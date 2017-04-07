@@ -1,0 +1,358 @@
+/************************************************************************************\
+*                                                                                    *
+* Copyright (c) 2014, Dr. Eugene W. Myers (EWM). All rights reserved.                *
+*                                                                                    *
+* Redistribution and use in source and binary forms, with or without modification,   *
+* are permitted provided that the following conditions are met:                      *
+*                                                                                    *
+*  · Redistributions of source code must retain the above copyright notice, this     *
+*    list of conditions and the following disclaimer.                                *
+*                                                                                    *
+*  · Redistributions in binary form must reproduce the above copyright notice, this  *
+*    list of conditions and the following disclaimer in the documentation and/or     *
+*    other materials provided with the distribution.                                 *
+*                                                                                    *
+*  · The name of EWM may not be used to endorse or promote products derived from     *
+*    this software without specific prior written permission.                        *
+*                                                                                    *
+* THIS SOFTWARE IS PROVIDED BY EWM ”AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES,    *
+* INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND       *
+* FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL EWM BE LIABLE   *
+* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES *
+* (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS  *
+* OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY      *
+* THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING     *
+* NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN  *
+* IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                      *
+*                                                                                    *
+* For any issues regarding this software and its use, contact EWM at:                *
+*                                                                                    *
+*   Eugene W. Myers Jr.                                                              *
+*   Bautzner Str. 122e                                                               *
+*   01099 Dresden                                                                    *
+*   GERMANY                                                                          *
+*   Email: gene.myers@gmail.com                                                      *
+*                                                                                    *
+\************************************************************************************/
+
+
+                The Dazzler Database Library
+
+                            Author:  Gene Myers
+                            First:   July 17, 2013
+                            Current: April 13, 2014
+
+  To facilitate the multiple phases of the dazzler assembler, we organize all the read
+data into what is effectively a "database" of the reads and their meta-information.
+The design goals for this data base are as follows:
+
+(1) The database stores the source Pacbio read information in such a way that it can
+       recreate the original input data, thus permitting a user to remove the
+       (effectively redundant) source files.  This avoids duplicating the same data,
+       once in the source file and once in the database.
+
+(2) The data base can be built up incrementally, that is new sequence data can be added
+       to the data base over time.
+
+(3) The data base flexibly allows one to store any meta-data desired for reads.  This
+       is accomplished with the concept of *tracks* that implementors can add as they
+       need them.
+
+(4) The data is held in a compressed form equivalent to the .dexta and .dexqv files of
+       the data extraction module.  Both the .fasta and .quiva information for each
+       read is held in the data base and can be recreated from it.  The .quiva
+       information can be added separately and later on if desired.
+
+(5) To facilitate job parallel, cluster operation of the phases of our assembler, the
+       data base has a concept of a *current partitioning* in which all the reads that
+       are over a given length and optionally unique to a well, are divided up into
+       *blocks* containing roughly a given number of bases, except possibly the last
+       block which may have a short count.  Often programs con be run on blocks or
+       pairs of blocks and each such job is reasonably well balanced as the blocks are
+       all the same size.  One must be careful about changing the partition during an
+       assembly as doing so can void the structural validity of any interim
+       block-based results.
+
+  A Dazzler DB consists of one named, *visible* file, e.g. FOO.db, and several
+*invisible* secondary files encoding various elements of the DB.  The secondary files
+are "invisible" to the UNIX OS in the sense that they begin with a "." and hence are
+not listed by "ls" unless one specifies the -a flag.  We chose to do this so that when
+a user lists the contents of a directory they just see a single name, e.g. FOO.db, that
+is the one used to refer to the DB in commands.  The files associated with a database
+named, say FOO,  are as follows:
+
+(a) "FOO.db": a text file containing
+                 (i)  the list of input files added to the database so far, and
+                 (ii) how to partition the database into blocks (if the partition
+                       parameters have been set).
+
+(b) ".FOO.idx": a binary "index" of all the meta-data about each read allowing, for
+                  example, one to randomly access a read's sequence (in the store
+                  ".FOO.bps").  It is 28N + 88 bytes in size where N is the number of
+                  reads in the database.
+
+(c) ".FOO.bps": a binary compressed "store" of all the DNA sequences.  It is M/4 bytes
+                  in size where M is the total number of base pairs in the database.
+
+(d) ".FOO.qvs": a binary compressed "store" of the 5 Pacbio quality value streams for
+                  the reads.  Its size is roughly 5/3M bytes depending on the
+                  compression acheived.  This file only exists if .quiva files have
+                  been added to the database.
+
+(e) ".FOO.<track>.anno": a *track* containing customized meta-data for each read.  For
+    ".FOO.<track>.data"  example, the DBdust command annotates low complexity intervals
+                         of reads and records the intervals for each read in two files
+                         .FOO.dust.anno & .FOO.dust.data.  Any kind of information
+                         about a read can be recorded, such as micro-sats, repeat
+                         intervals, corrected sequence, etc.  Specific tracks will be
+                         described as modules that produce them are released.
+
+If one does not like the convention of the secondary files being invisible, then
+un-defining the constant HIDE_FILES in DB.h before compiling the library, creates
+commands that do not place a prefixing "." before secondary file names, e.g. FOO.idx
+instead of .FOO.idx.  One then sees all the files realizing a DB when listing the
+contents of a directory with ls.
+
+  The command DBsplit sets or resets the current partition for a database which is
+determined by 3 parameters: (i) the total number of basepairs to place in each block,
+(ii) the minimum read length of reads to include within a block, and (iii) whether or
+not to only include the longest read from a given well or all reads from a well (NB:
+several reads of the same insert in a given well can be produced by the Pacbio
+instrument).  Note that the length and uniqueness parameters effectively select a
+subset of the reads that contribute to the size of a block.  We call this subset the
+*trimmed* data base.  Some commands operate on the entire database, others on the
+trimmed database, and yet others have an option flag that permits them to operate on
+either at the users discretion.  Therefore, one should note carefully to which version
+of the database a command refers to.  This is especially important for any command that
+identifies reads by their index (ordinal position) in the database.
+
+Once the database has been split into blocks, the commands DBshow, DBstats, and DBdust
+below and commands yet to come, such as the local alignment finder dalign, can take a
+block or blocks as arguments.  On the command line this is indicated by supplying the
+name of the DB followed by a period and then a block number, e.g. FOO.3.db or simply
+FOO.3, refers to the 3'rd block of DB FOO (assuming of course it has a current
+partition and said partition has a 3rd block).  One should note carefully that a block
+is a contiguous range of reads such that once it is trimmed has a given size in base
+pairs (as set by DBsplit).  Thus like an entire database, a block can be either
+untrimmed  or trimmed and one needs to again be careful when giving a read index to
+a command such as DBshow.
+
+All programs add suffixes (e.g. .db) as needed.  The commands of the database library
+are currently as follows:
+
+1. fasta2DB [-v] <path:db> <input:fasta> ...
+
+Builds an initial data base, or adds to an existing database, the list of .fasta files
+following the database name argument.  A given .fasta file can only be added once to
+the DB (this is checked by the command).  The .fasta headers must be in the "Pacbio"
+format (i.e. the output of the Pacbio tools or our dextract program) and the well,
+pulse interval, and read quality are extracted from the header and kept with each read
+record.  If the files are being added to an existing database, and the partition
+settings of the DB have already been set (see DBsplit below), then the partitioning of
+the database is updated to include the new data.
+
+2. DB2fasta [-vU] [-w<int(80)>] <path:db>
+
+The set of .fasta files for the given DB are recreated from the DB exactly as they were
+input.  That is, this is a perfect inversion, including the reconstitution of the
+proper .fasta headers.  Because of this property, one can, if desired, delete the
+.fasta source files once they are in the DB as they can always be recreated from it.
+By default the output sequences are in lower case and 80 chars per line.  The -U option
+specifies upper case should be used, and the characters per line, or line width, can be
+set to any positive value with the -w option.
+
+3. quiva2DB [-vl] <path:db> <input:quiva> ...
+
+Adds the given .quiva files to an existing DB "path".  The input files must be added in
+the same order as the .fasta files were and have the same root names, e.g. FOO.fasta
+and FOO.quiva.  The files can be added incrementally but must be added in the same
+order as the .fasta files.  This is enforced by the program.  With the -l option set
+the compression scheme is a bit lossy to get more compression (see the description of
+dexqv in the DEXTRACTOR module).
+
+4. DB2quiva [-vU] <path:db>
+
+The set of .quiva files within the given DB are recreated from the DB exactly as they
+were input.  That is, this is a perfect inversion, including the reconstitution of the
+proper .quiva headers.  Because of this property, one can, if desired, delete the
+.quiva source files once they are in the DB as they can always be recreated from it.
+By .fastq convention each QV vector is output as a line without new-lines, and by
+default the Deletion Tag entry is in lower case letters.  The -U option specifies
+upper case letters should be used instead.
+
+5. DBsplit [-a] [-x<int>] [-s<int(400)>] <path:db>
+
+Divide the database <path>.db conceptually into a series of blocks referable to on the
+command line as <path>.1.db, <path>.2.db, ...  If the -x option is set then all reads
+less than the given length are ignored, and if the -a option is not set then secondary
+reads from a given well are also ignored.  The remaining reads, constituting what we
+call the trimmed DB, are split amongst the blocks so that each block is of size
+-s * 1Mbp except for the last which necessarily contains a smaller residual.  The
+default value for -s is 400Mbp because blocks of this size can be compared by our
+"overlapper" dalign in roughly 16Gb of memory.  The blocks are very space efficient in
+that their sub-index of the master .idx is computed on the fly when loaded, and the
+.bps and .qvs files of base pairs and quality values, respectively, is shared with the
+master DB.  Any relevant portions of tracks associated with the DB are also computed
+on the fly when loading a database block.
+
+6. DBdust [-b] [-w<int(64)>] [-t<double(2.)>] [-m<int(10)>] <path:db>
+
+Runs the symmetric DUST algorithm over the reads in the untrimmed DB, say <path>.db,
+producing a track .<path>.dust[.anno,.data] that marks all intervals of low complexity
+sequence, where the scan window is of size -w, the threshold for being a low-complexity
+interval is -t, and only perfect intervals of size greater than -m are recorded.  If
+the -b option is set then the definition of low complexity takes into account the
+frequency of a given base.  The command is incremental if given a DB to which new data
+has been added since it was last run on the DB, then it will extend the track to
+include the new reads.  It is important to set this flag for genomes with a strong
+AT/GC bias, albeit the code is a tad slower.  The dust track, if present, is understood
+and used by DBshow, DBstats, and dalign.
+
+DBdust can also be run over an untriimmed DB block in which case it outputs a track
+encoding where the trace file names contain the block number, e.g. .FOO.3.dust.anno
+and .FOO.3.dust.data, given FOO.3 on the command line.  We call this a *block track*.
+This permits job parallelism in block-sized chunks, and the resulting sequence of
+block tracks can then be merged into a track for the entire untrimmed DB with Catrack.
+
+7. Catrack [-v] <path:db> <track:name>
+
+Find all block tracks of the form .<path>.#.<track>... and merge them into a single
+track, .<path>.<track>..., for the given DB.   The block track files must all encode
+the same kind of track data (this is checked), and the files must exist for block
+1, 2, 3, ... up to the last block number.
+
+8. DBshow [-udqUQ] [-w<int(80)>] <path:db> [ <reads:range> ... ]
+
+Displays the reads requested in the database <path>.db.  By default the command
+applies to the trimmed database, but if -u is set then the entire DB is used.  If no
+read arguments are given then every read in the database or database block is
+displayed.  Otherwise the list of supplied integer ranges give the ordinal positions
+in the actively loaded portion of the db.  A read range is either a lone integer or
+the symbol #, in which case the read range consists of just that read (the last read in
+the database if #).  One may also give two positive integers separated by a dash to
+indicate a range of integers, where again a # represents the index of the last read in
+the actively loaded db.  For example, 1 3-5 # displays reads 1, 3, 4, 5, and the last
+read in the active db.  As another example, 1-# displays every read in the active db
+(the default).
+
+By default a .fasta file of the read sequences is displayed.  If the -q option is
+set, then the QV streams are also displayed in a non-standard modification of the
+fasta format.  If the -Q option is set, then a .quiva file of just the relevant
+QV entries is displayed.
+
+If the -d option is set then the .dust track intervals are also displayed in an
+additional header line and the low complexity bases within a sequence are displayed in
+the case opposite that used for all the other bases.  By default the output sequences
+are in lower case and 80 chars per line.  The -U option specifies upper case should be
+used, and the characters per line, or line width, can be set to any positive value
+with the -w option.
+
+The .fasta or .quiva files that are output can be converted into a DB by fasta2DB
+and quiva2DB (if the -d option is not set), providing a simple way to make a DB of a
+subset of the reads for testing purposes.
+
+9. DBstats [-a] [-x<int>] [-b<int(1000)] <path:db>
+
+Show overview statistics for all the reads in the data base <path>.db that are not
+shorter than the length given by the -x option (if given).   A histogram of read
+lengths is also included where the bucket size can be controlled with the -b option.
+Normally, if several reads are all from the same well (insert), then only the longest
+read from the well is reported in the statistics.  If the -a flag is set then all
+reads are reported.
+
+10. DBrm <path:db> ...
+
+Delete all the files for the given data bases.  Do not use rm to remove a database, as
+there are at least two and often several secondary files for each DB including track
+files, and all of these are removed by DBrm.
+
+11. simulator <genlen:double> [-c<double(20.)>] [-b<double(.5)] [-r<int>]
+                              [-m<int(10000)>]  [-s<int(2000)>]
+                              [-x<int(4000)>]   [-e<double(.15)>]
+                              [-M<file>]
+
+In addition to the DB commands we include here, somewhat tangentially, a simple
+simulator that generates synthetic reads for a random genome.  simulator first
+generates a fake genome of size genlen*1Mb long, that has an AT-bias of -b.  It then
+generates sample reads of mean length -m from a log-normal length distribution with
+standard deviation -s, but ignores reads of length less than -x.  It collects enough
+reads to cover the genome -c times and introduces -e fraction errors into each read
+where the ratio of insertions, deletions, and substitutions are set by defined
+constants INS_RATE (default 73%) and DEL_RATE (default 20%) within generate.c.  One
+can also control the rate at which reads are picked from the forward and reverse
+strands by setting the defined constant FLIP_RATE (default 50/50).  The -r option seeds
+the random number generator for the generation of the genome so that one can
+reproducibly generate the same underlying genome to sample from.  If this parameter is
+missing, then the job id of the invocation seeds the random number generator.  The
+output is sent to the standard output (i.e. it is a UNIX pipe).  The output is in
+Pacbio .fasta format suitable as input to fasta2DB.  Finally, the -M option requests
+that the coordinates from which each read has been sampled are written to the indicated
+file, one line per read, ASCII encoded.  This "map" file essentially tells one where
+every read belongs in an assembly and is very useful for debugging and testing
+purposes.  If a read pair is say b,e then if b < e the read was sampled from [b,e] in
+the forward direction, and if b > e from [e,b] in the reverse direction.
+
+Example:
+
+     A small complete example of most of the commands above. 
+
+> simulator 1.0 >G.fasta   //  Generate a 20x data sets of a 1Mb genome
+> fasta2DB G G.fasta       //  Create a compressed data base of the reads, G.db
+> rm G.fasta               //  Redundant, recreate any time with "DB2fasta G"
+> DBsplit -s11 G           //  Split G into 2 parts of size ~ 11MB each
+> DBdust G.1               //  Produce a "dust" track on each part (just to illustrate)
+> DBdust G.2
+> Catrack G dust           //  Create one track for the entire DB from the 2 sub-tracks
+> rm .G.*.dust.*           //  Clean up the sub-tracks
+> DBstats G                //  Take a look at the statistics for the database
+
+Statistics for all wells in the data set
+
+          1,862 reads       out of           1,862     0.0% loss
+     20,001,184 base pairs  out of      20,001,184     0.0% loss
+
+Base composition: 0.250(A) 0.250(C) 0.250(G) 0.250(T)
+
+         10,741 average read length
+          2,167 standard deviation
+
+Distribution of Read Lengths (Bin size = 1,000)
+
+    Bin:      Count  % Reads  % Bases   Average
+ 21,000:          2      0.1      0.2    21397
+ 20,000:          0      0.1      0.2    21397
+ 19,000:          2      0.2      0.4    20541
+ 18,000:          1      0.3      0.5    20189
+ 17,000:         10      0.8      1.4    18495
+ 16,000:         15      1.6      2.6    17503
+ 15,000:         30      3.2      4.9    16444
+ 14,000:         81      7.6     10.8    15300
+ 13,000:        140     15.1     20.2    14381
+ 12,000:        202     25.9     32.8    13589
+ 11,000:        286     41.3     49.2    12796
+ 10,000:        345     59.8     67.3    12084
+  9,000:        351     78.7     84.0    11472
+  8,000:        248     92.0     94.6    11045
+  7,000:        106     97.7     98.6    10842
+  6,000:         40     99.8     99.9    10749
+  5,000:          3    100.0    100.0    10741
+
+136 low-complexity intervals totaling 1,985 bases
+
+> ls -al
+total 8832576
+drwxr-xr-x  28 myersg  staff         952 Jun 24 15:46 .
+drwxr-xr-x  10 myersg  staff         340 Jun 16 15:45 ..
+-rw-r--r--   1 myersg  staff     5000992 Jun 24 15:46 .G.bps
+-rw-r--r--   1 myersg  staff        7460 Jun 24 15:46 .G.dust.anno
+-rw-r--r--   1 myersg  staff        1088 Jun 24 15:46 .G.dust.data
+-rw-r--r--   1 myersg  staff       59696 Jun 24 15:46 .G.idx
+-rw-r--r--   1 myersg  staff         162 Jun 24 13:03 G.db
+> cat G.db
+files =         1
+       1862 G Sim
+blocks =         2
+size =        11 cutoff =         0 all = 0
+         0         0
+      1024      1024
+      1862      1862

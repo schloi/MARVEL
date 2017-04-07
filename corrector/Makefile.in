@@ -1,0 +1,22 @@
+
+prefix         = @prefix@
+exec_prefix    = @exec_prefix@
+bindir         = @bindir@
+
+include ../Makefile.settings
+
+ALL = LAcorrect LAconvert
+
+all: $(ALL)
+
+install: all
+	$(INSTALL_PROGRAM) -m 0755 $(ALL) $(install_bin)
+
+clean:
+	rm -rf $(ALL) *.dSYM
+
+LAcorrect: LAcorrect.c $(PATH_MSA)/msa.h $(PATH_MSA)/msa.c $(PATH_LIB)/pass.h $(PATH_LIB)/pass.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h consensus.h consensus.c $(PATH_DB)/QV.c $(PATH_LIB)/utils.h $(PATH_LIB)/utils.c
+	$(CC) $(CFLAGS) -o LAcorrect LAcorrect.c consensus.c $(PATH_MSA)/msa.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(PATH_DB)/DB.c $(PATH_DB)/QV.c $(PATH_LIB)/utils.c $(CLIBS) -lpthread
+
+LAconvert: LAconvert.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/compression.c
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o LAconvert LAconvert.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_LIB)/oflags.c $(PATH_DB)/DB.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(CLIBS)

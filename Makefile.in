@@ -1,0 +1,49 @@
+
+prefix         = @prefix@
+exec_prefix    = @exec_prefix@
+bindir         = @bindir@
+
+VERSION := $(shell cat VERSION)
+export VERSION
+
+include Makefile.settings
+
+MODULES = corrector dalign db lib.python scripts scrub touring utils 
+
+.PHONY: all
+all: prebuild
+	for dir in $(MODULES); do \
+		$(MAKE) -C $$dir $@ ; \
+	done
+
+.PHONY: clean
+clean:
+	for dir in $(MODULES); do \
+		$(MAKE) -C $$dir $@ ; \
+	done
+
+.PHONY: install
+install:
+	$(INSTALL_PROGRAM) -d $(install_bin)
+	$(INSTALL_PROGRAM) -d $(install_scripts)
+	$(INSTALL_PROGRAM) -d $(install_python)
+	for dir in $(MODULES); do \
+		$(MAKE) -C $$dir $@ ; \
+	done
+	rm -f $(bindir) $(prefix)/scripts $(prefix)/lib.python
+	ln -s $(install_bin) $(bindir)
+	ln -s $(install_scripts) $(prefix)/scripts
+	ln -s $(install_python) $(prefix)/lib.python
+	echo "$(VERSION)" > $(prefix)/VERSION
+
+prebuild: lib/oflags.h
+	build/oflags.py lib/oflags.h lib.python/marvel/oflags.py
+	build/colorramp.py touring/colorramp.py
+	build/version.sh
+
+Makefile: Makefile.in config.status Makefile.settings.in
+	./config.status $@
+
+config.status: configure
+	./config.status --recheck
+

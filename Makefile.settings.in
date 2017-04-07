@@ -1,0 +1,35 @@
+
+PATH_DB = ../db
+PATH_DALIGN = ../dalign
+PATH_LIB = ../lib
+PATH_LIBE = ../lib.ext
+PATH_MSA = ../msa
+
+install_bin    = @prefix@/$(VERSION)/bin
+install_scripts= @prefix@/$(VERSION)/scripts
+install_python = @prefix@/$(VERSION)/lib.python
+
+srcdir         = @srcdir@
+
+CC             = @CC@
+CFLAGS         = @CFLAGS@
+
+INSTALL        = @INSTALL@
+INSTALL_DATA   = @INSTALL_DATA@
+INSTALL_PROGRAM= @INSTALL_PROGRAM@
+INSTALL_SCRIPT = @INSTALL_SCRIPT@
+
+GTK_LIBS       = @GTK_LIBS@
+GTK_CFLAGS     = @GTK_CFLAGS@
+
+VPATH = $(PATH_DB) $(PATH_DALIGN) $(PATH_LIB) $(PATH_LIBE) $(PATH_MSA)
+
+CFLAGS += -Wunused-macros -Wall -Wextra -I../
+CLIBS = -lm -lz
+# CFLAGS += -D_GNU_SOURCE
+
+debug ?= 0
+ifeq ($(debug), 1)
+	CFLAGS = -Wunused-macros -Wall -Wextra -I../ -g -O0 -Wunreachable-code -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls
+endif
+

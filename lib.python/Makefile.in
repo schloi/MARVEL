@@ -1,0 +1,15 @@
+
+include ../Makefile.settings
+
+ALL =
+SCRIPTS = marvel/oflags.py marvel/rawqueue.py marvel/config.py marvel/DB.py marvel/LAS.py marvel/__init__.py marvel/queue.py
+
+all: $(ALL)
+
+install: all
+	$(INSTALL_PROGRAM) -d $(install_python)/marvel
+	$(INSTALL_PROGRAM) -m 0555 $(SCRIPTS) $(install_python)/marvel
+
+clean:
+	rm -f oflags.py
+

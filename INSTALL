@@ -1,0 +1,17 @@
+
+REQUIREMENTS
+------------
+
+xxx
+
+INSTALL
+-------
+
+1) autoreconf
+
+2) configure --prefix=/somewhere
+
+3) make
+
+4) make install
+
