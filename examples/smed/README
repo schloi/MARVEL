@@ -1,0 +1,43 @@
+##### READ PATCHING PHASE
+
+# extract p4 fasta sequencs from h5 files 
+for x in m1[34]*.bax.h5
+do
+   H5dextract -s p4_${x%bax.h5}stats -f p4_${x%bax.h5}fa -S b -x 4000 $x
+done
+
+# extract p6 fasta sequencs from h5 files    
+for x in m15*.bax.h5
+do
+   H5dextract -s p6_${x%bax.h5}stats -f p6_${x%bax.h5}fa -S b -x 4000 $x
+done
+
+# create initial databases  
+FA2db -v -x 4000 -b SMED_P4 p4_*.fa
+FA2db -v -x 4000 -b SMED_P6 p6_*.fa
+
+# split databases into blocks
+DBsplit SMED_P4
+DBsplit SMED_P6
+
+# create dust tracks
+DBdust -b SMED_P4
+DBdust -b SMED_P6
+
+# create daligner and merge plans
+HPCdaligner -v -t 100 -r1 -j16 --dal 32 --mrg 32 -b -o SMED_P4 SMED_P4
+HPCdaligner -v -t 100 -r1 -j16 --dal 32 --mrg 32 -b -o SMED_P6 SMED_P6
+
+
+
+##### ASSEMBLY PHASE
+
+# create a new Database of fixed reads
+FA2db -v -x 4000 -c SMED_FIX SMED_P6.*.fixed.fasta
+FA2db -v -x 11000 -c SMED_FIX SMED_P4.*.fixed.fasta
+
+# split database into blocks
+DBsplit SMED_FIX
+
+# create dust track 
+DBdust -p SMED_FIX

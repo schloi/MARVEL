@@ -7,22 +7,45 @@ import marvel.queue
 
 ### settings
 
-DB         = "AXOLOTL_FIX"
+DB         = "AXOLOTL"
 COVERAGE   = 30
 
+DB_FIX     = DB + "_FIX"
 PARALLEL   = multiprocessing.cpu_count()
 
 ### patch raw reads
 
 q = marvel.queue.queue(DB, COVERAGE, PARALLEL)
 
+### run daligner to create initial overlaps 
+q.plan("planDalign{db}")
+### run LAmerge to merge overlap blocks  
+q.plan("planMerge{db}")
+
+# create quality and trim annotation (tracks) for each overlap block
+q.block("{path}/LAq -b {block} {db} {db}.{block}.las")
+# merge quality and trim tracks 
+q.single("{path}/TKmerge -d {db} q")
+q.single("{path}/TKmerge -d {db} trim")
+# run LAfix to patch reads based on overlaps
+q.block("{path}/LAfix -c -x 2000 {db} {db}.{block}.las {db}.{block}.fixed.fasta")
+# create a new Database of fixed reads
+q.single("{path}/DB2fasta -v -x 2000 {db_fixed} {db}.*.fixed.fasta", db_fixed = DB_FIX)
+q.single("{path}/DBsplit {db_fixed}", db_fixed = DB_FIX)
+q.single("{path}/DBdust {db_fixed}", db_fixed = DB_FIX)
+# merge contained and repeat track 
+q.single("{path}/TKcombine {db_fixed} mask maskr maskc dust", db_fixed = DB_FIX)
+# create daligner and merge plans, replace SERVER and PORT
+q.single("{path}/HPCdaligner -v -t 100 -D SERVER:PORT -m mask -r2 -j16 --dal 32 --mrg 32 -o {db_fixed} {db_fixed}", db_fixed = DB_FIX)
+
+q.process()
+
+##### assemble patched reads
+
+q = marvel.queue.queue(DB_FIX, COVERAGE, PARALLEL)
+
 ### run daligner to create overlaps 
 q.plan("planDalign{db}")
-
-# after all daligner jobs are finshied the dynamic repeat masker has to be shut down
-# !!!!!!!!!!!!!!!!!!!!!!!!!! replace SERVER and PORT !!!!!!!!!!!!!!!!!!!!!!!!!!
-q.single("{path}/DMctl -h HOST -p PORT shutdown")
-
 ### run LAmerge to merge overlap blocks  
 q.plan("planMerge{db}")
 
@@ -40,10 +63,10 @@ q.block("{path}/LAq -T trim0 -s 5 -b {block} {db} {db}.{block}.stitch.las")
 q.single("{path}/TKmerge -d {db} q")
 q.single("{path}/TKmerge -d {db} trim0")
 ##### create a repeat annotation (tracks) for each overlap block and merge them
-q.block("{path}/LArepeat -c {coverage} -l 1.5 -h 2.0 -b {block} {db} {db}.{block}.stitch.las")
+q.block("{path}/LArepeat -c {coverage} -b {block} {db} {db}.{block}.stitch.las")
 q.single("{path}/TKmerge -d {db} repeats")
-##### combine repeat track and maskr, maskc track from dynamic masking server 
-q.single("{path}/TKcombine {db} frepeats repeats maskc maskr")
+
+
 
 ##### detects "borders" in overlaps due to bad regions within reads that were not detected 
 ##### in LAfix. Those regions can be quite big (several Kb). If gaps within a read are
@@ -64,37 +87,20 @@ q.single("{path}/TKmerge -d {db} trim1")
 ##### -o 2000 ... overlaps shorter than 2k bases are discarded
 ##### -p      ... purge overlaps, overlaps are not written into the output file    
 ##### option -L (see LAstitch) is also available
-q.block("{path}/LAfilter -p -s 100 -n 300 -r frepeats -t trim1 -o 1000 -u 10 {db} {db}.{block}.gap.las {db}.{block}.filtered.las")
+q.block("{path}/LAfilter -p -n 500 -r repeats -t trim1 -o 2000 -u 10 {db} {db}.{block}.gap.las {db}.{block}.filtered.las")
 
 ##### merge all filtered overlap files into one overlap file
 q.single("{path}/LAmerge -S filtered {db} {db}.filtered.las")
 
 ##### create overlap graph
-q.single("!mkdir -p components")
-q.single("{path}/OGbuild -t trim1 -s -c 1 {db} {db}.filtered.las components/{db}")
-
-q.process()
-
+q.single("{path}/OGbuild -t trim1 {db} {db}.filtered.las {db}.graphml")
 ##### tour the overlap graph and create contigs paths 
-first = True
-for fpath in glob.glob("components/*.graphml"):
-    q.single("{path_scripts}/OGtour.py -c {db} {graph}", graph = fpath)
-    if not first:
-        q.merge()
-    else:
-        first = False
-
-q.process()
-
+q.single("{path_scripts}/OGtour.py -c {db} {db}.graphml")
 ##### create contig fasta files 
-first = True
-for fpath in glob.glob("components/*.paths"):
-    fpath_graph = fpath.replace(".tour.paths", ".graphml")
-    q.single("{path_scripts}/tour2fasta.py -t trim1 {db} {graph} {paths}", graph = fpath_graph, paths = fpath)
+q.single("{path_scripts}/tour2fasta.py -t trim1 {db} {db}.tour.graphml {db}.tour.paths")
 
-    if not first:
-        q.merge()
-    else:
-        first = False
+### optional: create a layout of the overlap graph which can viewed in a Browser (svg) or Gephi (dot)
+q.single("{path}/OGlayout -R {db}.tour.graphml {db}.tour.layout.svg")
+# q.single("{path}/OGlayout -R {db}.tour.graphml {db}.tour.layout.dot")
 
 q.process()

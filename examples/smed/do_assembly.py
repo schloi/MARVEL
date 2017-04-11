@@ -7,8 +7,8 @@ import marvel.queue
 
 ### settings
 
-DB         = "AXOLOTL_FIX"
-COVERAGE   = 30
+DB         = "SMED_FIX"
+COVERAGE   = 42
 
 PARALLEL   = multiprocessing.cpu_count()
 
@@ -18,10 +18,6 @@ q = marvel.queue.queue(DB, COVERAGE, PARALLEL)
 
 ### run daligner to create overlaps 
 q.plan("planDalign{db}")
-
-# after all daligner jobs are finshied the dynamic repeat masker has to be shut down
-# !!!!!!!!!!!!!!!!!!!!!!!!!! replace SERVER and PORT !!!!!!!!!!!!!!!!!!!!!!!!!!
-q.single("{path}/DMctl -h HOST -p PORT shutdown")
 
 ### run LAmerge to merge overlap blocks  
 q.plan("planMerge{db}")
@@ -36,42 +32,45 @@ q.plan("planMerge{db}")
 q.block("{path}/LAstitch -f 50 {db} {db}.{block}.las {db}.{block}.stitch.las")
 
 ##### create quality and trim annotation (tracks) for each overlap block and merge them
-q.block("{path}/LAq -T trim0 -s 5 -b {block} {db} {db}.{block}.stitch.las")
+q.block("{path}/LAq -T trim0 -b {block} {db} {db}.{block}.stitch.las")
 q.single("{path}/TKmerge -d {db} q")
 q.single("{path}/TKmerge -d {db} trim0")
 ##### create a repeat annotation (tracks) for each overlap block and merge them
 q.block("{path}/LArepeat -c {coverage} -l 1.5 -h 2.0 -b {block} {db} {db}.{block}.stitch.las")
 q.single("{path}/TKmerge -d {db} repeats")
-##### combine repeat track and maskr, maskc track from dynamic masking server 
-q.single("{path}/TKcombine {db} frepeats repeats maskc maskr")
+##### homogenize repeat track 
+q.block("{path}/TKhomogenize -t trim0 -b {block} {db} {db}.{block}.stitch.las")
+q.single("{path}/TKcombine -d {db} hrepeats \\#.hrepeats")
+q.single("{path}/TKcombine {db} frepeats repeats hrepeats")
+q.merge()
 
 ##### detects "borders" in overlaps due to bad regions within reads that were not detected 
 ##### in LAfix. Those regions can be quite big (several Kb). If gaps within a read are
 ##### detected LAgap chooses the longer part oft the read as valid range. The other part(s) are
 ##### discarded
 ##### option -L (see LAstitch) is also available     
-q.block("{path}/LAgap -s 100 -t trim0 {db} {db}.{block}.stitch.las {db}.{block}.gap.las")
+q.block("{path}/LAgap -s 300 -t trim0 {db} {db}.{block}.stitch.las {db}.{block}.gap.las")
 
 ##### create a new trim1 track, (trim0 is kept)
 q.block("{path}/LAq -u -t trim0 -T trim1 -b {block} {db} {db}.{block}.gap.las")
 q.single("{path}/TKmerge -d {db} trim1")
 
-##### based on different filter critera filter out: local-alignments, repeat induced-alifnments
+##### based on different filter critera filter out: local-alignments, repeat induced-alignments
 ##### previously discarded alignments, ....
 ##### -r repeats, -t trim1 ... use repeats and trim1 track
 ##### -n 500  ... overlaps must be anchored by at least 500 bases (non-repeats) 
-##### -u 10   ... overlaps with more than 10 unaligned bases according to the trim1 intervall are discarded
+##### -u 10   ... overlaps with more than 10 unaligned bases according to the trim1 interval are discarded
 ##### -o 2000 ... overlaps shorter than 2k bases are discarded
 ##### -p      ... purge overlaps, overlaps are not written into the output file    
 ##### option -L (see LAstitch) is also available
-q.block("{path}/LAfilter -p -s 100 -n 300 -r frepeats -t trim1 -o 1000 -u 10 {db} {db}.{block}.gap.las {db}.{block}.filtered.las")
+q.block("{path}/LAfilter -p -S 300 -MM {coverage} -n 300 -r frepeats -t trim1 -o 2000 -u 10 {db} {db}.{block}.gap.las {db}.{block}.filtered.las")
 
 ##### merge all filtered overlap files into one overlap file
 q.single("{path}/LAmerge -S filtered {db} {db}.filtered.las")
 
 ##### create overlap graph
 q.single("!mkdir -p components")
-q.single("{path}/OGbuild -t trim1 -s -c 1 {db} {db}.filtered.las components/{db}")
+q.single("{path}/OGbuild -t trim1 -s {db} {db}.filtered.las components/{db}")
 
 q.process()
 
