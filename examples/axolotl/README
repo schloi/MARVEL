@@ -1,0 +1,35 @@
+##### READ PATCHING PHASE
+
+### replace SERVER and PORT also in do_patching.py and do_assembly.py !!!  
+
+# create initial database  
+FA2db -v -x 2000 -b AXOLOTL -f axoFiles.txt
+# split database into blocks
+DBsplit AXOLOTL
+# create dust track
+DBdust AXOLOTL
+
+# create daligner and merge plans, replace SERVER and PORT
+HPCdaligner -v -t 100 -D SERVER:PORT -r1 -j16 --dal 32 --mrg 32 -o AXOLOTL AXOLOTL
+
+# start dynamic repeat masking server on SERVER:PORT, replace PORT
+DMserver -t 16 -p PORT -C AXOLOTL 40 AXOLOTL_CP
+
+
+
+##### ASSEMBLY PHASE
+
+
+# create a new Database of fixed reads
+FA2db -v -x 2000 -c AXOLOTL_FIX AXOLOTL.*.fixed.fasta
+# split database into blocks
+DBsplit AXOLOTL_FIX
+# combine repeat tracks maskr and maskc that were created during read patching phase   
+TKcombine AXOLOTL_FIX mask maskr maskc
+
+# create daligner and merge plans, replace SERVER and PORT
+HPCdaligner -v -t 100 -D SERVER:PORT -m mask -r2 -j16 --dal 32 --mrg 32 -o AXOLOTL_FIX AXOLOTL_FIX
+
+# start dynamic repeat masking server on SERVER:PORT, replace PORT
+DMserver -t 16 -p PORT -C AXOLOTL_FIX 40 AXOLOTL_CP 
+
