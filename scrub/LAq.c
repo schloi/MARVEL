@@ -33,6 +33,8 @@
 #define VERBOSE
 #undef DEBUG_Q
 
+#define TRIM_WINDOW        5
+
 // command line defaults
 
 #define DEF_ARG_B          0
@@ -132,7 +134,7 @@ static int trim_q_offsets(AnnotateContext* actx, int rid, int rlen, track_data* 
     track_anno wnd_left;
     int sum = 0;
 
-    for (wnd_left = ob ; wnd_left - ob <= 5 && ob < oe ; wnd_left++)
+    for (wnd_left = ob ; wnd_left - ob <= TRIM_WINDOW && ob < oe ; wnd_left++)
     {
         track_data q = dataq[wnd_left];
 
@@ -145,9 +147,9 @@ static int trim_q_offsets(AnnotateContext* actx, int rid, int rlen, track_data* 
             continue;
         }
 
-        if (wnd_left - ob == 5 && sum / 5 >= trim_q)
+        if (wnd_left - ob == TRIM_WINDOW && sum / TRIM_WINDOW >= trim_q)
         {
-            // printf("move left %d\n", sum / 5);
+            // printf("move left %d\n", sum / TRIM_WINDOW);
 
             sum -= dataq[ob];
             ob++;
@@ -159,7 +161,7 @@ static int trim_q_offsets(AnnotateContext* actx, int rid, int rlen, track_data* 
     track_anno wnd_right;
     sum = 0;
 
-    for (wnd_right = oe ; oe - wnd_right <= 5 && ob < oe ; wnd_right--)
+    for (wnd_right = oe ; oe - wnd_right <= TRIM_WINDOW && ob < oe ; wnd_right--)
     {
         track_data q = dataq[wnd_right - 1];
 
@@ -172,9 +174,9 @@ static int trim_q_offsets(AnnotateContext* actx, int rid, int rlen, track_data* 
             continue;
         }
 
-        if (oe - wnd_right == 5 && sum / 5 >= trim_q)
+        if (oe - wnd_right == TRIM_WINDOW && sum / TRIM_WINDOW >= trim_q)
         {
-            // printf("move right %d\n", sum / 5);
+            // printf("move right %d\n", sum / TRIM_WINDOW);
 
             sum -= dataq[oe];
             oe--;
@@ -538,24 +540,25 @@ static int handler_update_anno(void* _ctx, Overlap* ovls, int novl)
 
 static void usage()
 {
-    fprintf(stderr, "[-u] [-mbdsS <int>] [-L <file>] [-tT <track>] <db> <overlaps>\n");
-    fprintf(stderr, "options: -b ... track block number\n");
-    fprintf(stderr, "         -d ... trim with Q cutoff (diff: %d)\n", DEF_ARG_D);
+    fprintf( stderr, "usage: [-u] [-b n] [-d n] [-s n] [-S n] [-t track] [-T track] [-q track] [-Q track] database input.las\n\n" );
 
-    fprintf(stderr, "         -s ... min number of segments for Q estimate (%d)\n", DEF_ARG_S);
-    fprintf(stderr, "         -S ... max number of segments for Q estimate (%d)\n", DEF_ARG_SS);
+    fprintf( stderr, "Creates an annotation track containing the reads' qualities and computes trim information.\n\n" );
 
-    fprintf(stderr, "         -o ... min overlap length after trim (%d)\n", DEF_ARG_O);
+    fprintf( stderr, "options: -b n      block number\n" );
+    fprintf( stderr, "         -d n      trim reads based on this quality cutoff (default %d)\n", DEF_ARG_D );
 
-    fprintf(stderr, "         -u ... update trim %s using overlaps and existing %s track (%d)\n", DEF_ARG_T, DEF_ARG_Q, DEF_ARG_U);
-    fprintf(stderr, "         -L ... log Q cutoff to file\n");
+    fprintf( stderr, "         -s n      minimum number of segments for quality estimate (default %d)\n", DEF_ARG_S );
+    fprintf( stderr, "         -S n      maximum number of segments for quality estimate (default %d)\n", DEF_ARG_SS );
 
-    fprintf(stderr, "         -t ... input trim track (%s)\n", DEF_ARG_T);
-    fprintf(stderr, "         -T ... output trim track (%s)\n", DEF_ARG_T);
+    fprintf( stderr, "         -o n      minimum overlap length after trim (default %d)\n", DEF_ARG_O );
 
-    fprintf(stderr, "         -q ... input q track (%s)\n", DEF_ARG_Q);
-    fprintf(stderr, "         -Q ... output q track (%s)\n", DEF_ARG_Q);
+    fprintf( stderr, "         -u        update existing trim track\n" );
 
+    fprintf( stderr, "         -t track  input trim track in -u mode (default %s)\n", DEF_ARG_T );
+    fprintf( stderr, "         -T track  output trim track (default %s)\n", DEF_ARG_T );
+
+    fprintf( stderr, "         -q track  input quality track in -u mode (default %s)\n", DEF_ARG_Q );
+    fprintf( stderr, "         -Q track  output quality track (default %s)\n", DEF_ARG_Q );
 }
 
 int main(int argc, char* argv[])
@@ -662,6 +665,12 @@ int main(int argc, char* argv[])
     {
         fprintf(stderr, "error: invalid -s -S combination\n");
         exit(1);
+    }
+
+    if (actx.track_q_in != NULL && arg_u == 0)
+    {
+        fprintf( stderr, "error: -q specified without -u\n" );
+        exit( 1 );
     }
 
     char* pcPathReadsIn = argv[optind++];

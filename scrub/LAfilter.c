@@ -23,6 +23,7 @@
 #include "lib/tracks.h"
 #include "lib/trim.h"
 #include "lib/utils.h"
+#include "lib.ext/fgetln.h"
 
 
 #include "dalign/align.h"
@@ -36,8 +37,9 @@
 #define BIN_SIZE 100
 #define MIN_LR 500
 
-#define READ_NONE 0x0
-#define READ_DISCARD ( 0x1 << 0 )
+#define READ_NONE       0x0
+#define READ_DISCARD  ( 0x1 << 0 )
+#define READ_STRICT   ( 0x1 << 1 )
 
 #define VERBOSE
 #undef VERBOSE_STITCH
@@ -75,6 +77,7 @@ typedef struct
     int rm_cov;        // repeat modules, coverage
     int rm_aggressive; // -M
     int do_trim;
+    int downsample;
 
     int removeFlags; // 1 << 0 ... stitched overlaps, 1 << 1 ... module overlaps, 1 << 2 .. trace points
 
@@ -105,6 +108,7 @@ typedef struct
     HITS_DB* db;
     HITS_TRACK* trackRepeat;
     HITS_TRACK* trackTrim;
+    HITS_TRACK* trackRepeatStrict;
 
     int* r2bin;
     int max_r2bin;
@@ -119,6 +123,174 @@ typedef struct
 
 extern char* optarg;
 extern int optind, opterr, optopt;
+
+static int cmp_int(const void* a, const void* b)
+{
+    return (*(int*)a) - (*(int*)b);
+}
+
+static int cmp_2int(const void* a, const void* b)
+{
+    int cmp = cmp_int(a, b);
+
+    if ( cmp )
+    {
+        return cmp;
+    }
+
+    return cmp_int( ((int*)a) + 1, ((int*)b) + 1);
+}
+
+typedef struct
+{
+    int* exclude_reads;
+    int exclude_reads_n;
+
+    int* exclude_edges;
+    int exclude_edges_n;
+
+    int* include_edges;
+    int include_edges_n;
+
+    int* strict_reads;
+    int strict_reads_n;
+} FilterRules;
+
+static void fread_rules( FILE* fin, FilterRules* rules )
+{
+    char* line;
+    size_t len;
+    int* singles = NULL;
+    int singles_cur = 0;
+    int singles_max = 0;
+    int* multi_inc = NULL;
+    int multi_inc_cur = 0;
+    int multi_inc_max = 0;
+    int* multi_ex = NULL;
+    int multi_ex_cur = 0;
+    int multi_ex_max = 0;
+    int* strict = NULL;
+    int strict_cur = 0;
+    int strict_max = 0;
+
+    while ( (line = fgetln(fin, &len)) != NULL )
+    {
+        char* end = line + len;
+
+        if (len <= 1 || line[0] == '#')
+        {
+            continue;
+        }
+
+        char mode = *line;
+
+        if ( mode != '-' && mode != '+' && mode != 's' )
+        {
+            printf("malformed line: %*s\n", (int)(len - 1), line);
+            continue;
+        }
+
+        int single = 1;
+        char* sep;
+        for ( sep = line + 1 ; sep != end ; sep++ )
+        {
+            if ( *sep == '-' )
+            {
+                single = 0;
+                break;
+            }
+        }
+
+        if ( single )
+        {
+            if (mode == '-')
+            {
+                if ( singles_max == singles_cur )
+                {
+                    singles_max = singles_max * 1.2 + 100;
+                    singles = realloc(singles, sizeof(int) * singles_max);
+                }
+
+                singles[ singles_cur ] = strtoimax(line + 1, NULL, 10);
+                singles_cur += 1;
+            }
+            else if (mode == 's')
+            {
+                if ( strict_max == strict_cur )
+                {
+                    strict_max = strict_max * 1.2 + 100;
+                    strict = realloc(strict, sizeof(int) * strict_max);
+                }
+
+                strict[ strict_cur ] = strtoimax(line + 1, NULL, 10);
+                strict_cur += 1;
+            }
+        }
+        else
+        {
+            *sep = '\0';
+
+            if (mode == '-')
+            {
+                if ( multi_ex_cur + 4 >= multi_ex_max )
+                {
+                    multi_ex_max = multi_ex_max * 1.2 + 100;
+                    multi_ex = realloc(multi_ex, sizeof(int) * multi_ex_max);
+                }
+
+                multi_ex[ multi_ex_cur ]     = strtoimax(line + 1, NULL, 10);
+                multi_ex[ multi_ex_cur + 1 ] = strtoimax(sep + 1, NULL, 10);
+                multi_ex[ multi_ex_cur + 2 ] = multi_ex[ multi_ex_cur + 1 ];
+                multi_ex[ multi_ex_cur + 3 ] = multi_ex[ multi_ex_cur ];
+
+                multi_ex_cur += 4;
+            }
+            else
+            {
+                if ( multi_inc_cur + 4 >= multi_inc_max )
+                {
+                    multi_inc_max = multi_inc_max * 1.2 + 100;
+                    multi_inc = realloc(multi_inc, sizeof(int) * multi_inc_max);
+                }
+
+                multi_inc[ multi_inc_cur ]     = strtoimax(line + 1, NULL, 10);
+                multi_inc[ multi_inc_cur + 1 ] = strtoimax(sep + 1, NULL, 10);
+                multi_inc[ multi_inc_cur + 2 ] = multi_inc[ multi_inc_cur + 1 ];
+                multi_inc[ multi_inc_cur + 3 ] = multi_inc[ multi_inc_cur ];
+
+                multi_inc_cur += 4;
+            }
+        }
+    }
+
+    qsort(singles, singles_cur, sizeof(int), cmp_int);
+    qsort(strict, strict_cur, sizeof(int), cmp_int);
+    qsort(multi_inc, multi_inc_cur / 2, sizeof(int) * 2, cmp_2int);
+    qsort(multi_ex, multi_ex_cur / 2, sizeof(int) * 2, cmp_2int);
+
+    rules->exclude_reads = singles;
+    rules->exclude_reads_n = singles_cur;
+
+    rules->strict_reads = strict;
+    rules->strict_reads_n = strict_cur;
+
+    rules->exclude_edges = multi_ex;
+    rules->exclude_edges_n = multi_ex_cur;
+
+    rules->include_edges = multi_inc;
+    rules->include_edges_n = multi_inc_cur;
+
+    int i;
+    printf("exclude reads: ");
+    for ( i = 0; i < rules->exclude_reads_n;i++) printf("%d ", rules->exclude_reads[i]);
+    printf("\nstrict reads: ");
+    for ( i = 0; i < rules->strict_reads_n;i++) printf("%d ", rules->strict_reads[i]);
+    printf("\ninclude edges: ");
+    for ( i = 0; i < rules->include_edges_n;i += 2) printf("%d-%d ", rules->include_edges[i], rules->include_edges[i+1]);
+    printf("\nexclude edges: ");
+    for ( i = 0; i < rules->exclude_edges_n;i += 2) printf("%d-%d ", rules->exclude_edges[i], rules->exclude_edges[i+1]);
+    printf("\n");
+}
 
 static int loader_handler( void* _ctx, Overlap* ovl, int novl )
 {
@@ -405,13 +577,24 @@ static int find_repeat_modules( FilterContext* ctx, Overlap* ovls, int novl )
         }
     }
 
-    if ( ( left > 0 && right > 0 ) || ( left == 0 && right == 0 ) )
+    if ( ( left > 0 && right > 0 ) ) // || ( left == 0 && right == 0 ) )
     {
         return 1;
     }
 
-    track_anno* ranno = (track_anno*)( ctx->trackRepeat->anno );
-    track_data* rdata = (track_data*)( ctx->trackRepeat->data );
+    track_anno* ranno;
+    track_data* rdata;
+
+    if ( ctx->trackRepeatStrict )
+    {
+        ranno = (track_anno*)ctx->trackRepeatStrict->anno;
+        rdata = (track_data*)ctx->trackRepeatStrict->data;
+    }
+    else
+    {
+        ranno = (track_anno*)ctx->trackRepeat->anno;
+        rdata = (track_data*)ctx->trackRepeat->data;
+    }
 
     track_anno ob = ranno[ a ];
     track_anno oe = ranno[ a + 1 ];
@@ -946,6 +1129,7 @@ static int filter( FilterContext* ctx, Overlap* ovl )
     int nLen  = ovl->path.aepos - ovl->path.abpos;
     int nLenB = ovl->path.bepos - ovl->path.bbpos;
     int ret   = 0;
+    HITS_READ* reads = ctx->db->reads;
 
     if ( nLenB < nLen )
     {
@@ -1036,8 +1220,19 @@ static int filter( FilterContext* ctx, Overlap* ovl )
     {
         int b, e, rb, re, ovllen, repeat, repeat_read;
 
-        track_anno* repeats_anno = ctx->trackRepeat->anno;
-        track_data* repeats_data = ctx->trackRepeat->data;
+        track_anno* repeats_anno;
+        track_data* repeats_data;
+
+        if ( ctx->trackRepeatStrict && ( (reads[ovl->aread].flags & READ_STRICT) || (reads[ovl->bread].flags & READ_STRICT) ) )
+        {
+            repeats_anno = ctx->trackRepeatStrict->anno;
+            repeats_data = ctx->trackRepeatStrict->data;
+        }
+        else
+        {
+            repeats_anno = ctx->trackRepeat->anno;
+            repeats_data = ctx->trackRepeat->data;
+        }
 
         b      = repeats_anno[ ovl->aread ] / sizeof( track_data );
         e      = repeats_anno[ ovl->aread + 1 ] / sizeof( track_data );
@@ -1280,6 +1475,20 @@ static int filter_handler( void* _ctx, Overlap* ovl, int novl )
     FilterContext* ctx = (FilterContext*)_ctx;
     int j;
 
+    if ( ctx->downsample )
+    {
+        int max_rid = (int)(ctx->downsample * DB_NREADS(ctx->db) / 100.0);
+
+        for ( j = 0; j < novl ; j++ )
+        {
+            Overlap* o = ovl + j;
+            if (o->aread > max_rid || o->bread > max_rid)
+            {
+                o->flags |= OVL_DISCARD;
+            }
+        }
+    }
+
     if ( ctx->trim )
     {
         for ( j = 0; j < novl; j++ )
@@ -1356,32 +1565,33 @@ static int filter_handler( void* _ctx, Overlap* ovl, int novl )
     return 1;
 }
 
-static void usage()
+static void usage(FILE* fout, const char* app)
 {
-    fprintf( stderr, "[-vpLqT] [-dnolRsSumM <int>] [-rt <track>] [-xP <file>] <db> <overlaps_in> <overlaps_out>\n" );
+    fprintf( fout, "usage: %s [-vpLqT] [-dnolsSumMf n] [-rRt track] [-xP file] database input.las output.las\n\n", app );
 
-    fprintf( stderr, "options: -v ... verbose\n" );
-    fprintf( stderr, "         -d ... max divergence allowed [0,100]\n" );
-    fprintf( stderr, "         -n ... min number of non-repeat bases\n" );
-    fprintf( stderr, "         -o ... min overlap length\n" );
-    fprintf( stderr, "         -l ... min read length\n" );
-    fprintf( stderr, "         -p ... purge discarded overlaps\n" );
-    fprintf( stderr, "         -s ... stitch (%d)\n", DEF_ARG_S );
-    fprintf( stderr, "         -S ... stitch aggressively (%d)\n", DEF_ARG_S );
-    fprintf( stderr, "         -r ... repeat track name (%s)\n", DEF_ARG_R );
-    fprintf( stderr, "         -t ... trim track name (%s)\n", DEF_ARG_T );
-    fprintf( stderr, "         -T ... trim overlaps (%d)\n", DEF_ARG_TT );
-    fprintf( stderr, "         -u ... max number of unaligned bases\n" );
-    fprintf( stderr, "         -R ... remove (multiple -R possible) ... \n" );
-    fprintf( stderr, "                0 stitched overlaps, i.e. overlaps with invalid trace points\n" );
-    fprintf( stderr, "                1 module overlaps\n" );
-    fprintf( stderr, "         	      2 trace points\n" );
-    fprintf( stderr, "         -L ... two pass processing with read caching\n");
-    fprintf( stderr, "experimental features:\n" );
-    fprintf( stderr, "         -m ... resolve repeat modules, pass coverage as argument\n" );
-    fprintf( stderr, "         -M ... -m + more aggressive module detection\n" );
-    fprintf( stderr, "         -x ... exclude read ids found in file\n" );
-    fprintf( stderr, "         -P ... write read ids of repeat spanners to file\n" );
+    fprintf( fout, "Filters the input las file by various critera\n\n" );
+
+    fprintf( fout, "options: -v  verbose output\n" );
+    fprintf( fout, "         -d n  max divergence allowed [0,100]\n" );
+    fprintf( fout, "         -n n  minimum number of non-repeat-annotated bases in an alignment\n" );
+    fprintf( fout, "         -o n  minimum overlap length\n" );
+    fprintf( fout, "         -l n  minimum read length\n" );
+    fprintf( fout, "         -p purge discarded overlaps\n" );
+    fprintf( fout, "         -s n  stitch split alignments with a distance between them below n\n" );
+    fprintf( fout, "         -S n  stitch irrespective of discrepencies in the distance between in A and B read\n");
+    fprintf( fout, "         -r track  name of the track containing the repeat annotation (%s)\n", DEF_ARG_R );
+    fprintf( fout, "         -t track  name of the track containing the trim annotation (%s)\n", DEF_ARG_T );
+    fprintf( fout, "         -T  apply the trim annotation and update the alignments\n" );
+    fprintf( fout, "         -u  maximum number of unaligned (leftover) bases in the alignment\n" );
+    fprintf( fout, "         -L  two-pass processing with read caching\n\n");
+    fprintf( fout, "experimental options:\n" );
+    fprintf( fout, "         -f n  percentage of overlaps to keep (downsampling)\n" );
+    fprintf( fout, "         -m n  resolve repeat modules, pass coverage as argument.\n" );
+    fprintf( fout, "         -M n  -m + more aggressive module detection\n" );
+    fprintf( fout, "         -x file  exclude read ids found in file\n" );
+    fprintf( fout, "         -P file  write read ids of repeat spanners to file\n" );
+    fprintf( fout, "         -R track  strict repeat track name\n\n");
+    fprintf( fout, "Up to three m's can be used (-mmm n) with each additional m increasing the aggressiveness of the repeat resolution.\n" );
 }
 
 static int opt_repeat_count( int argc, char** argv, char opt )
@@ -1420,6 +1630,7 @@ int main( int argc, char* argv[] )
     PassContext* pctx;
     FILE* fileOvlIn;
     FILE* fileOvlOut;
+    char* app = argv[ 0 ];
 
     bzero( &fctx, sizeof( FilterContext ) );
 
@@ -1428,11 +1639,13 @@ int main( int argc, char* argv[] )
     // args
 
     char* pathSpanningReads = NULL;
-    char* pathExcludeReads  = NULL;
+    char* pathRules  = NULL;
     char* pcTrackRepeats    = DEF_ARG_R;
+    char* pcTrackRepeatsStrict = NULL;
     char* arg_trimTrack     = DEF_ARG_T;
     int arg_purge           = 0;
 
+    fctx.trackRepeatStrict  = NULL;
     fctx.fileSpanningReads  = NULL;
     fctx.fMaxDiffs          = -1;
     fctx.nMaxUnalignedBases = -1;
@@ -1446,6 +1659,7 @@ int main( int argc, char* argv[] )
     fctx.useRLoader         = 0;
     fctx.do_trim            = DEF_ARG_TT;
     fctx.rm_mode            = 0;
+    fctx.downsample         = 0;
 
     fctx.stitch_aggressively = 0;
     fctx.removeFlags         = 0;
@@ -1460,16 +1674,20 @@ int main( int argc, char* argv[] )
     }
 
     opterr = 0;
-    while ( ( c = getopt( argc, argv, "TvLpd:n:o:l:R:s:S:u:m:M:r:t:P:x:" ) ) != -1 )
+    while ( ( c = getopt( argc, argv, "TvLpd:n:o:l:R:s:S:u:m:M:r:t:P:x:X:f:" ) ) != -1 )
     {
         switch ( c )
         {
+            case 'f':
+                fctx.downsample = atoi(optarg);
+                break;
+
             case 'T':
                 fctx.do_trim = 1;
                 break;
 
             case 'x':
-                pathExcludeReads = optarg;
+                pathRules = optarg;
                 break;
 
             case 'P':
@@ -1489,13 +1707,13 @@ int main( int argc, char* argv[] )
                 fctx.rm_cov = atoi( optarg );
                 break;
 
-            case 'R':
+            case 'X':
             {
                 int flag = atoi( optarg );
                 if ( flag < 0 || flag > 2 )
                 {
                     fprintf( stderr, "[ERROR]: Unsupported -R [%d] option.\n", flag );
-                    usage();
+                    usage(stdout, app);
                     exit( 1 );
                 }
                 fctx.removeFlags |= ( 1 << flag );
@@ -1544,20 +1762,24 @@ int main( int argc, char* argv[] )
                 pcTrackRepeats = optarg;
                 break;
 
+            case 'R':
+                pcTrackRepeatsStrict = optarg;
+                break;
+
             case 't':
                 arg_trimTrack = optarg;
                 break;
 
             default:
                 fprintf( stderr, "unknown option %c\n", c );
-                usage();
+                usage(stdout, app);
                 exit( 1 );
         }
     }
 
     if ( argc - optind != 3 )
     {
-        usage();
+        usage(stdout, app);
         exit( 1 );
     }
 
@@ -1589,6 +1811,15 @@ int main( int argc, char* argv[] )
         db.reads[ i ].flags = READ_NONE;
     }
 
+    if ( fctx.downsample )
+    {
+        if (fctx.downsample > 99 || fctx.downsample < 0)
+        {
+            fprintf( stderr, "invalid downsampling factor %d. must be in [1, 99]\n", fctx.downsample);
+            exit( 1 );
+        }
+    }
+
     if ( pathSpanningReads )
     {
         fctx.fileSpanningReads = fopen( pathSpanningReads, "w" );
@@ -1597,6 +1828,16 @@ int main( int argc, char* argv[] )
         {
             fprintf( stderr, "could not open %s\n", pathSpanningReads );
             exit( 1 );
+        }
+    }
+
+    if (pcTrackRepeatsStrict)
+    {
+        fctx.trackRepeatStrict = track_load( &db, pcTrackRepeatsStrict );
+        if (!fctx.trackRepeatStrict)
+        {
+            fprintf(stderr, "could not load track %s\n", pcTrackRepeatsStrict);
+            exit(1);
         }
     }
 
@@ -1616,29 +1857,35 @@ int main( int argc, char* argv[] )
     if ( !fctx.trackTrim )
     {
         fprintf( stderr, "could not load track %s\n", arg_trimTrack );
-        exit( 1 );
+        // exit( 1 );
     }
 
-    if ( pathExcludeReads )
+    if ( pathRules )
     {
-        FILE* fileIn = fopen( pathExcludeReads, "r" );
+        FILE* fileIn = fopen( pathRules, "r" );
 
         if ( fileIn == NULL )
         {
-            fprintf( stderr, "could not open %s\n", pathExcludeReads );
+            fprintf( stderr, "could not open %s\n", pathRules );
             exit( 1 );
         }
 
-        int* values;
-        int nvalues;
+        FilterRules rules;
 
-        fread_integers( fileIn, &values, &nvalues );
+        fread_rules( fileIn, &rules );
 
-        printf( "excluding %d reads\n", nvalues );
+        printf( "excluding %d reads\n", rules.exclude_reads_n );
 
-        for ( i = 0; i < nvalues; i++ )
+        for ( i = 0; i < rules.exclude_reads_n; i++ )
         {
-            db.reads[ values[ i ] ].flags = READ_DISCARD;
+            db.reads[ rules.exclude_reads[i] ].flags |= READ_DISCARD;
+        }
+
+        printf( "strict repeats for %d reads\n", rules.strict_reads_n );
+
+        for ( i = 0; i < rules.strict_reads_n; i++ )
+        {
+            db.reads[ rules.strict_reads[i] ].flags |= READ_STRICT;
         }
 
         fclose( fileIn );

@@ -35,8 +35,11 @@ extern int optind, opterr, optopt;
 
 static void usage()
 {
-    printf("[-d] <db> <track>\n");
-    printf("Options: -d ... remove single tracks after merging\n");
+    printf( "usage: [-d] database track\n\n" );
+
+    printf( "Merge annotation tracks that have been created for each block into a single track.\n\n" );
+
+    printf( "options: -d  remove source tracks after merging\n" );
 }
 
 int main(int argc, char* argv[])

@@ -604,11 +604,16 @@ static int loader_handler(void* _ctx, Overlap* ovl, int novl)
 
 static void usage()
 {
-    fprintf(stderr, "usage: [-pvL] [-f <int>] <db> <ovl.in> <ovl.out>\n");
-    fprintf(stderr, "options: -v ... verbose\n");
-    fprintf(stderr, "         -f ... fuzzing for stitch (%d)\n", DEF_ARG_F);
-    fprintf(stderr, "         -L ... two pass processing with read caching\n");
-    fprintf(stderr, "         -p ... purge discarded overlaps\n");
+    fprintf( stderr, "usage: [-p] [-v] [-L] [-f n] database input.las output.las\n\n" );
+
+    fprintf( stderr, "Stitch alignments that would have been continuous if it wasn't for\n" );
+    fprintf( stderr, "noisy regions in one or both of the reads, that caused the alignment\n" );
+    fprintf( stderr, "to be split in two or more.\n\n" );
+
+    fprintf( stderr, "options: -v  verbose output\n" );
+    fprintf( stderr, "         -f  maximum stitch distance (default %d)\n", DEF_ARG_F );
+    fprintf( stderr, "         -p  do not write discarded overlaps to the output file\n" );
+    fprintf( stderr, "         -L  two-pass processing with read caching\n" );
 }
 
 int main(int argc, char* argv[])

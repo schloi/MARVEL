@@ -8,6 +8,7 @@
  *
  *******************************************************************************************/
 
+#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +16,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <assert.h>
 
 #include "dalign/align.h"
 #include "db/DB.h"
@@ -116,118 +116,140 @@ static void convert_pre( PassContext* pctx, ConvertContext* cctx )
     ovl_header_write( cctx->fileLas_c, pctx->novl, pctx->twidth );
 
     cctx->tbytes = pctx->tbytes;
-    cctx->amap = malloc(sizeof(int) * cctx->db_u->maxlen);
-    cctx->bmap = malloc(sizeof(int) * cctx->db_u->maxlen);
+    cctx->amap   = malloc( sizeof( int ) * cctx->db_u->maxlen );
+    cctx->bmap   = malloc( sizeof( int ) * cctx->db_u->maxlen );
 
     // mapping of uncorrected read ids to corrected rids
 
-    cctx->riduc_to_ridc = malloc(sizeof(int) * cctx->db_u->nreads);
+    cctx->riduc_to_ridc = malloc( sizeof( int ) * cctx->db_u->nreads );
 
     int i;
-    for (i = 0; i < cctx->db_u->nreads; i++)
+    for ( i = 0; i < cctx->db_u->nreads; i++ )
     {
-        cctx->riduc_to_ridc[i] = -1;
+        cctx->riduc_to_ridc[ i ] = -1;
     }
 
-    track_data* data = cctx->source->data;
-    track_anno* anno = cctx->source->anno;
+    track_data* data_src = cctx->source->data;
+    track_anno* anno_src = cctx->source->anno;
 
-    for (i = 0; i < cctx->db_c->nreads; i++)
+    for ( i = 0; i < cctx->db_c->nreads; i++ )
     {
-        track_anno b = anno[i] / sizeof(track_data);
-        track_anno e = anno[i+1] / sizeof(track_data);
+        track_anno b = anno_src[ i ] / sizeof( track_data );
+        track_anno e = anno_src[ i + 1 ] / sizeof( track_data );
 
         assert( b < e );
+        assert( cctx->riduc_to_ridc[ data_src[ b ] ] == -1 );
 
-        cctx->riduc_to_ridc[ data[b] ] = i;
+        cctx->riduc_to_ridc[ data_src[ b ] ] = i;
     }
 
     // convert trim track
 
-    data = cctx->trim->data;
-    anno = cctx->trim->anno;
+    track_data* data_trim_u = cctx->trim->data;
+    track_anno* anno_trim_u = cctx->trim->anno;
 
-    track_anno* anno_c = cctx->trim_a_c = malloc(sizeof(track_anno) * (cctx->db_c->nreads + 1));
-    track_data* data_c = cctx->trim_d_c = malloc(sizeof(track_data) * (cctx->db_c->nreads * 2));
+    track_anno* anno_trim_c = cctx->trim_a_c = calloc( cctx->db_c->nreads + 1, sizeof( track_anno ) );
+    track_data* data_trim_c = cctx->trim_d_c = calloc( cctx->db_c->nreads * 2, sizeof( track_data ) );
 
     track_anno* anno_pos_c = cctx->postrace->anno;
     track_data* data_pos_c = cctx->postrace->data;
 
     int* amap = cctx->amap;
 
-    track_anno dcur = anno_c[0] = 0;
+    track_anno dcur = 0;
 
-    for ( i = 0; i < cctx->db_u->nreads; i++)
+    assert( cctx->db_c->nreads == cctx->db_u->nreads );
+
+    for ( i = 0; i < cctx->db_c->nreads; i++ )
     {
-        int rc = cctx->riduc_to_ridc[i];
+        // source read id
 
-        if (rc == -1)
+        track_anno b = anno_src[ i ] / sizeof( track_data );
+        track_anno e = anno_src[ i + 1 ] / sizeof( track_data );
+        assert( b < e );
+
+        int rid_u = data_src[ b ];
+
+        // trim data of source read
+
+        b = anno_trim_u[ rid_u ] / sizeof( track_data );
+        e = anno_trim_u[ rid_u + 1 ] / sizeof( track_data );
+
+        if ( b == e )
         {
             continue;
         }
 
-        track_anno b = anno[i] / sizeof(track_data);
-        track_anno e = anno[i + 1] / sizeof(track_data);
-
         assert( b + 2 == e );
 
-        track_data tb = data[b];
-        track_data te = data[b+1];
+        track_data tb = data_trim_u[ b ];
+        track_data te = data_trim_u[ b + 1 ];
+
         track_data tb_c = -1;
         track_data te_c = -1;
 
-        if (tb == te)
+        if ( tb == te )
         {
             tb_c = 0;
             te_c = 0;
         }
         else
         {
-            // create pos mapping
+            // create position mapping
 
-            track_anno ab = anno_pos_c[ rc ] / sizeof(track_data);
-            track_anno ae = anno_pos_c[ rc + 1] / sizeof(track_data);
+            track_anno ab = anno_pos_c[ i ] / sizeof( track_data );
+            track_anno ae = anno_pos_c[ i + 1 ] / sizeof( track_data );
 
-            trace_to_posmap((int32_t*)(data_pos_c + ab), ae - ab, DB_READ_LEN(cctx->db_u, i), amap);
+            trace_to_posmap( (int32_t*)( data_pos_c + ab ), ae - ab, DB_READ_LEN( cctx->db_u, rid_u ), amap );
 
-            while ( (tb_c = amap[tb]) == -1 )
+            // convert trim interval
+
+            while ( ( tb_c = amap[ tb ] ) == -1 )
             {
                 tb++;
             }
 
             te--;
 
-            while ( (te_c = amap[te]) == -1 )
+            while ( ( te_c = amap[ te ] ) == -1 )
             {
                 te--;
             }
 
             te_c++;
-
         }
 
         // printf("mapping %5d..%5d -> %5d..%5d\n", data[b], data[b+1], tb_c, te_c);
 
-        data_c[dcur++] = tb_c;
-        data_c[dcur++] = te_c;
+        data_trim_c[ dcur++ ] = tb_c;
+        data_trim_c[ dcur++ ] = te_c;
 
-        anno_c[rc + 1] = sizeof(track_data) * dcur;
+        anno_trim_c[ i ] += 2 * sizeof( track_data );
+    }
+
+    track_anno qoff, coff;
+    qoff = 0;
+    for ( i = 0; i <= cctx->db_c->nreads; i++ )
+    {
+        coff             = anno_trim_c[ i ];
+        anno_trim_c[ i ] = qoff;
+        qoff += coff;
     }
 }
 
-static void convert_post( PassContext* pctx, ConvertContext* cctx )
+static void convert_post( ConvertContext* cctx )
 {
     int nreads = cctx->db_c->nreads;
 
-    track_write(cctx->db_c, cctx->nameTrim_c, 0, cctx->trim_a_c, cctx->trim_d_c, cctx->trim_a_c[nreads] / sizeof(track_data));
+    track_write( cctx->db_c, cctx->nameTrim_c, 0, cctx->trim_a_c, cctx->trim_d_c, cctx->trim_a_c[ nreads ] / sizeof( track_data ) );
 
-    free(cctx->amap);
-    free(cctx->bmap);
+    free( cctx->amap );
+    free( cctx->bmap );
 
-    free(cctx->riduc_to_ridc);
+    free( cctx->riduc_to_ridc );
 
-    free(cctx->trim_a_c);
-    free(cctx->trim_d_c);
+    free( cctx->trim_a_c );
+    free( cctx->trim_d_c );
 }
 
 static int convert_process( void* _ctx, Overlap* ovl, int novl )
@@ -235,35 +257,45 @@ static int convert_process( void* _ctx, Overlap* ovl, int novl )
     ConvertContext* ctx = (ConvertContext*)_ctx;
     FILE* fileLas_c     = ctx->fileLas_c;
     int tbytes          = ctx->tbytes;
-    int a_u = ovl->aread;
-    int a_c = ctx->riduc_to_ridc[a_u];
+    int a_u             = ovl->aread;
+    int a_c             = ctx->riduc_to_ridc[ a_u ];
+
+    if ( a_c == -1 )
+    {
+        fprintf( stderr, "could not map source read %d to corrected read\n", a_u );
+        exit( 1 );
+    }
+
+#ifdef DEBUG
+    printf( "u %5d -> c %5d\n", a_u, a_c );
+#endif
 
     track_anno* anno = ctx->postrace->anno;
     track_data* data = ctx->postrace->data;
 
-    track_anno ab = anno[ a_c ] / sizeof(track_data);
-    track_anno ae = anno[ a_c + 1] / sizeof(track_data);
+    track_anno ab = anno[ a_c ] / sizeof( track_data );
+    track_anno ae = anno[ a_c + 1 ] / sizeof( track_data );
 
     int* amap = ctx->amap;
     int* bmap = ctx->bmap;
 
-    trace_to_posmap((int32_t*)(data + ab), ae - ab, DB_READ_LEN(ctx->db_u, a_u), amap);
+    trace_to_posmap( (int32_t*)( data + ab ), ae - ab, DB_READ_LEN( ctx->db_u, a_u ), amap );
 
     int i;
     for ( i = 0; i < novl; i++ )
     {
         Overlap* o = ovl + i;
 
-        if (o->flags & OVL_DISCARD)
+        if ( o->flags & OVL_DISCARD )
         {
             continue;
         }
 
 #ifdef DEBUG
-        printf("%5d x %5d | %5d..%5d %5d -> %5d..%5d %5d\n",
+        printf( "%7d x %7d | %5d..%5d %5d -> %5d..%5d %5d\n",
                 a_u, o->bread,
-                o->path.abpos, o->path.aepos, DB_READ_LEN(ctx->db_u, a_u),
-                o->path.bbpos, o->path.bepos, DB_READ_LEN(ctx->db_u, o->bread));
+                o->path.abpos, o->path.aepos, DB_READ_LEN( ctx->db_u, a_u ),
+                o->path.bbpos, o->path.bepos, DB_READ_LEN( ctx->db_u, o->bread ) );
 #endif
 
         o->path.tlen = 0;
@@ -271,21 +303,27 @@ static int convert_process( void* _ctx, Overlap* ovl, int novl )
         int b_u = o->bread;
         int b_c = ctx->riduc_to_ridc[ b_u ];
 
-        track_anno tbb = anno[ b_c ] / sizeof(track_data);
-        track_anno tbe = anno[ b_c + 1] / sizeof(track_data);
-        trace_to_posmap((int32_t*)(data + tbb), tbe - tbb, DB_READ_LEN(ctx->db_u, b_u), bmap);
+        if ( b_c == -1 )
+        {
+            fprintf( stderr, "could not map source read %d to corrected read\n", b_u );
+            exit( 1 );
+        }
+
+        track_anno tbb = anno[ b_c ] / sizeof( track_data );
+        track_anno tbe = anno[ b_c + 1 ] / sizeof( track_data );
+        trace_to_posmap( (int32_t*)( data + tbb ), tbe - tbb, DB_READ_LEN( ctx->db_u, b_u ), bmap );
 
         int ab_u = o->path.abpos;
         int ae_u = o->path.aepos - 1;
         int ab_c = -1;
         int ae_c = -1;
 
-        while ( (ab_c = amap[ ab_u ]) == -1 )
+        while ( ( ab_c = amap[ ab_u ] ) == -1 )
         {
             ab_u++;
         }
 
-        while ( (ae_c = amap[ ae_u ]) == -1 )
+        while ( ( ae_c = amap[ ae_u ] ) == -1 )
         {
             ae_u--;
         }
@@ -296,12 +334,12 @@ static int convert_process( void* _ctx, Overlap* ovl, int novl )
         o->path.aepos = ae_c;
 
 #ifdef DEBUG
-        printf("%5d         | %5d..%5d %5d\n",
+        printf( "%7d           | %5d..%5d %5d\n",
                 a_c,
-                ab_c, ae_c, DB_READ_LEN(ctx->db_c, a_c));
+                ab_c, ae_c, DB_READ_LEN( ctx->db_c, a_c ) );
 #endif
 
-        assert( 0 <= ab_c && ab_c < ae_c && ae_c <= DB_READ_LEN(ctx->db_c, a_c) );
+        assert( 0 <= ab_c && ab_c < ae_c && ae_c <= DB_READ_LEN( ctx->db_c, a_c ) );
 
         int bb_u;
         int be_u;
@@ -310,9 +348,9 @@ static int convert_process( void* _ctx, Overlap* ovl, int novl )
 
         if ( o->flags & OVL_COMP )
         {
-            int blen_u = DB_READ_LEN(ctx->db_u, b_u);
-            bb_u = blen_u - o->path.bepos;
-            be_u = blen_u - o->path.bbpos - 1;
+            int blen_u = DB_READ_LEN( ctx->db_u, b_u );
+            bb_u       = blen_u - o->path.bepos;
+            be_u       = blen_u - o->path.bbpos - 1;
         }
         else
         {
@@ -320,26 +358,26 @@ static int convert_process( void* _ctx, Overlap* ovl, int novl )
             be_u = o->path.bepos - 1;
         }
 
-        while ( (bb_c = bmap[ bb_u ]) == -1 )
+        while ( ( bb_c = bmap[ bb_u ] ) == -1 )
         {
             bb_u++;
         }
 
-        while ( (be_c = bmap[ be_u ]) == -1 )
+        while ( ( be_c = bmap[ be_u ] ) == -1 )
         {
             be_u--;
         }
 
         if ( o->flags & OVL_COMP )
         {
-            int blen_c = DB_READ_LEN(ctx->db_c, b_c);
+            int blen_c    = DB_READ_LEN( ctx->db_c, b_c );
             o->path.bbpos = blen_c - be_c - 1;
             o->path.bepos = blen_c - bb_c;
 
 #ifdef DEBUG
-            printf("%5d         <                       %5d..%5d (%5d..%5d) %5d\n",
+            printf( "%7d           <                       %5d..%5d (%5d..%5d) %5d\n",
                     b_c,
-                    o->path.bbpos, o->path.bepos, bb_c, be_c, DB_READ_LEN(ctx->db_c, b_c));
+                    o->path.bbpos, o->path.bepos, bb_c, be_c, DB_READ_LEN( ctx->db_c, b_c ) );
 #endif
         }
         else
@@ -348,16 +386,16 @@ static int convert_process( void* _ctx, Overlap* ovl, int novl )
             o->path.bepos = be_c + 1;
 
 #ifdef DEBUG
-            printf("%5d         >                       %5d..%5d %5d\n",
+            printf( "%7d           >                       %5d..%5d %5d\n",
                     b_c,
-                    o->path.bbpos, o->path.bepos, DB_READ_LEN(ctx->db_c, b_c));
+                    o->path.bbpos, o->path.bepos, DB_READ_LEN( ctx->db_c, b_c ) );
 #endif
         }
 
         o->aread = a_c;
         o->bread = b_c;
 
-        assert( 0 <= o->path.bbpos && o->path.bbpos < o->path.bepos && o->path.bepos <= DB_READ_LEN(ctx->db_c, b_c) );
+        assert( 0 <= o->path.bbpos && o->path.bbpos < o->path.bepos && o->path.bepos <= DB_READ_LEN( ctx->db_c, b_c ) );
 
         Write_Overlap( fileLas_c, o, tbytes );
     }
@@ -468,7 +506,7 @@ int main( int argc, char* argv[] )
 
     pass( pctx, convert_process );
 
-    convert_post( pctx, &cctx );
+    convert_post( &cctx );
 
     pass_free( pctx );
 

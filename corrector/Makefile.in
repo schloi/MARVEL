@@ -5,7 +5,7 @@ bindir         = @bindir@
 
 include ../Makefile.settings
 
-ALL = LAcorrect LAconvert
+ALL = LAcorrect 
 
 all: $(ALL)
 
@@ -19,4 +19,5 @@ LAcorrect: LAcorrect.c $(PATH_MSA)/msa.h $(PATH_MSA)/msa.c $(PATH_LIB)/pass.h $(
 	$(CC) $(CFLAGS) -o LAcorrect LAcorrect.c consensus.c $(PATH_MSA)/msa.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(PATH_DB)/DB.c $(PATH_DB)/QV.c $(PATH_LIB)/utils.c $(CLIBS) -lpthread
 
 LAconvert: LAconvert.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/compression.c
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o LAconvert LAconvert.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_LIB)/oflags.c $(PATH_DB)/DB.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(CLIBS)
+	$(CC) $(CFLAGS) -o LAconvert LAconvert.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_LIB)/oflags.c $(PATH_DB)/DB.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(CLIBS)
+

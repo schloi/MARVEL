@@ -14,6 +14,7 @@ V_VISITED   = (1 << 3)
 V_PATH_END  = (1 << 4)
 V_RETRY     = (1 << 5)
 V_MODULE    = (1 << 6)
+V_OPTIONAL  = (1 << 7)
 
 #
 ###

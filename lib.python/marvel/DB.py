@@ -3,7 +3,8 @@ import os
 import struct
 import zlib
 
-import numpy
+import array
+# import numpy
 
 class Track(object):
 
@@ -22,7 +23,7 @@ class Track(object):
     @classmethod
     def uncompress_chunks(cls, fin):
         hsize = struct.calcsize(Track.STRUCT_CHUNK_HEADER)
-        data = ""
+        data = bytes()
 
         while True:
             chunk = fin.read(hsize)
@@ -33,7 +34,7 @@ class Track(object):
             (clen, ) = struct.unpack(Track.STRUCT_CHUNK_HEADER, chunk)
 
             chunk = fin.read(clen)
-            data += zlib.decompress(chunk)
+            data += zlib.decompress( chunk )
 
         return data
 
@@ -66,25 +67,37 @@ class Track(object):
         if not os.path.exists(pathAnno) or not os.path.exists(pathData):
             return None
 
-        fileAnno = open(pathAnno, "r")
-        fileData = open(pathData, "r")
+        fileAnno = open(pathAnno, "rb")
+        fileData = open(pathData, "rb")
 
         if version == 1:
             ht = fileAnno.read( struct.calcsize(Track.STRUCT_TRACK_HEADER) )
             (t.tlen, t.tsize) = struct.unpack(Track.STRUCT_TRACK_HEADER, ht)
 
-            t.anno = numpy.fromfile(fileAnno, numpy.uint64).tolist()
+            t.anno = array.array("Q")
+            t.anno.frombytes( fileAnno.read() )
+
+            # t.anno = numpy.fromfile(fileAnno, numpy.uint64).tolist()
             t.anno = [ x / 4 for x in t.anno ]
 
-            t.data = numpy.fromfile(fileData, numpy.int32).tolist()
+            t.data = array.array("l")
+            t.data.frombytes( fileData.read() )
+
+            # t.data = numpy.fromfile(fileData, numpy.int32).tolist()
         else:
             ht = fileAnno.read( struct.calcsize(Track.STRUCT_TRACK_HEADER_V2) )
             (t.version, t.size, dummy, t.tlen, t.clen, t.cdlen, dummy, dummy, dummy) = struct.unpack(Track.STRUCT_TRACK_HEADER_V2, ht)
 
-            t.anno = numpy.frombuffer(Track.uncompress_chunks(fileAnno), numpy.uint64).tolist()
-            t.anno = [ x / 4 for x in t.anno ]
+            t.anno = array.array("Q")
+            t.anno.frombytes( Track.uncompress_chunks(fileAnno) )
 
-            t.data = numpy.frombuffer(Track.uncompress_chunks(fileData), numpy.int32).tolist()
+            # t.anno = numpy.frombuffer(Track.uncompress_chunks(fileAnno), numpy.uint64).tolist()
+            t.anno = [ int(x / 8) for x in t.anno ]
+
+            t.data = array.array("l")
+            t.data.frombytes( Track.uncompress_chunks(fileData) )
+
+            # t.data = numpy.frombuffer(Track.uncompress_chunks(fileData), numpy.int32).tolist()
 
         fileAnno.close()
         fileData.close()
@@ -122,16 +135,16 @@ class DB(object):
     maxlen = 0
     totlen = 0
 
-    tracks = []
-
     def __init__(self, path):
         (self.dbPath, self.dbName) = os.path.split(path)
 
         if self.dbName.endswith(".db"):
             self.dbName = self.dbName[:-3]
 
-        self.fileBps = open( os.path.join(self.dbPath, "." + self.dbName + ".bps"), "r" )
-        self.fileIdx = open( os.path.join(self.dbPath, "." + self.dbName + ".idx"), "r" )
+        self.fileBps = open( os.path.join(self.dbPath, "." + self.dbName + ".bps"), "rb" )
+        self.fileIdx = open( os.path.join(self.dbPath, "." + self.dbName + ".idx"), "rb" )
+
+        self.tracks = []
 
         self.__read_index()
 

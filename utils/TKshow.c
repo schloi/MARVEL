@@ -16,20 +16,24 @@
 #include "lib/pass.h"
 
 #define DEF_ARG_B 1000
+#define DEF_ARG_S 4
 
 extern char* optarg;
 extern int optind, opterr, optopt;
 
 static void usage()
 {
-    printf("[-ntpdi] [-s <int>] [-b <int>] <db> <track>\n");
-    printf("Options: -p ... prefix with track name\n");
-    printf("         -d ... distance between intervals\n");
-    printf("         -i ... annotation is in form of intervals\n");
-    printf("         -s ... # bytes for an entry\n");
-    printf("         -S ... summary stats for tracks containing intervals\n");
-    printf("         -b ... bin size for histogram (%d)\n", DEF_ARG_B);
-    printf("         -n ... new line after each track entry\n");
+    printf( "usage: [-ntpdi] [-s n] [-b n] database track\n\n" );
+
+    printf( "Display the contents of an annotation track.\n\n" );
+
+    printf( "options: -p  prefix each line printed with the track name\n" );
+    printf( "         -d  print the distance between intervals\n" );
+    printf( "         -i  annotation is in form of intervals\n" );
+    printf( "         -s  each entry in the annotation track has n bytes (default %d)\n", DEF_ARG_S );
+    printf( "         -S  display a histogram of the interval lengths\n" );
+    printf( "         -b  bin size for histogram (%d)\n", DEF_ARG_B );
+    printf( "         -n  new line after each track entry\n" );
 }
 
 static int isPowerOfTwo(unsigned int x)
@@ -65,14 +69,15 @@ int main(int argc, char* argv[])
 
     HITS_TRACK* track = NULL;
 
-    int prefix, dist, intervals, dsize, stats, newline;
+    int prefix, dist, intervals, stats, newline;
     char* pcDb;
     char* pcTrack;
     int binsize = DEF_ARG_B;
+    int dsize   = DEF_ARG_S;
 
     // args
 
-    newline = prefix = dist = intervals = dsize = stats = 0;
+    newline = prefix = dist = intervals = stats = 0;
 
     opterr = 0;
 
@@ -108,6 +113,10 @@ int main(int argc, char* argv[])
 
             case 'S':
                 stats = 1;
+                break;
+
+            default:
+                usage();
                 break;
         }
     }
@@ -205,14 +214,14 @@ int main(int argc, char* argv[])
                 b += 2 * dsize;
             }
 
-            if (prefix)
-            {
-                printf("%s ", pcTrack);
-            }
-
             if (!newline)
             {
-                printf("%d (%" PRIu64 ")", i, (e - b) / dsize);
+                if (prefix)
+                {
+                    printf("%s ", pcTrack);
+                }
+
+                printf( "%d", i );
             }
 
             if (strcmp(pcTrack, TRACK_PACBIO_CHEM) == 0)
@@ -225,6 +234,11 @@ int main(int argc, char* argv[])
             {
                 if (newline)
                 {
+                    if (prefix)
+                    {
+                        printf("%s ", pcTrack);
+                    }
+
                     printf("%d", i);
                 }
 
@@ -235,7 +249,7 @@ int main(int argc, char* argv[])
                 }
                 else if (intervals)
                 {
-                    printf(" %" PRIu64 "%" PRIu64, value(data + b, dsize), value(data + b + dsize, dsize));
+                    printf(" %" PRIu64 "-%" PRIu64, value(data + b, dsize), value(data + b + dsize, dsize));
                     b += 2 * dsize;
                 }
                 else

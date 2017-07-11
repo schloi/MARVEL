@@ -36,6 +36,9 @@
 #define MAX_COVERAGE 100        // max for coverage histogram
 #define MIN_OVERLAP_GROUPS 1000 // min number of groups for coverage estimate
 
+#define EDGE_TAGGING_DIST   1000        // max distance of the repeat to the repeat ends
+#define EDGE_TAGGING_FUZZ    200        // number of wiggle bases for alignment termination at repeat ends
+
 #define DEFAULT_RP_XCOV_ENTER 2.0
 #define DEFAULT_RP_XCOV_LEAVE 1.7
 #define DEFAULT_RP_MERGE_DIST -1
@@ -43,6 +46,8 @@
 #define DEFAULT_COV_MAX_READS -1
 
 #define DEF_ARG_IC 0
+#define DEF_ARG_O  0
+#define DEF_ARG_LL 0
 
 // toggles
 
@@ -54,11 +59,12 @@
 typedef struct
 {
     HITS_DB* db;
-    HITS_TRACK* track_trim;
 
     int cov;      // expected/estimated coverage
     int avg_rlen; // average read length
     int inccov;   // include coverage in the resulting track
+    int min_aln_len;
+    int min_rlen;
 
     // coverage pass
 
@@ -238,9 +244,8 @@ static void pre_repeats( RepeatContext* ctx )
 static void post_repeats( RepeatContext* ctx )
 {
     int j;
-    int rp_merge_dist = ctx->rp_merge_dist;
-
     track_anno coff, off;
+
     off = 0;
 
     for ( j = 0; j <= DB_NREADS( ctx->db ); j++ )
@@ -248,42 +253,6 @@ static void post_repeats( RepeatContext* ctx )
         coff              = ctx->rp_anno[ j ];
         ctx->rp_anno[ j ] = off;
         off += coff;
-    }
-
-    if ( ctx->track_trim && rp_merge_dist > 0 )
-    {
-        int trim_ab, trim_ae;
-
-        for ( j = 0; j <= DB_NREADS( ctx->db ); j++ )
-        {
-            track_anno ob = ctx->rp_anno[ j ] / sizeof( track_data );
-            track_anno oe = ctx->rp_anno[ j + 1 ] / sizeof( track_data );
-
-            if ( ob >= oe )
-            {
-                continue;
-            }
-
-            track_data rb = ctx->rp_data[ ob ];
-            track_data re = ctx->rp_data[ oe - 1 ];
-
-            get_trim( ctx->db, ctx->track_trim, j, &trim_ab, &trim_ae );
-
-            if ( trim_ab >= trim_ae )
-            {
-                continue;
-            }
-
-            if ( rb - trim_ab < rp_merge_dist )
-            {
-                ctx->rp_data[ ob ] = trim_ab;
-            }
-
-            if ( trim_ae - re < rp_merge_dist )
-            {
-                ctx->rp_data[ oe - 1 ] = trim_ae;
-            }
-        }
     }
 
     track_write( ctx->db, ctx->rp_track, ctx->rp_block, ctx->rp_anno, ctx->rp_data, ctx->rp_dcur );
@@ -311,7 +280,8 @@ static int handler_repeats( void* _ctx, Overlap* ovl, int novl )
     uint64_t rp_merged = 0;
     int rp_merge_dist = ctx->rp_merge_dist;
 
-    ctx->rp_bases += DB_READ_LEN( ctx->db, ovl->aread );
+    int alen = DB_READ_LEN( ctx->db, ovl->aread );
+    ctx->rp_bases += alen;
 
     if ( 2 * novl > ctx->rp_emax )
     {
@@ -331,7 +301,19 @@ static int handler_repeats( void* _ctx, Overlap* ovl, int novl )
         }
 
         if ( ovl[ i ].aread == ovl[ i ].bread )
+        {
             continue;
+        }
+
+        if ( ovl[i].path.aepos - ovl[i].path.abpos < ctx->min_aln_len )
+        {
+            continue;
+        }
+
+        if ( alen < ctx->min_rlen || DB_READ_LEN(ctx->db, ovl[i].bread) < ctx->min_rlen )
+        {
+            continue;
+        }
 
         rp_events[ j++ ] = ovl[ i ].path.abpos;
         rp_events[ j++ ] = -( ovl[ i ].path.aepos - 1 );
@@ -453,6 +435,55 @@ static int handler_repeats( void* _ctx, Overlap* ovl, int novl )
     }
 #endif
 
+    for ( i = ctx->rp_dcur ; i < rp_dcur ; i += ( 2 + inccov) )
+    {
+        int rb = rp_data[i];
+        int re = rp_data[i+1];
+
+        if ( rb > 0 && rb < EDGE_TAGGING_DIST && re < alen - EDGE_TAGGING_DIST )
+        {
+            int support = 0;
+
+            for ( j = 0; j < novl; j++)
+            {
+                Overlap* o = ovl + j;
+
+                if ( o->path.aepos > re - EDGE_TAGGING_FUZZ && o->path.aepos < re + EDGE_TAGGING_FUZZ && o->path.abpos == 0 )
+                {
+                    support += 1;
+                }
+            }
+
+            if ( support > 2 )
+            {
+                // printf("%7d repeat %5d..%5d extended to %5d..%5d\n", a, rp_data[i], rp_data[i+1], 0, rp_data[i+1]);
+                rp_data[i] = 0;
+            }
+        }
+
+        if ( re < alen - 1 && re > alen - EDGE_TAGGING_DIST && rb > EDGE_TAGGING_DIST )
+        {
+            int support = 0;
+
+            for ( j = 0; j < novl; j++)
+            {
+                Overlap* o = ovl + j;
+
+                if ( o->path.abpos > rb - EDGE_TAGGING_FUZZ && o->path.abpos < rb + EDGE_TAGGING_FUZZ && o->path.aepos == alen )
+                {
+                    support += 1;
+                }
+            }
+
+            if ( support > 2 )
+            {
+                // printf("%7d repeat %5d..%5d extended to %5d..%5d\n", a, rp_data[i], rp_data[i+1], rp_data[i], alen);
+                rp_data[i + 1] = alen;
+            }
+        }
+
+    }
+
     ctx->rp_dcur = rp_dcur;
     ctx->rp_repeat_bases += rp_repeat_bases;
     ctx->rp_merged += rp_merged;
@@ -462,18 +493,23 @@ static int handler_repeats( void* _ctx, Overlap* ovl, int novl )
 
 static void usage()
 {
-    printf( "usage:   [-hl <float>] [-tT <track>] [-bcmn <int>] <db> <overlaps>\n" );
-    printf( "options: -h ... repeat enter coverage (%.1f)\n", DEFAULT_RP_XCOV_ENTER );
-    printf( "         -l ... repeat leave coverage (%.1f)\n", DEFAULT_RP_XCOV_LEAVE );
+    printf( "usage: [-h f] [-l f] [-t track] [-b n] [-c n] [-m n] [-n n] [-o n] database input.las\n\n" );
 
-    printf( "         -t ... track name (" TRACK_REPEATS ")\n" );
-    printf( "         -T ... use trim track to extend repeat intervals to the read boundaries\n" );
-    printf( "                if they are within merge distance\n" );
+    printf( "Detects repeat elements based on coverage anomalies in reads and creates an annotation track with them.\n\n" );
 
-    printf( "         -b ... track block\n" );
-    printf( "         -c ... expected coverage (%d)\n", DEFAULT_COV );
-    printf( "         -m ... merge distance in bp (%d)\n", DEFAULT_RP_MERGE_DIST );
-    printf( "         -n ... # of a reads used for coverage estimate (%d)\n", DEFAULT_COV_MAX_READS );
+    printf( "options: -h f  above which multiple of the expected coverage the start of a repeat is reported (%.1f)\n", DEFAULT_RP_XCOV_ENTER );
+    printf( "         -l f  below which multiple of the expected coverage a repeat ends (%.1f)\n", DEFAULT_RP_XCOV_LEAVE );
+
+    printf( "         -m n  merge repeats less then n bases apart (%d)\n", DEFAULT_RP_MERGE_DIST );
+
+    printf( "         -o n  only use overlaps longer than n\n");
+    printf( "         -L n  only use reads longer then n\n");
+
+    printf( "         -c n  expected coverage of the dataset. -1 auto-detect. (%d)\n", DEFAULT_COV );
+    printf( "         -n n  number of a reads used for coverage estimation (%d)\n", DEFAULT_COV_MAX_READS );
+
+    printf( "         -t track  name of the repeat annotation track (%s)\n", TRACK_REPEATS );
+    printf( "         -b n  block number\n" );
 }
 
 int main( int argc, char* argv[] )
@@ -488,7 +524,6 @@ int main( int argc, char* argv[] )
 
     // process arguments
 
-    char* trimname      = NULL;
     rctx.rp_xcov_enter  = DEFAULT_RP_XCOV_ENTER;
     rctx.rp_xcov_leave  = DEFAULT_RP_XCOV_LEAVE;
     rctx.rp_merge_dist  = DEFAULT_RP_MERGE_DIST;
@@ -497,17 +532,23 @@ int main( int argc, char* argv[] )
     rctx.rp_track       = TRACK_REPEATS;
     rctx.rp_block       = 0;
     rctx.inccov         = DEF_ARG_IC;
+    rctx.min_aln_len    = DEF_ARG_O;
+    rctx.min_rlen       = DEF_ARG_LL;
 
     int c;
 
     opterr = 0;
 
-    while ( ( c = getopt( argc, argv, "T:Ch:l:m:c:n:t:b:" ) ) != -1 )
+    while ( ( c = getopt( argc, argv, "Ch:l:L:m:c:n:t:b:o:" ) ) != -1 )
     {
         switch ( c )
         {
-            case 'T':
-                trimname = optarg;
+            case 'L':
+                rctx.min_rlen = atoi(optarg);
+                break;
+
+            case 'o':
+                rctx.min_aln_len = atoi(optarg);
                 break;
 
             case 'C':
@@ -589,17 +630,6 @@ int main( int argc, char* argv[] )
     if ( rctx.cov_max_areads == -1 )
     {
         rctx.cov_max_areads = db.nreads;
-    }
-
-    if ( trimname != NULL )
-    {
-        rctx.track_trim = track_load( &db, trimname );
-
-        if ( rctx.track_trim == NULL )
-        {
-            fprintf( stderr, "ERROR: failed to open track %s\n", trimname );
-            exit( 1 );
-        }
     }
 
     // passes

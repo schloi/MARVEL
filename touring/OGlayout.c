@@ -2222,40 +2222,43 @@ void sortGraphEdges(Graph *g)
     }
 }
 
-static void usage()
+static void usage(FILE* fout, const char* app)
 {
-    printf("OGLayout [vR] [-f dot|graphml] [-F dot|svg] [-q <int>] [-tlcsdg <float>] [-C <int>] <in.dot> <out.dot>\n\n");
-    printf("options: -v         ... verbose\n\n");
-    printf("layout options:\n");
-    printf("         -q         ... QuadTree level (default: 10)\n");
-    printf("                        Maximum value to be used in the QuadTree representation. Greater values mean more accuracy\n");
-    printf("         -t         ... theta, Barnes Hut opening criteria (default: 1.2)\n");
-    printf("                        Smaller values mean more accuracy\n");
-    printf("         -l         ... Minimum level size (default: 3)\n");
-    printf("                        Minimum amount of nodes every level must have. Bigger values mean less levels\n");
-    printf("         -c         ... Coarsening rate (default: 0.75)\n");
-    printf("                        Minimum relative size (number of nodes) between two levels. Smaller values mean less levels\n");
-    printf("         -s         ... Step ratio (default: 0.97)\n");
-    printf("                        The ratio used to update the step size across iterations\n");
-    printf("         -d         ... Optimal distance (default: 100)\n");
-    printf("                        The natural length of the springs (edge length). Bigger values mean nodes will be further apart\n");
-    printf("         -g         ... convergence threshold (default: 0.0001)\n\n");
-    printf("in/out options:\n");
-    printf("         -C         ... apply color scheme\n");
-    printf("                        0: input colors (default)\n");
-    printf("                        1: edges and nodes: black, path edges red, contig start/end: green\n");
-    printf("                        2: edges and nodes: black\n");
-    printf("         -R         ... remove reverse edges from output, i.e. create a directed graph with arbitrary direction\n");
-    printf("         -S         ... skip layout step (e.g. useful to convert a graph into another graph format, or apply other color scheme)\n");
-    printf("         -f         ... graph input format\n");
-    printf("         -F         ... graph output format\n");
+    fprintf(fout, "usage: %s [-vRS] [-f [dot|graphml]] [-F [dot|svg]] [-qC n] [-tlcsdg f] input.graph output.graph\n\n", app);
+
+    fprintf( fout, "Computes a layout for the (usually toured) input graph.\n\n" );
+
+    fprintf(fout, "options: -v  verbose\n");
+    fprintf(fout, "         -S  skip layout step (e.g. graph format conversion, or apply other color scheme)\n");
+    fprintf(fout, "         -f format  graph input format\n");
+    fprintf(fout, "         -F format  graph output format\n");
+    fprintf(fout, "         -C n  apply color scheme\n");
+    fprintf(fout, "            0  input colors (default)\n");
+    fprintf(fout, "            1  edges and nodes: black, path edges red, contig start/end: green\n");
+    fprintf(fout, "            2  edges and nodes: black\n");
+    fprintf(fout, "         -R  remove reverse edges from output, i.e. create a directed graph with arbitrary direction\n");
+
+    fprintf(fout, "\nlayout:\n");
+    fprintf(fout, "         -q n  QuadTree level (default: 10)\n");
+    fprintf(fout, "               Maximum value to be used in the QuadTree representation. Greater values mean more accuracy\n");
+    fprintf(fout, "         -t f  theta, Barnes Hut opening criteria (default: 1.2)\n");
+    fprintf(fout, "               Smaller values mean more accuracy\n");
+    fprintf(fout, "         -l f  Minimum level size (default: 3)\n");
+    fprintf(fout, "               Minimum amount of nodes every level must have. Bigger values mean less levels\n");
+    fprintf(fout, "         -c f  Coarsening rate (default: 0.75)\n");
+    fprintf(fout, "               Minimum relative size (number of nodes) between two levels. Smaller values mean less levels\n");
+    fprintf(fout, "         -s f  Step ratio (default: 0.97)\n");
+    fprintf(fout, "               The ratio used to update the step size across iterations\n");
+    fprintf(fout, "         -d f  Optimal distance (default: 100)\n");
+    fprintf(fout, "               The natural length of the springs (edge length). Bigger values mean nodes will be further apart\n");
+    fprintf(fout, "         -g f  convergence threshold (default: 0.0001)\n");
 }
-;
+
 
 static int parseOptions(OgLayoutContext *octx, int argc, char *argv[])
 {
-
-    bzero(octx, sizeof(OgLayoutContext));
+    char* app = argv[ 0 ];
+    bzero( octx, sizeof( OgLayoutContext ) );
 
     // set default values
     octx->quadTreeLevel = DEFAULT_QUADTREE_LEVEL;
@@ -2337,14 +2340,14 @@ static int parseOptions(OgLayoutContext *octx, int argc, char *argv[])
 
             default:
                 fprintf(stderr, "Unknown option: %s\n", argv[optind - 1]);
-                usage();
+                usage(stdout, app);
                 exit(1);
         }
     }
 
     if (argc - optind < 2)
     {
-        usage();
+        usage(stdout, app);
         exit(1);
     }
 
@@ -2354,7 +2357,7 @@ static int parseOptions(OgLayoutContext *octx, int argc, char *argv[])
     if (octx->colorScheme < 0 || octx->colorScheme > 2)
     {
         fprintf(stderr, "Unsupported color scheme %d. Available schemes: 0-2!\n", octx->colorScheme);
-        usage();
+        usage(stdout, app);
         exit(1);
     }
 
@@ -2416,14 +2419,14 @@ static int parseOptions(OgLayoutContext *octx, int argc, char *argv[])
         if (octx->giformat == FORMAT_UNKNOWN)
         {
             fprintf(stderr, "error: cannot determine input graph format. Use option -f graphml|dot\n");
-            usage();
+            usage(stdout, app);
             exit(1);
         }
     }
     else
     {
         fprintf(stderr, "error: unknown input graph format %s\n", giformat);
-        usage();
+        usage(stdout, app);
         exit(1);
     }
 
@@ -2452,14 +2455,14 @@ static int parseOptions(OgLayoutContext *octx, int argc, char *argv[])
         if (octx->goformat == FORMAT_UNKNOWN)
         {
             fprintf(stderr, "error: cannot determine output graph format. Use option -f dot|svg\n");
-            usage();
+            usage(stdout, app);
             exit(1);
         }
     }
     else
     {
         fprintf(stderr, "error: unknown graph format %s\n", goformat);
-        usage();
+        usage(stdout, app);
         exit(1);
     }
 

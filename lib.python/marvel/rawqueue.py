@@ -1,7 +1,6 @@
 
 from __future__ import print_function
 
-import multiprocessing
 import sys
 import os
 import subprocess
@@ -132,7 +131,7 @@ class rawqueue(object):
     def command_to_threads(self, cmd, threads):
         return threads
 
-    def plan(self, plan, first = 1, last = -1, threads = 1):
+    def plan(self, plan, first = 1, last = -1, threads = 1, path = None):
         if type(plan) is types.StringType:
             plan = self.replace_variables(plan)
             commands = open(plan).readlines()
@@ -162,6 +161,9 @@ class rawqueue(object):
             strCmd = strLine.strip()
 
             threads = self.command_to_threads(strCmd, threads)
+
+            if path != None and strCmd[0] != os.path.sep:
+                strCmd = os.path.join(path, strCmd)
 
             arrBlock.append( (strCmd, threads) )
 

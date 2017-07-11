@@ -25,10 +25,9 @@ DEF_DBSPLIT_X  = 2000
 # min python version requirements
 
 def has_recent_python():
-    if sys.version_info.major == 1 or \
-       sys.version_info.major == 2 and sys.version_info.minor < 7 or \
+    if sys.version_info.major in (1, 2) or \
        sys.version_info.major == 3 and sys.version_info.minor < 5:
-       print("Python version 2.7+ or 3.5+ required")
+       print("Python version 3.5+ required")
        return False
 
     return True

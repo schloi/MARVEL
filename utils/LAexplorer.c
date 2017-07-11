@@ -1953,15 +1953,15 @@ static int command_line(GApplication* application, GApplicationCommandLine* cmdl
     gchar** remaining = NULL;
 
     GOptionEntry entries[] = {
-            {"quality", 'q', 0, G_OPTION_ARG_STRING, &qname, "Quality track name", NULL},
-            {"trim", 't', 0, G_OPTION_ARG_STRING, &tname, "Trim track name", NULL},
-            {"source", 's', 0, G_OPTION_ARG_STRING, &sname, "Source read id track name", NULL},
-            {"interval", 'i', 0, G_OPTION_ARG_STRING_ARRAY, &inames, "Name of intervals track for display", NULL},
+            {"quality", 'q', 0, G_OPTION_ARG_STRING, &qname, "name of the track containing the read quality annotation", NULL},
+            {"trim", 't', 0, G_OPTION_ARG_STRING, &tname, "name of the track containing the read trim annotation", NULL},
+            {"source", 's', 0, G_OPTION_ARG_STRING, &sname, "track containing a mapping of the read ids back to the pre-patching read ids", NULL},
+            {"interval", 'i', 0, G_OPTION_ARG_STRING_ARRAY, &inames, "include the interval annotation track in the display", NULL},
             {G_OPTION_REMAINING, 0, 0, G_OPTION_ARG_STRING_ARRAY, &remaining, NULL, NULL},
             {NULL, 0, 0, 0, NULL, NULL, NULL}
     };
 
-    GOptionContext* optctx = g_option_context_new("database las");
+    GOptionContext* optctx = g_option_context_new("database input.las");
     g_option_context_add_main_entries(optctx, entries, NULL);
     GError* error = NULL;
 

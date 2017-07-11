@@ -6,27 +6,28 @@
 #include "LAmergeUtils.h"
 #include "lib/oflags.h"
 
-static char* Usage = "[-hksv] [-C nsStA] [-n numFiles(8)] [-S fileSuffix] [-f files.txt] <db> <out.las> [<directory>| <in.1.las in.2.las ...>]";
+void printUsage( char* prog, FILE* out )
+{
+    fprintf( out, "usage: %s [-hksv] [-C [n|s|S|t|A]] [-n n] [-S string] [-f file] database output.las [input.directory | input.1.las ...]\n\n", prog );
 
-void printUsage(char *prog, FILE* out)
-  {
-    fprintf(out, "\nUsage:\t%s\t%s\n\n", prog, Usage);
-    fprintf(out, "  -h            prints this usage info\n");
-    fprintf(out, "  -v            verbose output\n");
-    fprintf(out, "  -s            sort files before merging takes place\n");
-    fprintf(out, "  -k            keep intermediate merge results\n");
-    fprintf(out, "  -C n|s|S|t|A  perform sanity checks. Multiple options are possible.\n");
-    fprintf(out, "                n ... file names must be consistent with database.\n");
-    fprintf(out, "                s ... small sort order check: lp.read.ID < rp.read.ID\n");
-    fprintf(out, "                S ... large sort order check: lp.read.ID < rp.read.ID && lp.read.COMP < rp.read.COMP && lp.read.abpos < rp.read.abpos\n");
-    fprintf(out, "                t ... check trace points\n");
-    fprintf(out, "                A ... check all (corresponds to: nSt)\n");
-    fprintf(out, "  -n NUM        specify number of files that are merged simultaneously [2, 255], (Default: 8).\n");
-    fprintf(out, "  -S suffix	  specify a file suffix, e.g. ovh, or rescued, (default: not set)\n");
-    fprintf(out, "  -f file       file that contains a list of overlap files that should be merged. (One file per line)\n");
-    fprintf(out, "  db            database name\n");
-    fprintf(out, "  directory     specify directory where the overlaps are located.\n");
-  }
+    fprintf( out, "Merge (and sorts) multiple input las files into a single output file.\n\n" );
+
+    fprintf( out, "options:\n" );
+
+    fprintf( out, "  -h  prints this usage info\n" );
+    fprintf( out, "  -v  verbose output\n" );
+    fprintf( out, "  -s  sort content of the input las files prior to merging\n" );
+    fprintf( out, "  -k  keep intermediate merge results\n" );
+    fprintf( out, "  -C mode  perform sanity checks. Multiple options are possible.\n" );
+    fprintf( out, "     n  file names must be consistent with database.\n" );
+    fprintf( out, "     s  ensure ascending read id ordering\n" );
+    fprintf( out, "     S  -s + ensure complement and alignment start position ordering\n" );
+    fprintf( out, "     t  check alignment trace points\n" );
+    fprintf( out, "     A  check all (equals -nSt)\n" );
+    fprintf( out, "  -n n  number of input files that are merged simultaneously [2, 255], (Default: 8).\n" );
+    fprintf( out, "  -S suffix  specify a file suffix, e.g. ovh, or rescued, (default: not set)\n" );
+    fprintf( out, "  -f file  file that contains a list of las files to be merged. (One file per line)\n" );
+}
 
 int SORT_OVL(const void *x, const void *y)
   {

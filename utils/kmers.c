@@ -148,13 +148,14 @@ static void compute_cutoffs(KmersContext* kctx)
     printf("computing k-mer cutoffs\n");
 #endif
 
+    uint64 histo_sum     = kctx->histo_sum;
+    uint64* histo_counts = kctx->histo_counts;
+
     uint64 sum = 0;
     int i = KMER_COUNT_MAX;
-    uint64 histo_sum = kctx->histo_sum;
-    uint64* histo_counts = kctx->histo_counts;
     uint64 count = 0;
 
-    while ( (double)(sum) / histo_sum < 0.01 )
+    while ( (double)( sum ) / histo_sum < 0.01 )
     {
         count += histo_counts[i] * i;
         sum += histo_counts[i];

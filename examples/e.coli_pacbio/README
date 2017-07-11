@@ -1,0 +1,5 @@
+
+1) gunzip p6.25x.fasta.gz
+2) MARVEL_INSTALL_DIR/scripts/DBprepare.py ECOL p6.25x.fasta
+3) do.py
+

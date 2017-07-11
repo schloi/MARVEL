@@ -150,13 +150,16 @@ static int loader_handler( void* _ctx, Overlap* ovl, int novl )
     return 1;
 }
 
-static void usage()
+static void usage(FILE* fout, const char* app)
 {
-    fprintf( stderr, "usage:  [-vpL] [-t <track>] <db> <overlaps.in> <overlaps.out>\n" );
-    fprintf( stderr, "options: -v ... verbose\n" );
-    fprintf( stderr, "         -p ... purge discarded overlaps\n" );
-    fprintf( stderr, "         -t ... trim track name (default: %s)\n", DEF_ARG_T );
-    fprintf( stderr, "         -L ... two pass processing with read caching\n");
+    fprintf( fout, "usage: %s [-vpL] [-t track] database input.las output.las\n\n", app );
+
+    fprintf( fout, "Apply the trim track to the input las file and update the alignments accordingly.\n\n" );
+
+    fprintf( fout, "options: -v  verbose output\n" );
+    fprintf( fout, "         -p  purge discarded overlaps\n" );
+    fprintf( fout, "         -t  trim track name (default: %s)\n", DEF_ARG_T );
+    fprintf( fout, "         -L  two-pass processing with read caching\n");
 }
 
 int main( int argc, char* argv[] )
@@ -166,6 +169,7 @@ int main( int argc, char* argv[] )
     FILE* fileOvlOut;
     PassContext* pctx;
     TrimContext tctx;
+    char* app = argv[ 0 ];
 
     // process arguments
 
@@ -200,14 +204,14 @@ int main( int argc, char* argv[] )
                 break;
 
             default:
-                usage();
+                usage(stdout, app);
                 exit( 1 );
         }
     }
 
     if ( argc - optind != 3 )
     {
-        usage();
+        usage(stdout, app);
         exit( 1 );
     }
 

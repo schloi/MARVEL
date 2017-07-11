@@ -8,18 +8,22 @@ export VERSION
 
 include Makefile.settings
 
-MODULES = corrector dalign db lib.python scripts scrub touring utils 
+MODULES = corrector dalign db lib.python scripts scrub touring utils msa patcher experimental
 
 .PHONY: all
 all: prebuild
 	for dir in $(MODULES); do \
-		$(MAKE) -C $$dir $@ ; \
+		if [ -d ./$$dir ]; then \
+			$(MAKE) -C $$dir $@ ; \
+		fi	\
 	done
 
 .PHONY: clean
 clean:
 	for dir in $(MODULES); do \
-		$(MAKE) -C $$dir $@ ; \
+		if [ -d ./$$dir ]; then \
+			$(MAKE) -C $$dir $@ ; \
+		fi	\
 	done
 
 .PHONY: install
@@ -28,13 +32,19 @@ install:
 	$(INSTALL_PROGRAM) -d $(install_scripts)
 	$(INSTALL_PROGRAM) -d $(install_python)
 	for dir in $(MODULES); do \
-		$(MAKE) -C $$dir $@ ; \
+		if [ -d ./$$dir ]; then \
+			$(MAKE) -C $$dir $@ ; \
+		fi	\
 	done
 	rm -f $(bindir) $(prefix)/scripts $(prefix)/lib.python
 	ln -s $(install_bin) $(bindir)
 	ln -s $(install_scripts) $(prefix)/scripts
 	ln -s $(install_python) $(prefix)/lib.python
 	echo "$(VERSION)" > $(prefix)/VERSION
+	@echo "---------------------------------------------------------------"
+	@echo "Installation into $(prefix) finished"
+	@echo "Don't forget to include $(prefix)/lib.python in your PYTHONPATH"
+	@echo "---------------------------------------------------------------"
 
 prebuild: lib/oflags.h
 	build/oflags.py lib/oflags.h lib.python/marvel/oflags.py
@@ -46,4 +56,3 @@ Makefile: Makefile.in config.status Makefile.settings.in
 
 config.status: configure
 	./config.status --recheck
-

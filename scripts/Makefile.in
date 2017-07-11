@@ -2,7 +2,7 @@
 include ../Makefile.settings
 
 ALL =
-SCRIPTS = rid2bid.py DBprepare.py
+SCRIPTS = rid2bid.py DBprepare.py paths2rids.py
 
 all: $(ALL)
 

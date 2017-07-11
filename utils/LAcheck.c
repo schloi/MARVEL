@@ -56,15 +56,6 @@ typedef struct
 
 } CheckContext;
 
-static void usage()
-{
-    fprintf(stderr, "usage  : [-p] [-s] [-d] [-i] <db> <las>\n");
-    fprintf(stderr, "options: -p ... check pass-through points (%d)\n", DEF_ARG_P);
-    fprintf(stderr, "         -s ... check sort order (%d)\n", DEF_ARG_S);
-    fprintf(stderr, "         -d ... report duplicates. implies -s (%d)\n", DEF_ARG_D);
-    fprintf(stderr, "         -i ... ignore overlaps that are discarded (default: 0)\n");
-}
-
 inline static int compare_sort(Overlap* o1, Overlap* o2)
 {
     int cmp;
@@ -210,6 +201,16 @@ static int check_process(void* _ctx, Overlap* ovl, int novl)
     return !ctx->error;
 }
 
+static void usage()
+{
+    fprintf( stderr, "usage: [-p] [-s] [-d] [-i] database input.las\n\n" );
+    fprintf( stderr, "Check the contents of a .las file for consistency.\n\n" );
+    fprintf( stderr, "options: -p  check pass-through points\n" );
+    fprintf( stderr, "         -s  check sort order\n" );
+    fprintf( stderr, "         -d  report duplicates\n" );
+    fprintf( stderr, "         -i  skip overlaps tagged as discarded\n" );
+}
+
 int main(int argc, char* argv[])
 {
     PassContext* pctx;
@@ -219,7 +220,6 @@ int main(int argc, char* argv[])
 
     bzero(&cctx, sizeof(CheckContext));
     cctx.db = &db;
-
 
     // process arguments
 

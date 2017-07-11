@@ -2,8 +2,6 @@
 import struct
 import os
 
-from numpy import array as npa
-
 from marvel.oflags import *
 
 OM_AB = 0
@@ -90,7 +88,7 @@ class LAS(object):
 
         self.fileLas.seek(self.tbytes * tlen, 1)
 
-        return npa( [ab, ae, bb, be, flags, aread, bread, diffs, -1] ) # , dtype = numpy.int32 )
+        return [ab, ae, bb, be, flags, aread, bread, diffs, -1]
 
     def rewind(self):
         self.fileLas.seek(0)

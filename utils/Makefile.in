@@ -4,7 +4,7 @@ include ../Makefile.settings
 ALL = LAcartoons LAshow LAcheck LAcount LAmerge \
       LAneighbors LAindex \
       LAstats LAextract LAZtest \
-	  TKshow TKcombine TKtrim \
+	  TKshow TKcombine \
 	  gff2track kmers
 
 have_gtk = @have_gtk@

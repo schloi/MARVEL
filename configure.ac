@@ -1,5 +1,6 @@
-#                                               -*- Autoconf -*-
-# Process this file with autoconf to produce a configure script.
+# Process this file with autoreconf to produce a configure script.
+
+AC_CONFIG_MACRO_DIR([m4/])
 
 AC_PREREQ([2.69])
 
@@ -12,11 +13,22 @@ AC_CONFIG_HEADERS([config.h])
 AC_PROG_CC
 AC_PROG_INSTALL
 
+# check python installation
+
+AC_PATH_PROGS([PYTHON3], [python3.6 python3 python3.5], [no])
+[if test "$PYTHON3" == "no"]
+[then]
+    AM_PATH_PYTHON([3.5])
+[fi]
+
+AC_PYTHON_MODULE([networkx])
+
 # Checks for libraries.
 AC_CHECK_LIB([hdf5], [H5Dopen2], [have_hdf5=yes], [have_hdf5=no])
 AC_CHECK_LIB([m], [sin])
 AC_CHECK_LIB([z], [compress])
 AC_CHECK_LIB([pthread], [pthread_create])
+AC_CHECK_LIB([bsd], [fgetln])
 
 PKG_CHECK_MODULES([GTK], [gtk+-3.0], [have_gtk=yes], [have_gtk=no])
 
@@ -49,6 +61,7 @@ AC_FUNC_REALLOC
 AC_FUNC_STRTOD
 AC_CHECK_FUNCS([bzero floor ftruncate gethostbyname inet_ntoa memmove memset mkdir pow realpath select setlocale socket sqrt strcasecmp strchr strdup strerror strncasecmp strrchr strtol])
 
+# generate files from templates
 AC_CONFIG_FILES([Makefile
                  Makefile.settings
                  corrector/Makefile
@@ -57,10 +70,26 @@ AC_CONFIG_FILES([Makefile
                  lib.python/Makefile
                  lib.python/marvel/config.py
                  scripts/Makefile
+                 scripts/DBprepare.py
+                 scripts/paths2rids.py
+                 scripts/rid2bid.py
                  scrub/Makefile
                  touring/Makefile
+                 touring/OGtour.py
+                 touring/tour2fasta.py
                  utils/Makefile])
 
+AM_CONDITIONAL([HAS_MOD_EXPERIMENTAL], [test -x experimental])
+AM_COND_IF([HAS_MOD_EXPERIMENTAL], [AC_CONFIG_FILES([experimental/Makefile])])
+
+AM_CONDITIONAL([HAS_MOD_MSA], [test -x msa])
+AM_COND_IF([HAS_MOD_MSA], [AC_CONFIG_FILES([msa/Makefile])])
+
+AM_CONDITIONAL([HAS_MOD_PATCHER], [test -x patcher])
+AM_COND_IF([HAS_MOD_PATCHER], [AC_CONFIG_FILES([patcher/Makefile])])
+
+# make variables available
+AC_SUBST([PYTHON3], ${PYTHON3})
 AC_SUBST([have_gtk], ${have_gtk})
 AC_SUBST([have_hdf5], ${have_hdf5})
 AC_SUBST(HDF5_INC)
@@ -68,6 +97,7 @@ AC_SUBST(HDF5_LIB)
 
 AC_OUTPUT
 
+# complain
 if test "x${have_gtk}" = xno; then
     echo "--------------------------------"
     echo " gtk not found"
@@ -81,5 +111,4 @@ if test "x${have_hdf5}" = xno; then
     echo " skipping apps depending on it"
     echo "--------------------------------"
 fi
-
 

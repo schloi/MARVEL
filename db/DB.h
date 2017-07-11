@@ -444,5 +444,6 @@ int DB_Blocks(char* db); // HEIDELBERG_MODIFICATION
 
 char *getDir(int runID, int subjectID); // HEIDELBERG_MODIFICATION
 
+int DB_block_range( char* db, int block, int* _beg, int* _end ); // HEIDELBERG_MODIFICATION
 
 #endif // _HITS_DB

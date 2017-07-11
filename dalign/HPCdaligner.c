@@ -71,8 +71,8 @@ static void printUsage(char* prog, FILE *out)
   {
     fprintf(out, "\nUsage:\t%s\t%s\n\n", prog, Usage);
     fprintf(out, "  -h            prints this usage info\n");
-    fprintf(out, "  -o ARG        specify a file suffix, if set the daligner plan is written to planDalignARG and the merge plan is written\n"
-        "                to planMergeARG (default: not set, i.e. everything goes to stdout)\n");
+    fprintf(out, "  -o ARG        specify a file prefix, if set the daligner plan is written to ARG.dalign.plan and the merge plan is written\n"
+                 "                to ARG.merge.plan (default: not set, i.e. everything goes to stdout)\n");
     fprintf(out, "  -v            enable verbose mode for daligner and LAmerge\n");
     fprintf(out, "  path          database\n");
     fprintf(out, "  bID[-bID]     specify a block or a range of blocks\n");
@@ -445,13 +445,13 @@ HPC_OPT* parseOptions(int argc, char* argv[])
             {
               char *out;
               out = (char*) malloc(strlen(optarg) + 20);
-              sprintf(out, "planDalign%s", optarg);
+              sprintf(out, "%s.dalign.plan", optarg);
               if ((hopt->dalignOut = fopen(out, "w")) == NULL)
                 {
                   fprintf(stderr, "ERROR - Cannot open file %s for writing\n", out);
                   exit(1);
                 }
-              sprintf(out, "planMerge%s", optarg);
+              sprintf(out, "%s.merge.plan", optarg);
               if ((hopt->mergeOut = fopen(out, "w")) == NULL)
                 {
                   fprintf(stderr, "ERROR - Cannot open file %s for writing\n", out);

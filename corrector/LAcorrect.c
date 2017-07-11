@@ -2,7 +2,7 @@
  *
  *  Consensus based read correction
  *
- *  Date   : revisited July 2016
+ *  Date   : revisited April 2017
  *
  *  Author : Marvel Team
  *
@@ -33,13 +33,11 @@
 #define MIN_TWIDTH 20
 
 #define MAX_COVERAGE 20
-#define MAX_TILES 100
+#define MAX_TILES 40
 
 #undef ADJUST_OFFSETS      // use mid-points to adjust pass through points
 #undef FIX_BOUNDARY_ERRORS // perform multi-tile alignment around segment boundary
 #define USE_A_TILES        // add the A tile to the tile-pile
-
-#undef WRITE_STATISTICS
 
 #define TRACK_POSITIONS
 
@@ -47,14 +45,18 @@
 #define CE_CENTER_DISTANCE 0.4 // consensus error fixing, max fraction of twidth from tile boundary
 #endif
 
+// read flags
+
+#define READ_CORRECT       1
+#define READ_CORRECTED     2
+
 // defaults
 
-#define DEF_ARG_X 0 // min length in order for corrected sequences to written to file
 #define DEF_ARG_Q TRACK_Q
+#define DEF_ARG_B -1
+#define DEF_ARG_J 1
 
 // development only
-
-#define VERBOSE
 
 #undef DEBUG
 #undef DEBUG_FIX_CONSENSUS
@@ -69,6 +71,7 @@
 
 typedef struct
 {
+    int verbose;
     int thread;     // thread number
     int twidth;     // spacing between the alignment trace points
     off_t start;    // start offset in the overlap file
@@ -76,15 +79,9 @@ typedef struct
     FILE* fileOvls; // overlaps
     FILE* fileOut;  // output file
 
-#ifdef WRITE_STATISTICS
-    FILE* fileStats; // statistics file
-#endif
-
-    HITS_DB db;            // database
-    HITS_TRACK* qtrack;    // quality track
+    HITS_DB db;         // database
+    HITS_TRACK* qtrack; // quality track
     char* fastaHeader;
-
-    int minRLen;
 } corrector_arg;
 
 // relative to the A read the overlaps are decomposed into so called tiles.
@@ -113,7 +110,7 @@ typedef struct
     msa* malign;       // multi-align state
     int malign_indent; // multi-align indentation (display only)
 #endif
-
+    int verbose;
     int thread; // thread #
 
     int twidth; // spacing of trace points
@@ -167,19 +164,12 @@ typedef struct
 
     char* fastaHeader; // keeps pointer to base_out
 
-    int minRLen;
-
 } corrector_context;
 
 // needed for getopt
 
 extern char* optarg;
 extern int optind, opterr, optopt;
-
-static int round_down( int n, int f )
-{
-    return n - ( n % f );
-}
 
 static int has_valid_pt_points( Overlap* ovl )
 {
@@ -218,8 +208,7 @@ static off_t* partition_overlaps( FILE* fileOvls, int parts )
     ovl_header_novl novl;
     ovl_header_twidth twidth;
 
-    off_t* offsets = (off_t*)malloc( sizeof( off_t ) * ( parts + 1 ) );
-    bzero( offsets, sizeof( off_t ) * parts );
+    off_t* offsets = calloc( parts + 1, sizeof( off_t ) );
 
     ovl_header_read( fileOvls, &novl, &twidth );
 
@@ -272,26 +261,11 @@ static int cmp_tovl_qv( const void* a, const void* b )
 
 #ifdef DEBUG
 
-/*
-static void print_read(char* seq, int b, int e)
-{
-    static char nucl[] = {'A', 'C', 'G', 'T', '*'};
-
-    while (b != e)
-    {
-        putc(nucl[ (int)seq[b] ], stdout);
-        b++;
-    }
-
-    putc('\n', stdout);
-}
-*/
-
 static void print_tiles( corrector_context* cctx, int tile )
 {
     int j;
 
-    printf( "TILE %3d\n", tile );
+    printf( "TILE %3d %5d..%5d\n", tile, cctx->toff[ tile ], cctx->toff[ tile + 1 ] );
 
     for ( j = cctx->toff[ tile ]; j < cctx->toff[ tile + 1 ]; j++ )
     {
@@ -329,7 +303,7 @@ static char* single_tile_consensus( corrector_context* cctx, int t, int* tiles_u
 
         if ( bb > be )
         {
-            printf( "bb > be %d %d ... a %d b %d\n", bb, be, cctx->tovl[ j ].a, cctx->tovl[ j ].b );
+            printf( "T%d bb > be %d %d ... a %d b %d\n", cctx->thread, bb, be, cctx->tovl[ j ].a, cctx->tovl[ j ].b );
             fflush( stdout );
         }
 
@@ -390,8 +364,8 @@ static char* multi_tile_consensus( corrector_context* cctx, Overlap* ovls, int n
 
     if ( novls >= cctx->mtc_dmax )
     {
-        cctx->mtc_data  = (int*)realloc( cctx->mtc_data, sizeof( int ) * novls * doff );
-        cctx->mtc_dsort = (int**)realloc( cctx->mtc_dsort, sizeof( int* ) * novls );
+        cctx->mtc_data  = realloc( cctx->mtc_data, sizeof( int ) * novls * doff );
+        cctx->mtc_dsort = realloc( cctx->mtc_dsort, sizeof( int* ) * novls );
     }
 
     int* data  = cctx->mtc_data;
@@ -471,7 +445,7 @@ static char* multi_tile_consensus( corrector_context* cctx, Overlap* ovls, int n
             continue;
         }
 
-        consensus_add( cctx->cons, cctx->reads[ ovl + 1 ], bb, be ); // , 0, ae-ab);
+        consensus_add( cctx->cons, cctx->reads[ ovl + 1 ], bb, be );
 
 #ifdef DEBUG_MULTI
         msa_add( cctx->malign, cctx->reads[ ovl + 1 ], -1, -1, bb, be, NULL, 0 );
@@ -527,12 +501,17 @@ static int load_read( corrector_context* cctx, int rid, int comp )
 
 #ifdef ADJUST_OFFSETS
 
+static int round_down( int n, int f )
+{
+    return n - ( n % f );
+}
+
 static int round_up( int n, int f )
 {
     return ( n + f - 1 ) - ( ( n - 1 ) % f );
 }
 
-static void adjust_offsets( corrector_context* cctx, Overlap* ovl, int novl )
+static void adjust_offsets( corrector_context* cctx, Overlap** ovls, int novl )
 {
     Alignment aln;
     Path path;
@@ -541,43 +520,46 @@ static void adjust_offsets( corrector_context* cctx, Overlap* ovl, int novl )
 
     aln.path = &path;
     aln.aseq = cctx->reads[ 0 ];
-    aln.alen = ovl->alen;
+    aln.alen = DB_READ_LEN( cctx->db, ovls[ 0 ]->aread );
 
     int ntmax   = 1000;
-    int* ntrace = (int*)malloc( sizeof( int ) * ntmax );
+    int* ntrace = malloc( sizeof( int ) * ntmax );
     int ntlen;
 
     int i;
     for ( i = 0; i < novl; i++ )
     {
+        Overlap* ovl = ovls[ i ];
+
 #ifdef DEBUG_OFFSETS
-        printf( "OVL %5d x %5d @ %5d..%5d x %5d..%5d\n", ovl[ i ].alen, ovl[ i ].blen, ovl[ i ].path.abpos, ovl[ i ].path.aepos, ovl[ i ].path.bbpos, ovl[ i ].path.bepos );
+        printf( "OVL %5d x %5d @ %5d..%5d x %5d..%5d\n",
+                ovl->alen, ovl->blen,
+                ovl->path.abpos, ovl->path.aepos,
+                ovl->path.bbpos, ovl->path.bepos );
 #endif
 
         aln.bseq = cctx->reads[ i + 1 ];
-        aln.blen = ovl[ i ].blen;
+        aln.blen = DB_READ_LEN( cctx->db, ovl->aread );
 
-        path = ovl[ i ].path;
+        path = ovl->path;
 
-        Compute_Trace_MID( &aln, cctx->align_work_data, twidth );
+        Compute_Trace_MID( &aln, cctx->align_work_data, twidth, GREEDIEST );
 
         {
-            int a = ovl[ i ].path.abpos;
-            int b = ovl[ i ].path.bbpos;
+            int a = ovl->path.abpos;
+            int b = ovl->path.bbpos;
             int p, t;
             int diffs   = 0;
             int matches = 0;
 
             int ntcur = 0;
-            ntlen     = ( round_down( ovl[ i ].path.aepos - 1, twidth ) - round_up( ovl[ i ].path.abpos + 1, twidth ) + twidth ) / twidth * 2 + 2;
+            ntlen     = ( round_down( ovl->path.aepos - 1, twidth ) - round_up( ovl->path.abpos + 1, twidth ) + twidth ) / twidth * 2 + 2;
 
             if ( ntlen > ntmax )
             {
                 ntmax  = 1.2 * ntmax + ntlen;
-                ntrace = (int*)malloc( sizeof( int ) * ntmax );
+                ntrace = malloc( sizeof( int ) * ntmax );
             }
-
-            // printf("pts  ");
 
             int bprev = aln.path->bbpos;
 
@@ -602,7 +584,6 @@ static void adjust_offsets( corrector_context* cctx, Overlap* ovl, int novl )
                             ntrace[ ntcur++ ] = b - bprev;
                             bprev             = b;
 
-                            // printf(" %4dx%4d %3d %3d", a, b, diffs, matches);
                             diffs = matches = 0;
                         }
                     }
@@ -630,7 +611,6 @@ static void adjust_offsets( corrector_context* cctx, Overlap* ovl, int novl )
                             ntrace[ ntcur++ ] = b - bprev;
                             bprev             = b;
 
-                            // printf(" %4dx%4d %3d %3d", a, b, diffs, matches);
                             diffs = matches = 0;
                         }
                     }
@@ -644,7 +624,6 @@ static void adjust_offsets( corrector_context* cctx, Overlap* ovl, int novl )
                         ntrace[ ntcur++ ] = b - bprev;
                         bprev             = b;
 
-                        // printf(" %4dx%4d %3d %3d", a, b, diffs, matches);
                         diffs = matches = 0;
                     }
                 }
@@ -661,13 +640,12 @@ static void adjust_offsets( corrector_context* cctx, Overlap* ovl, int novl )
                 a += 1;
                 b += 1;
 
-                if ( a % twidth == 0 && a != ovl[ i ].path.aepos )
+                if ( a % twidth == 0 && a != ovl->path.aepos )
                 {
                     ntrace[ ntcur++ ] = diffs;
                     ntrace[ ntcur++ ] = b - bprev;
                     bprev             = b;
 
-                    // printf(" %4dx%4d %3d %3d", a, b, diffs, matches);
                     diffs = matches = 0;
                 }
             }
@@ -678,10 +656,12 @@ static void adjust_offsets( corrector_context* cctx, Overlap* ovl, int novl )
 #ifdef DEBUG_OFFSETS
             if ( ntcur != ntlen )
             {
-                a = round_up( ovl[ i ].path.abpos + 1, twidth );
-                b = ovl[ i ].path.bbpos;
+                a = round_up( ovl->path.abpos + 1, twidth );
+                b = ovl->path.bbpos;
                 printf( "ntcur %d != ntlen %d\n", ntcur, ntlen );
-                printf( "%d..%d x %d..%d -> %d pts\n", ovl[ i ].path.abpos, ovl[ i ].path.aepos, ovl[ i ].path.bbpos, ovl[ i ].path.bepos, ntlen );
+                printf( "%d..%d x %d..%d -> %d pts\n",
+                        ovl->path.abpos, ovl->path.aepos,
+                        ovl->path.bbpos, ovl->path.bepos, ntlen );
 
                 printf( "npts  " );
                 for ( t = 0; t < ntcur - 1; t += 2 )
@@ -701,16 +681,16 @@ static void adjust_offsets( corrector_context* cctx, Overlap* ovl, int novl )
         int j;
 
 #ifdef DEBUG_OFFSETS
-        printf( "(%3d)", ovl[ i ].path.tlen );
-        for ( j = 1; j < ovl[ i ].path.tlen; j += 2 )
+        printf( "(%3d)", ovl->path.tlen );
+        for ( j = 1; j < ovl->path.tlen; j += 2 )
         {
-            if ( j > ntlen || j > ovl[ i ].path.tlen || ( (uint16*)( ovl[ i ].path.trace ) )[ j ] != ntrace[ j ] )
+            if ( j > ntlen || j > ovl->path.tlen || ( (uint16*)( ovl->path.trace ) )[ j ] != ntrace[ j ] )
             {
-                printf( ANSI_COLOR_RED " %3d" ANSI_COLOR_RESET, ( (uint16*)( ovl[ i ].path.trace ) )[ j ] );
+                printf( ANSI_COLOR_RED " %3d" ANSI_COLOR_RESET, ( (uint16*)( ovl->path.trace ) )[ j ] );
             }
             else
             {
-                printf( " %3d", ( (uint16*)( ovl[ i ].path.trace ) )[ j ] );
+                printf( " %3d", ( (uint16*)( ovl->path.trace ) )[ j ] );
             }
         }
         printf( "\n" );
@@ -723,11 +703,11 @@ static void adjust_offsets( corrector_context* cctx, Overlap* ovl, int novl )
         printf( "\n\n" );
 #endif
 
-        assert( ovl[ i ].path.tlen == ntlen );
+        assert( ovl->path.tlen == ntlen );
 
         for ( j = 0; j < ntlen; j++ )
         {
-            ( (uint16*)ovl[ i ].path.trace )[ j ] = ntrace[ j ];
+            ( (uint16*)ovl->path.trace )[ j ] = ntrace[ j ];
         }
     }
 }
@@ -758,7 +738,7 @@ static char* append_consensus( corrector_context* cctx, char* seqcons, int tiles
     if ( ncons + cctx->curcons >= cctx->maxcons )
     {
         cctx->maxcons = cctx->maxcons * 1.2 + ncons + 100;
-        cctx->seqcons = (char*)realloc( cctx->seqcons, cctx->maxcons );
+        cctx->seqcons = realloc( cctx->seqcons, cctx->maxcons );
     }
 
     cctx->tiles[ cctx->curtiles + 0 ] = ncons;
@@ -821,7 +801,7 @@ static char* fix_boundary_errors( corrector_context* cctx, Overlap* ovl, int nov
         if ( slen >= cctx->ce_smax )
         {
             cctx->ce_smax        = slen * 1.2;
-            cctx->ce_seq_singles = (char*)realloc( cctx->ce_seq_singles, sizeof( char ) * cctx->ce_smax );
+            cctx->ce_seq_singles = realloc( cctx->ce_seq_singles, sizeof( char ) * cctx->ce_smax );
         }
 
         strncpy( cctx->ce_seq_singles, cctx->seqcons + cctx->ce_tiles[ i ], slen );
@@ -892,7 +872,7 @@ static char* fix_boundary_errors( corrector_context* cctx, Overlap* ovl, int nov
         if ( 2 * path.tlen + tcur > tmax )
         {
             tmax  = tmax * 1.2 + path.tlen * 2;
-            trace = (int*)realloc( trace, sizeof( int ) * tmax );
+            trace = realloc( trace, sizeof( int ) * tmax );
         }
 
         int a = 0;
@@ -954,7 +934,7 @@ static char* fix_boundary_errors( corrector_context* cctx, Overlap* ovl, int nov
     if ( diffs_a + cctx->curcons >= cctx->maxcons )
     {
         cctx->maxcons = cctx->maxcons * 1.2 + diffs_a + 100;
-        cctx->seqcons = (char*)realloc( cctx->seqcons, cctx->maxcons );
+        cctx->seqcons = realloc( cctx->seqcons, cctx->maxcons );
     }
 
     int n = cctx->curcons - 1 + diffs_a;
@@ -1030,31 +1010,19 @@ static char* fix_boundary_errors( corrector_context* cctx, Overlap* ovl, int nov
 
 #endif // FIX_BOUNDARY_ERRORS
 
-static int break_read( corrector_context* cctx, Overlap* ovl, int novl )
+static int break_read( corrector_context* cctx, int aread )
 {
-#ifndef FIX_BOUNDARY_ERRORS
-    UNUSED( novl );
-#endif
 
     if ( cctx->curcons == 0 )
     {
         return 0;
     }
 
-    // validate consensus using multi-tile alignments
-
-    // cctx->ce_tiles[ cctx->ce_tcur ] = cctx->curcons;
-    // cctx->ce_tcur++;
-
-    int len = strlen( cctx->seqcons );
+// validate consensus using multi-tile alignments
 
 #ifdef DEBUG_FIX_CONSENSUS
-
-    if ( len > cctx->minRLen )
-    {
-        fprintf( cctx->fileOut, ">%d.%d source=%d\n", ovl->aread, cctx->ncorrected, ovl->aread );
-        write_seq( cctx->fileOut, cctx->seqcons );
-    }
+    fprintf( cctx->fileOut, ">%d.%d source=%d\n", aread, cctx->ncorrected, aread );
+    write_seq( cctx->fileOut, cctx->seqcons );
 
 #endif
 
@@ -1066,80 +1034,72 @@ static int break_read( corrector_context* cctx, Overlap* ovl, int novl )
     seq = cctx->seqcons;
 #endif
 
-    len = strlen( seq );
-
 #ifdef DEBUG_MULTI
     cctx->malign_indent = 0;
 #endif
 
-    if ( len > cctx->minRLen )
+    int ab   = cctx->ce_first_tile * cctx->twidth;
+    int alen = cctx->db->reads[ aread ].rlen;
+    int ae   = MIN( alen, ( cctx->ce_first_tile + cctx->ce_tcur - 1 ) * cctx->twidth );
+
+    fprintf( cctx->fileOut, ">%d.%d source=%d,%d,%d correctionq=", aread, cctx->ncorrected, aread, ab, ae );
+
+    int i;
+    for ( i = 0; i < cctx->curtiles; i += 2 )
     {
-        int ab   = cctx->ce_first_tile * cctx->twidth;
-        int alen = cctx->db->reads[ ovl->aread ].rlen;
-        int ae   = MIN( alen, ( cctx->ce_first_tile + cctx->ce_tcur - 1 ) * cctx->twidth );
+        if ( i > 0 )
+            fprintf( cctx->fileOut, "," );
 
-        fprintf( cctx->fileOut, ">%d.%d source=%d,%d,%d correctionq=", ovl->aread, cctx->ncorrected, ovl->aread, ab, ae );
-
-        int i;
-        for ( i = 0; i < cctx->curtiles; i += 2 )
-        {
-            if ( i > 0 )
-                fprintf( cctx->fileOut, "," );
-
-            fprintf( cctx->fileOut, "%d,%d", cctx->tiles[ i ], cctx->tiles[ i + 1 ] );
-        }
+        fprintf( cctx->fileOut, "%d,%d", cctx->tiles[ i ], cctx->tiles[ i + 1 ] );
+    }
 
 #ifdef TRACK_POSITIONS
-        Alignment aln;
-        Path path;
+    Alignment aln;
+    Path path;
 
-        aln.path = &path;
+    aln.path = &path;
 
-        aln.aseq = cctx->reads[0];
-        aln.alen = DB_READ_LEN(cctx->db, ovl->aread);
+    aln.aseq = cctx->reads[ 0 ];
+    aln.alen = DB_READ_LEN( cctx->db, aread );
 
-        aln.bseq = seq;
-        aln.blen = strlen( aln.bseq );
-        Number_Read( aln.bseq );
+    aln.bseq = seq;
+    aln.blen = strlen( aln.bseq );
+    Number_Read( aln.bseq );
 
-        path.tlen  = 0;
-        path.trace = NULL;
+    path.tlen  = 0;
+    path.trace = NULL;
 
-        path.abpos = 0;
-        path.aepos = aln.alen;
+    path.abpos = 0;
+    path.aepos = aln.alen;
 
-        path.bbpos = 0;
-        path.bepos = aln.blen;
+    path.bbpos = 0;
+    path.bepos = aln.blen;
 
-        path.diffs = aln.alen + aln.blen;
+    path.diffs = aln.alen + aln.blen;
 
-        Compute_Trace_ALL( &aln, cctx->align_work_data );
+    Compute_Trace_ALL( &aln, cctx->align_work_data );
 
-        if ( path.tlen > 0 )
+    if ( path.tlen > 0 )
+    {
+        fprintf( cctx->fileOut, " postrace=" );
+        for ( i = 0; i < path.tlen; i++ )
         {
-            fprintf(cctx->fileOut, " postrace=");
-            for (i = 0; i < path.tlen; i++)
+            if ( i > 0 )
             {
-                if (i > 0 )
-                {
-                    fprintf(cctx->fileOut, ",");
-                }
-                fprintf(cctx->fileOut, "%d", ((int*)(path.trace))[i]);
+                fprintf( cctx->fileOut, "," );
             }
+            fprintf( cctx->fileOut, "%d", ( (int*)( path.trace ) )[ i ] );
         }
+    }
 
-        // Print_Alignment(stdout, &aln, cctx->align_work_data, 0, 100, 0, 100, 0);
-        // trace_to_posmap(path.trace, path.tlen, aln.alen);
-
-        Lower_Read( aln.bseq);
+    Lower_Read( aln.bseq );
 #endif
 
-        fprintf( cctx->fileOut, "\n" );
+    fprintf( cctx->fileOut, "\n" );
 
-        write_seq( cctx->fileOut, seq );
+    write_seq( cctx->fileOut, seq );
 
-        cctx->ncorrected++;
-    }
+    cctx->ncorrected++;
 
     cctx->seqcons[ 0 ] = '\0';
     cctx->curcons      = 0;
@@ -1151,10 +1111,10 @@ static int break_read( corrector_context* cctx, Overlap* ovl, int novl )
     return 1;
 }
 
-static int cmp_ovl_length( const void* a, const void* b )
+static int cmp_povl_length( const void* a, const void* b )
 {
-    Overlap* x = (Overlap*)a;
-    Overlap* y = (Overlap*)b;
+    Overlap* x = *(Overlap**)a;
+    Overlap* y = *(Overlap**)b;
 
     int len_x = x->path.aepos - x->path.abpos;
     int len_y = y->path.aepos - y->path.abpos;
@@ -1162,25 +1122,29 @@ static int cmp_ovl_length( const void* a, const void* b )
     return len_y - len_x;
 }
 
-static void correct_overlaps( corrector_context* cctx, Overlap* pOvls, int nOvls )
+static void correct_overlaps( corrector_context* cctx, Overlap** ovls, int nOvls )
 {
-    int a = pOvls->aread;
+    int a = ovls[ 0 ]->aread;
 
-    // if ( a != 48506 ) return ;
+    if ( ! ( cctx->db->reads[a].flags & READ_CORRECT ) )
+    {
+        return ;
+    }
 
-#ifdef VERBOSE
-    printf( "READ %8d (%5d) CONSENSUS [ SINGLE %5d MULTI %5d ]\n",
-            a, cctx->db->reads[ pOvls->aread ].rlen, cctx->stats_tiles_single, cctx->stats_tiles_multi );
-#endif
+    if ( cctx->verbose )
+    {
+        // printf( "READ %8d (%5d) CONSENSUS [ SINGLE %5d MULTI %5d ]\n", a, cctx->db->reads[ a ].rlen, cctx->stats_tiles_single, cctx->stats_tiles_multi );
+        printf( "T%d READ %8d (%5d)\n", cctx->thread, a, cctx->db->reads[ a ].rlen);
+    }
 
     // verify that the PT points are valid
 
     int i;
     for ( i = 0; i < nOvls; i++ )
     {
-        if ( !has_valid_pt_points( pOvls + i ) )
+        if ( !has_valid_pt_points( ovls[ i ] ) )
         {
-            printf( "ERROR: bad pt points ovl %d bread %d\n", i, pOvls[ i ].bread );
+            printf( "ERROR: bad pt points ovl %d bread %d\n", i, ovls[ i ]->bread );
             return;
         }
     }
@@ -1194,7 +1158,7 @@ static void correct_overlaps( corrector_context* cctx, Overlap* pOvls, int nOvls
     if ( ntiles + 1 >= cctx->ntoff )
     {
         cctx->ntoff = cctx->ntoff * 1.2 + ntiles + 1;
-        cctx->toff  = (int*)realloc( cctx->toff, sizeof( int ) * cctx->ntoff );
+        cctx->toff  = realloc( cctx->toff, sizeof( int ) * cctx->ntoff );
     }
 
     bzero( cctx->toff, sizeof( int ) * cctx->ntoff );
@@ -1203,9 +1167,12 @@ static void correct_overlaps( corrector_context* cctx, Overlap* pOvls, int nOvls
 
     for ( i = 0; i < nOvls; i++ )
     {
-        for ( t = round_down( pOvls[ i ].path.abpos, cctx->twidth ) / cctx->twidth;
-              t <= round_down( pOvls[ i ].path.aepos - 1, cctx->twidth ) / cctx->twidth;
-              t++ )
+        // int tb = round_down( ovls[ i ]->path.abpos, cctx->twidth ) / cctx->twidth;
+        // int te = round_down( ovls[ i ]->path.aepos - 1, cctx->twidth ) / cctx->twidth;
+        int tb = ovls[ i ]->path.abpos / cctx->twidth;
+        int te = tb + ovls[ i ]->path.tlen / 2 - 1;
+
+        for ( t = tb; t <= te; t++ )
         {
             if ( cctx->toff[ t + 1 ] < MAX_TILES )
             {
@@ -1217,7 +1184,10 @@ static void correct_overlaps( corrector_context* cctx, Overlap* pOvls, int nOvls
 #ifdef USE_A_TILES
     for ( i = 0; i < ntiles; i++ )
     {
-        cctx->toff[ i + 1 ] += 1;
+        if ( cctx->toff[ i + 1 ] < MAX_TILES )
+        {
+            cctx->toff[ i + 1 ]++;
+        }
     }
 #endif
 
@@ -1229,7 +1199,7 @@ static void correct_overlaps( corrector_context* cctx, Overlap* pOvls, int nOvls
     if ( cctx->toff[ ntiles ] >= cctx->ntovl )
     {
         cctx->ntovl = cctx->ntovl * 1.2 + cctx->toff[ ntiles ] + 1;
-        cctx->tovl  = (tile_overlap*)realloc( cctx->tovl, sizeof( tile_overlap ) * cctx->ntovl );
+        cctx->tovl  = realloc( cctx->tovl, sizeof( tile_overlap ) * cctx->ntovl );
     }
 
     // fill in tiles
@@ -1238,8 +1208,7 @@ static void correct_overlaps( corrector_context* cctx, Overlap* pOvls, int nOvls
     unsigned short* trace;
     int p = 0;
 
-    int* curtiles = malloc( sizeof( int ) * ntiles );
-    bzero( curtiles, sizeof( int ) * ntiles );
+    int* curtiles = calloc( ntiles, sizeof( int ) );
 
 // A tiles
 
@@ -1251,11 +1220,8 @@ static void correct_overlaps( corrector_context* cctx, Overlap* pOvls, int nOvls
 
     for ( i = 0; i < ntiles; i++ )
     {
-        // p = cctx->toff[ i ]++;
-        // curtiles[ i ]++;
-
-        p = cctx->toff[i] + curtiles[i];
-        curtiles[i] += 1;
+        p = cctx->toff[ i ] + curtiles[ i ];
+        curtiles[ i ] += 1;
 
         cctx->tovl[ p ].read  = readidx;
         cctx->tovl[ p ].a     = a;
@@ -1275,34 +1241,31 @@ static void correct_overlaps( corrector_context* cctx, Overlap* pOvls, int nOvls
 
     for ( i = 0; i < nOvls; i++ )
     {
-        int bread = pOvls[ i ].bread;
+        int bread = ovls[ i ]->bread;
 
-        tile    = pOvls[ i ].path.abpos / cctx->twidth;
-        trace   = pOvls[ i ].path.trace;
-        be      = pOvls[ i ].path.bbpos + trace[ 1 ];
+        tile    = ovls[ i ]->path.abpos / cctx->twidth;
+        trace   = ovls[ i ]->path.trace;
+        be      = ovls[ i ]->path.bbpos + trace[ 1 ];
         readidx = -1;
 
         if ( curtiles[ tile ] < MAX_TILES )
         {
-            // p = cctx->toff[ tile ]++;
-            // curtiles[ tile ]++;
+            p = cctx->toff[ tile ] + curtiles[ tile ];
+            curtiles[ tile ] += 1;
 
-            p = cctx->toff[tile] + curtiles[tile];
-            curtiles[tile] += 1;
-
-            readidx = load_read( cctx, bread, pOvls[ i ].flags & OVL_COMP );
+            readidx = load_read( cctx, bread, ovls[ i ]->flags & OVL_COMP );
 
             cctx->tovl[ p ].read  = readidx;
             cctx->tovl[ p ].a     = a;
             cctx->tovl[ p ].b     = bread;
-            cctx->tovl[ p ].bbpos = pOvls[ i ].path.bbpos;
+            cctx->tovl[ p ].bbpos = ovls[ i ]->path.bbpos;
             cctx->tovl[ p ].bepos = be;
 
             cctx->tovl[ p ].qv = trace[ 0 ];
 
-            if ( pOvls[ i ].path.abpos % cctx->twidth )
+            if ( ovls[ i ]->path.abpos % cctx->twidth )
             {
-                cctx->tovl[ p ].apos = pOvls[ i ].path.abpos;
+                cctx->tovl[ p ].apos = ovls[ i ]->path.abpos;
             }
             else
             {
@@ -1310,14 +1273,14 @@ static void correct_overlaps( corrector_context* cctx, Overlap* pOvls, int nOvls
             }
         }
 
-        for ( t = 2; t < pOvls[ i ].path.tlen; t += 2 )
+        for ( t = 2; t < ovls[ i ]->path.tlen; t += 2 )
         {
             tile++;
             bb = be;
 
-            if ( t == pOvls[ i ].path.tlen - 1 )
+            if ( t == ovls[ i ]->path.tlen - 1 )
             {
-                be = pOvls[ i ].path.bepos + 1;
+                be = ovls[ i ]->path.bepos + 1;
             }
             else
             {
@@ -1326,15 +1289,12 @@ static void correct_overlaps( corrector_context* cctx, Overlap* pOvls, int nOvls
 
             if ( curtiles[ tile ] < MAX_TILES )
             {
-                // curtiles[ tile ]++;
-                // p = cctx->toff[ tile ]++;
-
-                p = cctx->toff[tile] + curtiles[tile];
-                curtiles[tile] += 1;
+                p = cctx->toff[ tile ] + curtiles[ tile ];
+                curtiles[ tile ] += 1;
 
                 if ( readidx == -1 )
                 {
-                    readidx = load_read( cctx, bread, pOvls[ i ].flags & OVL_COMP );
+                    readidx = load_read( cctx, bread, ovls[ i ]->flags & OVL_COMP );
                 }
 
                 cctx->tovl[ p ].read  = readidx;
@@ -1352,21 +1312,13 @@ static void correct_overlaps( corrector_context* cctx, Overlap* pOvls, int nOvls
             }
         }
 
-        if ( p != -1 && pOvls[ i ].path.aepos < alen && ( pOvls[ i ].path.aepos % cctx->twidth ) )
+        if ( p != -1 && ovls[ i ]->path.aepos < alen && ( ovls[ i ]->path.aepos % cctx->twidth ) )
         {
-            cctx->tovl[ p ].apos = -pOvls[ i ].path.aepos;
+            cctx->tovl[ p ].apos = -1 * ovls[ i ]->path.aepos;
         }
     }
 
     free( curtiles );
-
-    /*
-    for ( i = ntiles; i >= 1; i-- )
-    {
-        cctx->toff[ i ] = cctx->toff[ i - 1 ];
-    }
-    cctx->toff[ 0 ] = 0;
-    */
 
     cctx->curcons = 0;
 
@@ -1407,36 +1359,24 @@ static void correct_overlaps( corrector_context* cctx, Overlap* pOvls, int nOvls
         int tiles_used;
         char* seqcons = single_tile_consensus( cctx, i, &tiles_used );
 
-        // printf("%3d %3d %s\n", i, tiles_used, seqcons);
 
-        /*
-#ifdef USE_A_TILES
-        if ( tiles_used < 2 )
-#else
-        if ( tiles_used < 1 )
-#endif
+        if ( cctx->ce_tcur == 0 )
         {
-            break_read( cctx, pOvls, nOvls );
+            cctx->ce_first_tile = i;
         }
-        else
-*/
-        {
-            if ( cctx->ce_tcur == 0 )
-            {
-                cctx->ce_first_tile = i;
-            }
 
-            cctx->ce_tiles[ cctx->ce_tcur ] = cctx->curcons;
-            cctx->ce_tcur++;
+        cctx->ce_tiles[ cctx->ce_tcur ] = cctx->curcons;
+        cctx->ce_tcur++;
 
-            append_consensus( cctx, seqcons, tiles_used );
-        }
+        append_consensus( cctx, seqcons, tiles_used );
     }
 
     if ( cctx->curcons > 0 )
     {
-        break_read( cctx, pOvls, nOvls );
+        break_read( cctx, a );
     }
+
+    cctx->db->reads[ a ].flags |= READ_CORRECTED;
 
     cctx->nreads = 0;
 }
@@ -1454,10 +1394,9 @@ static void* corrector_thread( void* arg )
     cctx.malign_indent = 0;
 #endif
 
-    cctx.minRLen = carg->minRLen;
-
     cctx.ntoff = cctx.ntovl = 0;
     cctx.nreads = cctx.maxreads = 0;
+    cctx.verbose                = carg->verbose;
     cctx.toff                   = NULL;
     cctx.tovl                   = NULL;
     cctx.reads                  = NULL;
@@ -1471,8 +1410,7 @@ static void* corrector_thread( void* arg )
     cctx.twidth                 = carg->twidth;
     cctx.qtrack_offset          = carg->qtrack->anno;
     cctx.qtrack_data            = carg->qtrack->data;
-    // cctx.trimtrack              = carg->trimtrack;
-    cctx.track                  = malloc( sizeof( int ) * carg->db.maxlen );
+    cctx.track = malloc( sizeof( int ) * carg->db.maxlen );
 
     cctx.stats_tiles_single = 0;
     cctx.stats_tiles_multi  = 0;
@@ -1487,7 +1425,7 @@ static void* corrector_thread( void* arg )
     cctx.ce_seq_singles = NULL;
 
     cctx.ce_tcur  = 0;
-    cctx.ce_tiles = (int*)malloc( sizeof( int ) * ( cctx.db->maxlen / cctx.twidth + 1 ) );
+    cctx.ce_tiles = malloc( sizeof( int ) * ( cctx.db->maxlen / cctx.twidth + 1 ) );
 
     cctx.align_work_data = New_Work_Data();
 
@@ -1497,13 +1435,13 @@ static void* corrector_thread( void* arg )
 
     size_t tbytes = TBYTES( cctx.twidth );
 
-    Overlap* pOvls = NULL;
-    int omax       = 500;
-    pOvls          = (Overlap*)malloc( sizeof( Overlap ) * omax );
+    int omax              = 500;
+    Overlap* pOvls        = malloc( sizeof( Overlap ) * omax );
+    Overlap** ovls_sorted = malloc( sizeof( Overlap* ) * omax );
 
     fseek( fileOvls, carg->start, SEEK_SET );
 
-    while ( !Read_Overlap( fileOvls, pOvls ) && pOvls->flags & OVL_DISCARD )
+    while ( !Read_Overlap( fileOvls, pOvls ) && ( pOvls->flags & OVL_DISCARD || pOvls->path.tlen == 0 ) )
     {
         fseek( fileOvls, tbytes * pOvls->path.tlen, SEEK_CUR );
     }
@@ -1515,13 +1453,15 @@ static void* corrector_thread( void* arg )
 
     while ( ftell( fileOvls ) < carg->end )
     {
-        pOvls[ 0 ] = pOvls[ n ];
-        a          = pOvls->aread;
+        pOvls[ 0 ]       = pOvls[ n ];
+        ovls_sorted[ 0 ] = pOvls;
+
+        a = pOvls->aread;
 
         if ( pOvls->path.tlen > tmax )
         {
             tmax  = tmax * 1.2 + pOvls->path.tlen;
-            trace = (ovl_trace*)realloc( trace, sizeof( ovl_trace ) * tmax );
+            trace = realloc( trace, sizeof( ovl_trace ) * tmax );
         }
 
         tcur              = 0;
@@ -1540,7 +1480,9 @@ static void* corrector_thread( void* arg )
                 break;
             }
 
-            if ( pOvls[ n ].flags & OVL_DISCARD )
+            ovls_sorted[ n ] = pOvls + n;
+
+            if ( pOvls[ n ].flags & OVL_DISCARD || pOvls[ n ].path.tlen == 0 )
             {
                 fseek( fileOvls, tbytes * pOvls[ n ].path.tlen, SEEK_CUR );
                 continue;
@@ -1549,7 +1491,7 @@ static void* corrector_thread( void* arg )
             if ( tcur + pOvls[ n ].path.tlen >= tmax )
             {
                 tmax  = tmax * 1.2 + pOvls[ n ].path.tlen;
-                trace = (ovl_trace*)realloc( trace, sizeof( ovl_trace ) * tmax );
+                trace = realloc( trace, sizeof( ovl_trace ) * tmax );
 
                 tcur = 0;
                 int k;
@@ -1568,18 +1510,19 @@ static void* corrector_thread( void* arg )
             n += 1;
             if ( n >= omax )
             {
-                omax  = 1.2 * n + 10;
-                pOvls = (Overlap*)realloc( pOvls, sizeof( Overlap ) * omax );
+                omax        = 1.2 * n + 10;
+                pOvls       = realloc( pOvls, sizeof( Overlap ) * omax );
+                ovls_sorted = realloc( ovls_sorted, sizeof( Overlap* ) * omax );
             }
         }
 
-        qsort( pOvls, n, sizeof( Overlap ), cmp_ovl_length );
+        qsort( ovls_sorted, n, sizeof( Overlap* ), cmp_povl_length );
 
 #ifdef ADJUST_OFFSETS
-        adjust_offsets( &cctx, pOvls, n );
+        adjust_offsets( &cctx, ovls_sorted, n );
 #endif
 
-        correct_overlaps( &cctx, pOvls, n );
+        correct_overlaps( &cctx, ovls_sorted, n );
     }
 
     if ( cctx.toff != NULL )
@@ -1601,9 +1544,14 @@ static void* corrector_thread( void* arg )
     free( cctx.reads );
     free( cctx.mtc_data );
     free( cctx.mtc_dsort );
-
     free( cctx.ce_tiles );
     free( cctx.ce_seq_singles );
+    free( cctx.track );
+    free( cctx.tiles );
+    free( cctx.seqcons );
+    free( pOvls );
+    free( ovls_sorted );
+    free( trace );
 
     Free_Work_Data( cctx.align_work_data );
 
@@ -1613,22 +1561,19 @@ static void* corrector_thread( void* arg )
     msa_free( cctx.malign );
 #endif
 
-#ifdef WRITE_STATISTICS
-    fprintf( carg->fileStats, "BREAK_COV       %5d\n", cctx.stats_break_cov );
-    fprintf( carg->fileStats, "BREAK_LQ        %5d\n", cctx.stats_break_lq );
-    fprintf( carg->fileStats, "BREAK_UNKNOWN   %5d\n", cctx.stats_break_unknown );
-#endif
-
     return NULL;
 }
 
 static void usage()
 {
-    printf( "[-v] [-jx <int>] [-q <track>] <db> <in.las> <out.fasta>\n" );
-    printf( "options: -v ... verbose\n" );
-    printf( "         -j ... number of threads\n" );
-    printf( "         -x ... minimum sequence length (%d)\n", DEF_ARG_X );
-    printf( "         -q ... q track (%s)\n", DEF_ARG_Q );
+    printf( "usage: [-v] [-r <file>] [-j n] [-q track] database input.las output.fasta\n\n" );
+    printf( "Corrects the reads from the database based on the alignments in\n" );
+    printf( "input.las and stores the correct reads in output.fasta\n\n" );
+    printf( "Output files are named output.<thread.number>.fasta\n\n" );
+    printf( "options: -v        enable verbose output\n" );
+    printf( "         -j n      number of threads (default %d)\n", DEF_ARG_J );
+    printf( "         -q track  name of the quality track (default %s)\n", DEF_ARG_Q );
+    printf( "         -r file   text file with ids of the reads to be corrected\n");
 }
 
 int main( int argc, char* argv[] )
@@ -1638,11 +1583,12 @@ int main( int argc, char* argv[] )
     int64 novl;
     int twidth;
 
-    int verbose   = 0;
-    int nThreads  = 1;
-    int minLength = DEF_ARG_X;
+    int verbose  = 0;
+    int nThreads = DEF_ARG_J;
+    int block    = DEF_ARG_B;
 
-    char* qTrackName    = DEF_ARG_Q;
+    char* qTrackName = DEF_ARG_Q;
+    char* pathReadIds = NULL;
 
     // process arguments
 
@@ -1650,10 +1596,14 @@ int main( int argc, char* argv[] )
 
     opterr = 0;
 
-    while ( ( c = getopt( argc, argv, "vj:x:q:" ) ) != -1 )
+    while ( ( c = getopt( argc, argv, "vr:b:j:q:" ) ) != -1 )
     {
         switch ( c )
         {
+            case 'r':
+                pathReadIds = optarg;
+                break;
+
             case 'v':
                 verbose++;
                 break;
@@ -1662,8 +1612,8 @@ int main( int argc, char* argv[] )
                 nThreads = atoi( optarg );
                 break;
 
-            case 'x':
-                minLength = atoi( optarg );
+            case 'b':
+                block = atoi( optarg );
                 break;
 
             case 'q':
@@ -1720,41 +1670,66 @@ int main( int argc, char* argv[] )
         exit( 1 );
     }
 
-    if ( minLength < 0 )
-    {
-        fprintf( stderr, "negative read lengths are not supported\n" );
-        exit( 1 );
-    }
-
     off_t* offsets = partition_overlaps( fileOvls, nThreads );
 
     fclose( fileOvls );
 
     int i;
-    pthread_t* threads   = (pthread_t*)malloc( sizeof( pthread_t ) * nThreads );
-    corrector_arg* cargs = (corrector_arg*)malloc( sizeof( corrector_arg ) * nThreads );
 
-    char* pcOut = (char*)malloc( strlen( pcBaseOut ) + 20 );
+    for ( i = 0; i < DB_NREADS( &db ); i++ )
+    {
+        db.reads[ i ].flags = 0;
+    }
+
+    if ( pathReadIds )
+    {
+        FILE* fileIn = fopen( pathReadIds, "r" );
+
+        if ( fileIn == NULL )
+        {
+            fprintf( stderr, "could not open %s\n", pathReadIds );
+            exit( 1 );
+        }
+
+        int* values;
+        int nvalues;
+
+        fread_integers( fileIn, &values, &nvalues );
+
+        for ( i = 0; i < nvalues; i++ )
+        {
+            db.reads[ values[ i ] ].flags = READ_CORRECT;
+        }
+
+        fclose( fileIn );
+    }
+    else
+    {
+        for ( i = 0; i < DB_NREADS( &db ); i++ )
+        {
+            db.reads[ i ].flags = READ_CORRECT;
+        }
+    }
+
+    pthread_t* threads   = malloc( sizeof( pthread_t ) * nThreads );
+    corrector_arg* cargs = malloc( sizeof( corrector_arg ) * nThreads );
+
+    char* pcOut = malloc( strlen( pcBaseOut ) + 20 );
 
     for ( i = 0; i < nThreads; i++ )
     {
-        cargs[ i ].qtrack    = qtrack;
+        cargs[ i ].qtrack  = qtrack;
+        cargs[ i ].verbose = verbose;
 
-        cargs[ i ].thread  = i;
-        cargs[ i ].start   = offsets[ i ];
-        cargs[ i ].end     = offsets[ i + 1 ];
-        cargs[ i ].twidth  = twidth;
-        cargs[ i ].minRLen = minLength;
+        cargs[ i ].thread = i;
+        cargs[ i ].start  = offsets[ i ];
+        cargs[ i ].end    = offsets[ i + 1 ];
+        cargs[ i ].twidth = twidth;
 
         cargs[ i ].fileOvls = fopen( pcPathOverlaps, "r" );
 
         sprintf( pcOut, "%s.%02d.fasta", pcBaseOut, i );
         cargs[ i ].fileOut = fopen( pcOut, "w" );
-
-#ifdef WRITE_STATISTICS
-        sprintf( pcOut, "%s.%02d.stats", pcBaseOut, i );
-        cargs[ i ].fileStats = fopen( pcOut, "w" );
-#endif
 
         memcpy( &( cargs[ i ].db ), &db, sizeof( HITS_DB ) );
 
@@ -1762,11 +1737,11 @@ int main( int argc, char* argv[] )
         cargs[ i ].fastaHeader = pcBaseOut;
     }
 
+    free( offsets );
     free( pcOut );
 
     for ( i = 0; i < nThreads; i++ )
     {
-        // if (cargs[i].start < cargs[i].end)
         pthread_create( threads + i, NULL, corrector_thread, cargs + i );
     }
 
@@ -1775,15 +1750,39 @@ int main( int argc, char* argv[] )
         pthread_join( threads[ i ], NULL );
     }
 
+    char* buf = New_Read_Buffer( &db );
+    int rb, re;
+    if ( block > 0 )
+    {
+        DB_block_range( pcPathReadsIn, block, &rb, &re );
+    }
+    else
+    {
+        rb = 0;
+        re = DB_NREADS( &db );
+    }
+
+    for ( i = rb; i < re; i++ )
+    {
+        int flags = db.reads[i].flags;
+
+        if ( (flags & READ_CORRECT) && !(flags & READ_CORRECTED) )
+        {
+            FILE* fileOut = cargs[ i % nThreads ].fileOut;
+
+            Load_Read( &db, i, buf, 1 );
+
+            fprintf( fileOut, ">copy.%d source=%d,%d,%d\n", i, i, -1, -1 );
+            write_seq( fileOut, buf );
+        }
+    }
+    free( buf - 1 );
+
     for ( i = 0; i < nThreads; i++ )
     {
         fclose( cargs[ i ].fileOvls );
         fclose( cargs[ i ].fileOut );
         fclose( cargs[ i ].db.bases );
-
-#ifdef WRITE_STATISTICS
-        fclose( cargs[ i ].fileStats );
-#endif
     }
 
     free( cargs );

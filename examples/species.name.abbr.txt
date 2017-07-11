@@ -1,0 +1,18 @@
+ARTHA Arabidopsis thaliana
+AXOL Ambystoma mexicanum
+BYCIR Byssothecium circinans
+CBRIG Caenorhabditis briggsae
+CELEG Caenorhabditis elegans
+CLELY Clathospora elynae
+CSPE9 Caenorhabditis species 9
+CYBER Cyberlindnera jadinii
+DROS Drosophila melanogaster
+GOBY Neogobius melanostomus
+HUMAN Homo sapiens
+LECRE Leucosporidiella creatinivora
+LIZON Lizonia empirigonia
+MALIG Macrostomum lignano
+PSEUD Pseudomassariella vexata
+SMED Schmidtea mediterranea
+TUBIN Tupinambis merianae
+

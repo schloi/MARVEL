@@ -23,20 +23,23 @@
 
 #undef DEBUG
 
-static void usage()
-{
-    printf( "usage: [-vd]  <db> <track.out> <track.in1> <track.in2> ... | <#.track>\n" );
-    printf( "Options: -v        ... verbose\n" );
-    printf( "         -d        ... remove single tracks after merging\n" );
-    printf( "         <#.track> ... read in all 1 .. nblocks tracks \n" );
-}
-
 static int cmp_intervals( const void* a, const void* b )
 {
     track_data* x = (track_data*)a;
     track_data* y = (track_data*)b;
 
     return x[ 0 ] - y[ 0 ];
+}
+
+static void usage()
+{
+    printf( "usage: [-vd] database track.out [ <track.in1> ... | #.track ]\n\n" );
+
+    printf( "Combines annotation tracks with overlapping intervals into a single track.\n\n" );
+
+    printf( "options: -v  verbose\n" );
+    printf( "         -d  remove input tracks after combining\n" );
+    printf( "    #.track  prefixing the track name with #. selects all tracks 1.track ... database_block.tracks\n" );
 }
 
 int main( int argc, char* argv[] )

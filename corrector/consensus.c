@@ -555,6 +555,7 @@ void consensus_free(consensus* c)
 
     free(c->aln_ctx);
 
+    free(c->seq);
     free(c);
 }
 

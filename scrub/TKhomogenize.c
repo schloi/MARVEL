@@ -33,7 +33,6 @@
 // defaults
 
 #define DEF_ARG_B   0
-#define DEF_ARG_M   0
 #define DEF_ARG_I   TRACK_REPEATS
 #define DEF_ARG_II  TRACK_HREPEATS
 #define DEF_ARG_T   TRACK_TRIM
@@ -441,7 +440,7 @@ static int handler_homogenize(void* _ctx, Overlap* ovl, int novl)
 #endif
                 if ( (aoff >= iab || j == tlen - 2) && ibb == -1 )
                 {
-                    ibb = MIN(boff, ovl[i].path.bepos); 
+                    ibb = MIN(boff, ovl[i].path.bepos);
                 }
 
                 aoff = ( (aoff + twidth) / twidth) * twidth;
@@ -531,17 +530,20 @@ static int handler_homogenize(void* _ctx, Overlap* ovl, int novl)
     return 1;
 }
 
-static void usage()
+static void usage( FILE* fout, const char* app )
 {
-    printf("usage:   [-m] [-ber <int>] [-iIt <track>] <db> <overlaps>\n");
-    printf("options: -b ... track block\n");
-    printf("         -m ... merge input intervals into the output track (%d)\n", DEF_ARG_M);
-    printf("         -i ... input interval track (%s)\n", DEF_ARG_I);
-    printf("         -I ... output interval track (%s)\n", DEF_ARG_II);
-    printf("         -e ... only annotate n bases at the ends of the reads (%d), requires -t \n", DEF_ARG_E);
-    printf("         -t ... trim track (%s)\n", DEF_ARG_T);
-    printf("         -r ... base pair resolution (%d)\n", DEF_ARG_R);
-    printf("                scales memory usage by the same factor and improves runtime\n");
+    fprintf( fout, "usage: %s [-m] [-ber n] [-iIt track] database input.las\n\n", app );
+
+    fprintf( fout, "Creates a new annotation track by transfering the annotation of the A read to the B read aligning to it.\n\n" );
+
+    fprintf( fout, "options: -b n  track block\n" );
+    fprintf( fout, "         -m  add input intervals to the output track\n" );
+    fprintf( fout, "         -i track  input interval track (%s)\n", DEF_ARG_I );
+    fprintf( fout, "         -I track  output interval track (%s)\n", DEF_ARG_II );
+    fprintf( fout, "         -t track  trim annotation track to be used (%s)\n", DEF_ARG_T );
+    fprintf( fout, "         -e n  only annotate n bases at the ends of the reads (%d), requires -t \n", DEF_ARG_E );
+    fprintf( fout, "         -r n  base pair resolution (default %d)\n", DEF_ARG_R );
+    fprintf( fout, "               scales memory usage by n and improves runtime\n" );
 }
 
 int main(int argc, char* argv[])
@@ -550,6 +552,7 @@ int main(int argc, char* argv[])
     PassContext* pctx;
     HomogenizeContext hctx;
     FILE* fileOvlIn;
+    char* app = argv[ 0 ];
 
     bzero(&hctx, sizeof(HomogenizeContext));
     hctx.db = &db;
@@ -599,14 +602,14 @@ int main(int argc, char* argv[])
                       break;
 
             default:
-                      usage();
+                      usage(stdout, app);
                       exit(1);
         }
     }
 
     if (argc - optind != 2)
     {
-        usage();
+        usage(stdout, app);
         exit(1);
     }
 

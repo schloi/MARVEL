@@ -65,11 +65,12 @@ typedef struct
     int lowq;
     int maxgap;
     int trim;
+    int maxspanners;
+    int minsupport;
 
     HITS_TRACK* qtrack;
     char *trimName;
     HITS_TRACK* trimtrack;
-    HITS_TRACK* dusttrack;
 
     HITS_TRACK** convertTracks;
     int curctracks;
@@ -108,7 +109,7 @@ typedef struct
     int diff;       // quality
     int b;          // b read id
     int support;    // how many reads support the gap
-    int span;       // reads spanning the gap
+    // int span;       // reads spanning the gap
 
     int comp;       // complement sequence when writing
 } Gap;
@@ -138,12 +139,6 @@ static void fix_pre(PassContext* pctx, FixContext* fctx)
     else
     {
         fctx->trimtrack = NULL;
-    }
-
-    if ( !(fctx->dusttrack = track_load(fctx->db, TRACK_DUST)) )
-    {
-        fprintf(stderr, "failed to open track %s\n", TRACK_DUST);
-        exit(1);
     }
 
     int maxlen = fctx->db->maxlen;
@@ -213,7 +208,7 @@ static int cmp_gaps(const void* x, const void* y)
     return cmp;
 }
 
-static int spanners(Overlap* ovls, int novl, int b, int e)
+static int spanners_interval(Overlap* ovls, int novl, int b, int e)
 {
     int span = 0;
     int i;
@@ -228,6 +223,28 @@ static int spanners(Overlap* ovls, int novl, int b, int e)
     }
 
     return span;
+}
+
+static int spanners_point(Overlap* ovls, int novl, int p, int max)
+{
+    int span = 0;
+    int i;
+    for (i = 0; i < novl; i++)
+    {
+        Overlap* ovl = ovls + i;
+
+        if (ovl->path.abpos < p - MIN_SPAN && ovl->path.aepos > p + MIN_SPAN)
+        {
+            span++;
+
+            if ( span > max )
+            {
+                break;
+            }
+        }
+    }
+
+    return (span > max);
 }
 
 static int filter_flips(FixContext* fctx, Overlap* ovls, int novl, int* trim_b, int* trim_e)
@@ -355,7 +372,7 @@ static int filter_flips(FixContext* fctx, Overlap* ovls, int novl, int* trim_b, 
             int ab_c = alen - ovl2->path.bbpos;
             int ae_c = alen - ovl->path.bepos;
 
-            if (intersect(ab, ae, ab_c, ae_c) && spanners(ovls, novl, ab, ae) <= 1)
+            if (intersect(ab, ae, ab_c, ae_c) && spanners_interval(ovls, novl, ab, ae) <= 1)
             {
 #ifdef DEBUG_FLIP
                 printf("%8d GAP   @ %5d..%5d x %5d..%5d\n",
@@ -388,12 +405,18 @@ static int filter_flips(FixContext* fctx, Overlap* ovls, int novl, int* trim_b, 
 static int fix_process(void* _ctx, Overlap* ovl, int novl)
 {
 // #warning "REMOVE ME"
-//    if ( ovl->aread != 229 ) return 1;
+//    if ( ovl->aread != 166815 ) return 1;
 
     FixContext* fctx = (FixContext*)_ctx;
 
+// #warning "REMOVE ME"
+    // if ( DB_READ_LEN(fctx->db, ovl->aread) < 20000 ) return 1;
+
     int maxgap = fctx->maxgap;
     int lowq = fctx->lowq;
+    int twidth = fctx->twidth;
+    int maxspanners = fctx->maxspanners;
+    int minsupport = fctx->minsupport;
 
     int dcur = 0;
     int dmax = 1000;
@@ -401,9 +424,6 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
 
     track_anno* qanno = fctx->qtrack->anno;
     track_data* qdata = fctx->qtrack->data;
-
-    track_anno* dustanno = fctx->dusttrack->anno;
-    track_data* dustdata = fctx->dusttrack->data;
 
     track_data* qa = qdata + (qanno[ovl->aread] / sizeof(track_data));
 
@@ -438,7 +458,7 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
     // sanity check tracks
 
     int alen = DB_READ_LEN(fctx->db, ovl->aread);
-    int nsegments = (alen + fctx->twidth - 1) / fctx->twidth;
+    int nsegments = (alen + fctx->twidth - 1) / twidth;
 
     int ob = qanno[ovl->aread] / sizeof(track_data);
     int oe = qanno[ovl->aread + 1] / sizeof(track_data);
@@ -447,23 +467,6 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
     {
         fprintf(stderr, "read %d expected %d Q track entries, found %d\n", ovl->aread, nsegments, oe - ob);
         exit(1);
-    }
-
-    ob = dustanno[ovl->aread] / sizeof(track_data);
-    oe = dustanno[ovl->aread + 1] / sizeof(track_data);
-
-    while (ob < oe)
-    {
-        int b = dustdata[ob];
-        int e = dustdata[ob + 1];
-
-        if (b < 0 || b > alen || b > e || e > alen)
-        {
-            fprintf(stderr, "dust interval %d..%d outside read length %d\n", b, e, alen);
-            exit(1);
-        }
-
-        ob += 2;
     }
 
     if (trim_ab < 0 || trim_ab > alen || trim_ab > trim_ae || trim_ae > alen)
@@ -475,11 +478,16 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
     // locate breaks in A and move outwards to the next segment boundary
 
     int i;
+    Overlap* ocur = ovl + 0;
+    Overlap* oprev = NULL;
     for (i = 1; i < novl; i++)
     {
-        if ( ovl[i-1].bread == ovl[i].bread &&
-             ovl[i-1].path.aepos < ovl[i].path.abpos &&
-             (ovl[i-1].flags & OVL_COMP) == (ovl[i].flags & OVL_COMP) )
+        oprev = ocur;
+        ocur = ovl + i;
+
+        if ( oprev->bread == ocur->bread &&
+             oprev->path.aepos < ocur->path.abpos &&
+             (oprev->flags & OVL_COMP) == (ocur->flags & OVL_COMP) )
         {
             if ( dcur >= dmax )
             {
@@ -490,8 +498,8 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
             ovl_trace* trace_left = ovl[i-1].path.trace;
             ovl_trace* trace_right = ovl[i].path.trace;
 
-            int ab = (ovl[i-1].path.aepos - 1) / fctx->twidth;
-            int ae = ovl[i].path.abpos / fctx->twidth + 1;
+            int ab = (ovl[i-1].path.aepos - 1) / twidth;
+            int ae = ovl[i].path.abpos / twidth + 1;
 
             int j = ovl[i-1].path.tlen - 1;
 
@@ -531,33 +539,10 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
                 be = blen - t;
             }
 
-            // check if the gap is due to a weak region in B
-            track_anno ob = dustanno[ovl[i].bread] / sizeof(track_data);
-            track_anno oe = dustanno[ovl[i].bread + 1] / sizeof(track_data);
-
             int weak_b = 0;
-            while (ob < oe)
-            {
-                track_data db = dustdata[ob];
-                track_data de = dustdata[ob+1];
-
-                if (bb <= db && be >= de)
-                {
-                    weak_b = 1;
-                    break;
-                }
-
-                ob += 2;
-            }
-
-            if (weak_b)
-            {
-                continue;
-            }
-
             track_data* qb = qdata + (qanno[ovl[i].bread] / sizeof(track_data));
-            int beg = bb / fctx->twidth;
-            int end = be / fctx->twidth + 1;
+            int beg = bb / twidth;
+            int end = be / twidth + 1;
             int q = 0;
             j = beg;
             while (j < end)
@@ -576,6 +561,34 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
                 continue;
             }
 
+            if ( spanners_point(ovl, novl, ab * twidth, maxspanners) &&
+                 spanners_point(ovl, novl, ae * twidth, maxspanners) )
+            {
+                continue;
+            }
+
+            int q_total = 0;
+            int q_zero = 0;
+            for (j = ab + 1; j < ae - 1; j++)
+            {
+                q_total += 1;
+
+                if (qa[j] == 0)
+                {
+                    q_zero += 1;
+                }
+            }
+
+            if ( q_total - q_zero > 1 ) // TODO --- hardcoded
+            {
+                continue;
+            }
+
+            if ( (ae - ab) * twidth * 10 < (be - bb)  ) // TODO --- hardcoded
+            {
+                continue;
+            }
+
 #ifdef DEBUG
             printf("A %7d %5d..%5d %5d..%5d -> ", ovl->aread, ovl[i-1].path.abpos, ovl[i-1].path.aepos, ovl[i].path.abpos, ovl[i].path.aepos);
             printf("B %7d %5d..%5d %5d..%5d | ", ovl[i].bread, ovl[i-1].path.bbpos, ovl[i-1].path.bepos, ovl[i].path.bbpos, ovl[i].path.bepos);
@@ -584,13 +597,12 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
 
             // gap due to potential weak region in A
 
+            data[dcur].ab = ab * twidth;
+            data[dcur].ae = ae * twidth;
+            data[dcur].b = ovl[i].bread;
             data[dcur].bb = bb;
             data[dcur].be = be;
-            data[dcur].b = ovl[i].bread;
-            data[dcur].span = 0;
             data[dcur].support = 1;
-            data[dcur].ab = ab * fctx->twidth;
-            data[dcur].ae = ae * fctx->twidth;
             data[dcur].diff = 100.0 * q / (be - bb);
             data[dcur].comp = (ovl[i].flags & OVL_COMP);
 
@@ -626,42 +638,13 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
                 continue;
             }
 
-            if ( abs( (data[j].be - data[j].bb) - (data[i].be - data[i].bb) ) < 40 )        // TODO --- hardcoded
+            if ( abs( (data[j].be - data[j].bb) - (data[i].be - data[i].bb) ) < 50 )
             {
                 data[i].support += 1;
                 data[j].support = -1;
             }
         }
     }
-
-    /*
-    printf("############\n");
-
-    for (i = 0; i < dcur; i++)
-    {
-        if ( data[i].support == - 1)
-        {
-            continue;
-        }
-
-        printf("%7d %7d | %5d..%5d -> %5d..%5d (%6d x %6d) @ DIFF %3d SUPPORT %3d SPAN %3d\n",
-                    ovl->aread,
-                    data[i].b,
-                    data[i].ab, data[i].ae,
-                    data[i].bb, data[i].be,
-                    data[i].ae - data[i].ab, data[i].be - data[i].bb,
-                    data[i].diff, data[i].support, data[i].span);
-
-        printf("Q");
-        for (j = data[i].ab / fctx->twidth; j < data[i].ae / fctx->twidth; j++)
-        {
-            printf(" %2d", qa[j]);
-        }
-        printf("\n");
-    }
-
-    printf("############\n");
-    */
 
     // merge overlapping breaks
 
@@ -679,6 +662,7 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
                 continue;
             }
 
+            // if ( data[i].ae - data[i].ab > data[j].ae - data[j].ab )
             if (data[i].support > data[j].support)
             {
                 data[i].support += data[j].support;
@@ -694,26 +678,28 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
     }
 
     // filter breaks with not enough support (# B reads) or no accompanying Q drop in A
-
+    /*
     for (j = 0; j < dcur; j++)
     {
-        if ( spanners(ovl, novl, data[j].ab, data[j].ae) > 10 )
+        if ( data[j].support != -1 && spanners_point(ovl, novl, data[j].ab) > maxspanners
+                                   && spanners_point(ovl, novl, data[j].ae) > maxspanners )
         {
             data[j].support = -1;
         }
     }
+    */
 
     j = 0;
     for (i = 0; i < dcur; i++)
     {
-        if (data[i].support < 5)
+        if (data[i].support < minsupport)
         {
             continue;
         }
 
         int bad_q = 0;
         int k;
-        for (k = data[i].ab / fctx->twidth; k < data[i].ae / fctx->twidth; k++)
+        for (k = data[i].ab / twidth; k < data[i].ae / twidth; k++)
         {
             if (qa[k] == 0 || qa[k] >= lowq)
             {
@@ -735,8 +721,8 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
 
     // scan for bad regions ~1k from both ends
 
-    int seg_first = trim_ab / fctx->twidth;
-    int seg_last = trim_ae / fctx->twidth;
+    int seg_first = trim_ab / twidth;
+    int seg_last = trim_ae / twidth;
 
     while (qa[seg_first] == 0)
     {
@@ -762,14 +748,14 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
             continue;
         }
 
-        int ab = i * fctx->twidth;
-        int ae = (i + 1) * fctx->twidth;
+        int ab = i * twidth;
+        int ae = (i + 1) * twidth;
 
         // already covered by a break interval
         int contained = 0;
         for (j = 0; j < dcur; j++)
         {
-            if ( data[j].ab <= ae && data[j].ae >= ab )
+            if ( data[j].support != -1 && data[j].ab <= ab && data[j].ae >= ae )
             {
                 contained = 1;
                 break;
@@ -781,33 +767,6 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
             // printf("%d @ %d contained\n", i, qa[i]);
             continue;
         }
-
-        /*
-        // region dusted
-        track_anno ob = dustanno[ovl->aread] / sizeof(track_data);
-        track_anno oe = dustanno[ovl->aread + 1] / sizeof(track_data);
-
-        int weak_a = 0;
-        while (ob < oe)
-        {
-            track_data db = dustdata[ob];
-            track_data de = dustdata[ob+1];
-
-            if (ae >= db && ab <= de)
-            {
-                // printf("A dust %d..%d %d..%d\n", ab, ae, db, de);
-                weak_a = 1;
-                break;
-            }
-
-            ob += 2;
-        }
-
-        if (!weak_a && qa[i] < lowq)
-        {
-            continue;
-        }
-        */
 
         // spanners & reads starting/stopping
         int span = 0;
@@ -835,7 +794,7 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
                 int k = 0;
                 while (apos <= ab)
                 {
-                    apos = (apos / fctx->twidth + 1) * fctx->twidth;
+                    apos = (apos / twidth + 1) * twidth;
 
                     bb = be;
                     be += tracerep[ k + 1 ];
@@ -855,8 +814,8 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
 
                 // get Q in B read
                 track_data* qb = qdata + (qanno[ovl[j].bread] / sizeof(track_data));
-                int beg = bb / fctx->twidth;
-                int end = be / fctx->twidth;
+                int beg = bb / twidth;
+                int end = be / twidth;
                 int q = 0;
                 k = beg;
                 while (k < end)
@@ -920,7 +879,7 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
         data[dcur].bb = bb_q_min;
         data[dcur].be = be_q_min;
         data[dcur].b = ovlrep->bread;
-        data[dcur].span = span;
+        // data[dcur].span = span;
         data[dcur].support = border;
         data[dcur].ab = ab;
         data[dcur].ae = ae;
@@ -1021,7 +980,7 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
     qsort(data, dcur, sizeof(Gap), cmp_gaps);
 
     // count reads that span the break
-
+    /*
     for (i = 0; i < novl; i++)
     {
         for (j = 0; j < dcur; j++)
@@ -1032,6 +991,7 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
             }
         }
     }
+    */
 
     // calculate new read length and patch segments
 
@@ -1141,13 +1101,13 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
         rlen += be - bb;
 
 #ifdef DEBUG
-        printf("B %7d %5d..%5d (%6d) @ DIFF %3d SUPPORT %3d SPAN %3d",
+        printf("B %7d %5d..%5d (%6d) @ DIFF %3d SUPPORT %3d",
                     data[i].b, bb, be,
                     be - bb,
-                    data[i].diff, data[i].support, data[i].span);
+                    data[i].diff, data[i].support);
 
         printf("    Q");
-        for (j = data[i].ab / fctx->twidth; j < data[i].ae / fctx->twidth; j++)
+        for (j = data[i].ab / twidth; j < data[i].ae / twidth; j++)
         {
             printf(" %2d", qa[j]);
         }
@@ -1326,13 +1286,20 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
 
 static void usage()
 {
-    printf("usage: [-xQg <int>] [-ct <track>] [-q <patched.quiva>] <db> <in.las> <patched.fasta>\n");
-    printf("       -c ... convert track intervals (multiple -c possible)\n");
-    printf("       -q ... patch quality streams\n");
-    printf("       -x ... min length for fixed sequences (%d)\n", DEF_ARG_X);
-    printf("       -Q ... segment quality threshold (%d)\n", DEF_ARG_Q);
-    printf("       -g ... max gap length for patching (%d)\n", DEF_ARG_G);
-    printf("       -t ... trim reads based on a track\n");
+    printf( "usage: [-l] [-x n] [-Q n] [-g n] [ [-c track] ...] [-t track] [-q file] database input.las patched.fasta\n\n" );
+
+    printf( "Patches larger sequencing errors in the reads based on the alignments.\n" );
+    printf( "Errors include polymerase strand changes, missed adaptors, missing sequence\n" );
+    printf( "excessively noisy sequence and inserts of random noise.\n\n" );
+
+    printf( "options:\n" );
+    printf( "   -c track  adjust the track intervals based on the changes made to the read\n" );
+    printf( "   -q file   adjust the quality values based on the change made to the read and write them to a file\n" );
+    printf( "   -x n      minimum read length after patching\n" );
+    printf( "   -Q n      minimum segment quality (default %d)\n", DEF_ARG_Q );
+    printf( "   -g n      maximum gap in the read that gets patched (default %d, -1 to patch all gaps)\n", DEF_ARG_G );
+    printf( "   -t track  trim reads based on a track and the -Q value\n" );
+    printf( "   -l        enable the low-coverage mode, recommended for <= 10x\n" );
 }
 
 int main(int argc, char* argv[])
@@ -1353,12 +1320,17 @@ int main(int argc, char* argv[])
 
     char* pathQvOut = NULL;
     int c;
+    int lowc = 0;
     opterr = 0;
 
-    while ((c = getopt(argc, argv, "x:q:c:Q:g:t:")) != -1)
+    while ((c = getopt(argc, argv, "lx:q:c:Q:g:t:")) != -1)
     {
         switch (c)
         {
+            case 'l':
+                      lowc = 1;
+                      break;
+
             case 'Q':
                       fctx.lowq = atoi(optarg);
                       break;
@@ -1447,6 +1419,17 @@ int main(int argc, char* argv[])
             fprintf(stderr, "could not open track '%s'\n", track);
             exit(1);
         }
+    }
+
+    if (lowc)
+    {
+        fctx.maxspanners = 3;
+        fctx.minsupport = 2;
+    }
+    else
+    {
+        fctx.maxspanners = 7;       // 10
+        fctx.minsupport = 4;        // 5
     }
 
     // pass

@@ -31,6 +31,7 @@
 #define STATUS_WIDOW     ( 1 << 1 )
 #define STATUS_PROPER    ( 1 << 2 )
 #define STATUS_USED      ( 1 << 3 )
+#define STATUS_OPTIONAL  ( 1 << 4 )
 
 // graph format
 
@@ -158,7 +159,7 @@ static void print_graph_gml_edge(FILE* f, OgEdge* e, char side)
 //
 //      turns into
 //
-//      id_i contained_i left_edges_i right_edges_i
+//      id_i optional_i left_edges_i right_edges_i
 //      #
 //      id_j id_k overhang_i flags_i divergence_i side_i
 //
@@ -250,9 +251,9 @@ static void print_graph_tgf(OgBuildContext* octx, FILE* f, int component)
             continue;
         }
 
-        int contained = ( status[aread] & STATUS_CONTAINED ) ? 1 : 0;
+        int optional = (status[aread] & STATUS_OPTIONAL) ? 1 : 0;
 
-        fprintf(f, "%d %d %d %d\n", aread, contained, niedges[aread], noedges[aread]);
+        fprintf(f, "%d %d %d %d\n", aread, optional, niedges[aread], noedges[aread]);
 
         status[aread] ^= STATUS_USED;
     }
@@ -391,12 +392,12 @@ static void print_graph_gml(OgBuildContext* octx, FILE* f, const char* title, ch
             continue;
         }
 
-        int contained = ( status[aread] & STATUS_CONTAINED ) ? 1 : 0;
+        int optional = (status[aread] & STATUS_OPTIONAL) ? 1 : 0;
 
         fprintf(f, "  node [\n");
         fprintf(f, "    id %d\n", aread);
         fprintf(f, "    read %d\n", aread);
-        fprintf(f, "    contained %d\n", contained);
+        fprintf(f, "    optional %d\n", optional);
         fprintf(f, "  ]\n");
 
         status[aread] ^= STATUS_USED;
@@ -432,8 +433,8 @@ static void print_graph_graphml(OgBuildContext* octx, FILE* f, const char* title
     fprintf(f, "  <key attr.name=\"end\"        attr.type=\"string\" for=\"edge\" id=\"end\" />\n");
     fprintf(f, "  <key attr.name=\"divergence\" attr.type=\"int\"    for=\"edge\" id=\"divergence\" />\n");
 
-    fprintf(f, "  <key attr.name=\"contained\"  attr.type=\"int\"    for=\"node\" id=\"contained\" />\n");
     fprintf(f, "  <key attr.name=\"read\"       attr.type=\"int\"    for=\"node\" id=\"read\" />\n");
+    fprintf(f, "  <key attr.name=\"optional\"   attr.type=\"int\"    for=\"node\" id=\"optional\" />\n");
 
     fprintf(f, "  <graph id=\"%s\" edgedefault=\"directed\">\n", title);
 
@@ -504,11 +505,11 @@ static void print_graph_graphml(OgBuildContext* octx, FILE* f, const char* title
             continue;
         }
 
-        int contained = ( status[aread] & STATUS_CONTAINED ) ? 1 : 0;
+        int optional = (status[aread] & STATUS_OPTIONAL) ? 1 : 0;
 
         fprintf(f, "    <node id=\"%d\">\n", aread);
         fprintf(f, "      <data key=\"read\">%d</data>\n", aread);
-        fprintf(f, "      <data key=\"contained\">%d</data>\n", contained);
+        fprintf(f, "      <data key=\"optional\">%d</data>\n", optional);
         fprintf(f, "    </node>\n");
 
         status[aread] ^= STATUS_USED;
@@ -1001,6 +1002,7 @@ static void add_contained_edges(OgBuildContext* octx, int contained)
 #endif
 
                     status[bread] = STATUS_PROPER;
+                    status[bread] |= STATUS_OPTIONAL;
 
                     inspect_new[curinspect_new] = bread;
                     curinspect_new++;
@@ -1055,6 +1057,7 @@ static void add_contained_edges(OgBuildContext* octx, int contained)
 #endif
 
                     status[bread] = STATUS_PROPER;
+                    status[bread] |= STATUS_OPTIONAL;
 
                     inspect_new[curinspect_new] = bread;
                     curinspect_new++;
@@ -1768,13 +1771,20 @@ static void post_count(OgBuildContext* octx)
 
 static void usage()
 {
-    printf("OGbuild [-s] [-c <int>] [-t <track>] [-f gml|graphml|tgf] [-p ovl|ovh] <db> <overlaps> <graph>\n");
-    printf("options: -c ... use contained reads. 0 disabled, >0 max n edges, -1 all\n");
-    printf("         -s ... split into components. path/prefix in <graph>\n");
-    printf("         -f ... graph format\n");
-    printf("         -p ... containment adding edge priority (%s)\n", DEF_ARG_P);
-    printf("         -t ... trim track (%s)\n", DEF_ARG_T);
-};
+    printf( "usage: [-s] [-c <int>] [-t <track>] [-f gml|graphml|tgf] [-p ovl|ovh] database input.las output.format\n\n" );
+
+    printf( "Builds the overlap graph based on the alignments in the input las file.\n\n" );
+
+    printf( "options: -c n      try to add otherwise containted reads to dead ends in the graph\n" );
+    printf( "                   0 disabled, >0 maximum number of edges, -1 all edges (default %d)\n", DEF_ARG_C );
+    printf( "         -p mode   which edges should be added when running in -c mode (default %s)\n" , DEF_ARG_P);
+    printf( "                   ovl longest overlap, ovh longer overhang\n" );
+
+    printf( "         -f frmt   output graph format. gml, graphml or tgf (default %s)\n", DEF_ARG_F );
+    printf( "         -s        write on file for each component of the overlap graph.\n" );
+    printf( "                   files are named output.<component.number>.format\n" );
+    printf( "         -t track  which trim track to use (%s)\n", DEF_ARG_T );
+}
 
 int main(int argc, char* argv[])
 {

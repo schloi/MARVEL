@@ -1,0 +1,5 @@
+
+1) gunzip 01_Ecoli_K12_R9_1D_Rapid_basecalled.pass.20x.fasta.gz
+2) MARVEL_INSTALL_DIR/scripts/DBprepare.py ECOL 01_Ecoli_K12_R9_1D_Rapid_basecalled.pass.20x.fasta
+3) do.py
+

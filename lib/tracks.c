@@ -52,11 +52,15 @@ HITS_TRACK* track_load(HITS_DB *db, char* track)
     }
 
     void* canno = malloc(header.clen);
+    bzero(canno, header.clen);
 
-    if ( fread(canno, header.clen, 1, afile) != 1 )
+    if ( header.clen > 0 )
     {
-        fprintf(stderr, "ERROR: failed to read track %s\n", track);
-        return NULL;
+        if ( fread(canno, header.clen, 1, afile) != 1 )
+        {
+            fprintf(stderr, "ERROR: failed to read anno track %s\n", track);
+            return NULL;
+        }
     }
 
     fclose(afile);
@@ -81,11 +85,15 @@ HITS_TRACK* track_load(HITS_DB *db, char* track)
     }
 
     void* cdata = malloc(header.cdlen);
+    bzero(cdata, header.cdlen);
 
-    if ( fread(cdata, header.cdlen, 1, dfile) != 1 )
+    if ( header.cdlen > 0 )
     {
-        fprintf(stderr, "ERROR: failed to read track %s\n", track);
-        return NULL;
+        if ( fread(cdata, header.cdlen, 1, dfile) != 1 )
+        {
+            fprintf(stderr, "ERROR: failed to read data track %s\n", track);
+            return NULL;
+        }
     }
 
     fclose(dfile);

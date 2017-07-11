@@ -27,10 +27,9 @@
 
 // command line defaults
 
-#define DEF_ARG_S -1
 #define DEF_ARG_F 0
 #define DEF_ARG_B 1000
-#define DEF_ARG_T TRACK_TRIM
+#define DEF_ARG_T NULL
 
 // read flags
 
@@ -52,7 +51,6 @@ typedef struct
     uint64_t nOverlaps;
     uint64_t nComplementOverlaps;
     uint64_t nIdentityOverlaps;
-    uint64_t nStitched;
 
     // overall stat counters for all overlap files
     uint32_t nAllContainedReads;
@@ -63,17 +61,16 @@ typedef struct
     uint64_t nAllIdentityOverlaps;
 
     // command line switches
-    int verbose;
     int fuzzing;
-    int stitch;
     int dumpOutContainedReads;
-	int raw;
+    int raw;
 
     // overlap length binning
     int ovlBinSize;
     int nbin;
     int* hist;
     uint64_t* bsum;
+    int* hist_local;
 
     // db
     HITS_DB* db;
@@ -84,65 +81,6 @@ typedef struct
 
 extern char* optarg;
 extern int optind, opterr, optopt;
-
-static void stitch( StatsContext* ctx, Overlap* pOvls, int n, int sfuzz )
-{
-    if ( n < 2 )
-    {
-        return;
-    }
-
-    int i, k, b;
-    int ab2, ae1, ae2;
-    int bb2, be1, be2;
-
-    const int ignore_mask = OVL_CONT | OVL_STITCH | OVL_GAP | OVL_TRIM;
-
-    for ( i = 0; i < n; i++ )
-    {
-        if ( pOvls[ i ].flags & ignore_mask )
-        {
-            continue;
-        }
-
-        b = pOvls[ i ].bread;
-
-        ae1 = pOvls[ i ].path.aepos;
-        be1 = pOvls[ i ].path.bepos;
-
-        for ( k = i + 1; k < n && pOvls[ k ].bread <= b; k++ )
-        {
-            if ( ( pOvls[ k ].flags & ignore_mask ) || ( pOvls[ i ].flags & OVL_COMP ) != ( pOvls[ k ].flags & OVL_COMP ) )
-            {
-                continue;
-            }
-
-            ab2 = pOvls[ k ].path.abpos;
-            ae2 = pOvls[ k ].path.aepos;
-
-            bb2 = pOvls[ k ].path.bbpos;
-            be2 = pOvls[ k ].path.bepos;
-
-            int deltaa = abs( ae1 - ab2 );
-            int deltab = abs( be1 - bb2 );
-
-            if ( deltaa < sfuzz && deltab < sfuzz && ( abs( deltaa - deltab ) < 40 ) )
-            {
-                pOvls[ i ].path.aepos = ae2;
-                pOvls[ i ].path.bepos = be2;
-                pOvls[ i ].path.diffs += pOvls[ k ].path.diffs;
-                pOvls[ i ].path.tlen = 0;
-
-                pOvls[ i ].flags &= ~( OVL_DISCARD | OVL_LOCAL ); // force a re-evaluation of the OVL_LOCAL flags
-                pOvls[ i ].flags |= OVL_OPTIONAL;
-
-                pOvls[ k ].flags |= OVL_DISCARD | OVL_STITCH | OVL_TEMP;
-
-                ctx->nStitched++;
-            }
-        }
-    }
-}
 
 static int contained_stats( StatsContext* ctx, Overlap* pOvls, int n )
 {
@@ -230,9 +168,10 @@ static void stats_pre( StatsContext* fctx )
     // allocate bit masks
     if ( fctx->hist == NULL )
     {
-        fctx->nbin = DB_READ_MAXLEN( fctx->db ) / fctx->ovlBinSize + 1;
-        fctx->hist = (int*)malloc( sizeof( int ) * fctx->nbin );
-        fctx->bsum = (uint64_t*)malloc( sizeof( uint64_t ) * fctx->nbin );
+        fctx->nbin       = DB_READ_MAXLEN( fctx->db ) / fctx->ovlBinSize + 1;
+        fctx->hist       = (int*)malloc( sizeof( int ) * fctx->nbin );
+        fctx->hist_local = (int*)malloc( sizeof( int ) * fctx->nbin );
+        fctx->bsum       = (uint64_t*)malloc( sizeof( uint64_t ) * fctx->nbin );
     }
 
     int i;
@@ -243,10 +182,11 @@ static void stats_pre( StatsContext* fctx )
     }
 
     bzero( fctx->hist, sizeof( int ) * fctx->nbin );
+    bzero( fctx->hist_local, sizeof( int ) * fctx->nbin );
     bzero( fctx->bsum, sizeof( uint64_t ) * fctx->nbin );
 }
 
-static void stats_post( StatsContext* ctx, int last )
+static void stats_post( StatsContext* ctx )
 {
     // update stats
     int i;
@@ -256,7 +196,7 @@ static void stats_post( StatsContext* ctx, int last )
     int usedb           = 0;
     int contained       = 0;
     uint64_t containedb = 0;
-	int raw = ctx->raw;
+    int raw             = ctx->raw;
 
     for ( i = 0; i < dbReads; i++ )
     {
@@ -303,59 +243,40 @@ static void stats_post( StatsContext* ctx, int last )
 
     // output
 
-	if (!raw)
-	{
-		printf( "a-reads: %7d\n", useda );
-		printf( "b-reads: %7d\n", usedb );
-		printf( "reads:   %7d\n", used );
+    if ( !raw )
+    {
+        printf( "distinct A-reads: %'7d\n", useda );
+        printf( "distinct B-reads: %'7d\n", usedb );
+        printf( "distinct reads:   %'7d\n", used );
 
-		if ( contained > 0 )
-		{
-			printf( "#contained reads: %d (%.2f%%), contained bases: %" PRIu64 " (%.2f%%), avgLen: %" PRIu64 "\n",
-					contained,
-					100.0 * contained / used,
-					containedb,
-					100.0 * containedb / nbases,
-					containedb / contained );
-		}
-
-		if ( ctx->nIdentityOverlaps > 0 )
-		{
-			printf( "#identity overlaps %" PRIu64 " from %d reads\n",
-					ctx->nIdentityOverlaps,
-					useda );
-		}
-	}
+        if ( contained > 0 )
+        {
+            printf( "contained reads:  %'7d (%.2f%%)\n", contained, 100.0 * contained / used );
+        }
+    }
 
     if ( ctx->nOverlaps > 0 )
     {
-        uint64_t nfwd = ctx->nOverlaps - ctx->nComplementOverlaps;
-
-		if (raw)
-		{
-			printf( "%" PRIu64 " %" PRIu64 "\n", ctx->nOverlaps, nbases / ctx->nOverlaps );
-		}
-		else
-		{
-			printf( "#overlaps %" PRIu64 ", n: %" PRIu64 " (%.2f%%), c: %" PRIu64 " (%.2f%%), avgLen %" PRIu64 "\n",
-					ctx->nOverlaps,
-					nfwd,
-					nfwd * 100.0 / ctx->nOverlaps,
-					ctx->nComplementOverlaps,
-					ctx->nComplementOverlaps * 100.0 / ctx->nOverlaps,
-					nbases / ctx->nOverlaps );
-		}
+        if ( raw )
+        {
+            printf( "# alignments avg.length\n" );
+            printf( "%" PRIu64 " %" PRIu64 "\n", ctx->nOverlaps, nbases / ctx->nOverlaps );
+        }
+        else
+        {
+            printf( "alignments:       %'7" PRIu64 " average length %" PRIu64 "\n",
+                    ctx->nOverlaps, nbases / ctx->nOverlaps );
+        }
     }
 
-    if ( !raw && ctx->nStitched > 0 )
+    if ( !raw )
     {
-        printf( "#stitched overlaps %" PRIu64 "\n", ctx->nStitched );
+        printf( "\nDistribution of Alignment Lengths (Bin size = %dbp)\n\n    Bin      Count    Local      %%  %% Bases  cum.avgerage\n", ctx->ovlBinSize );
     }
-
-	if ( !raw )
-	{
-	    printf( "\n  Distribution of Overlap Lengths (Bin size = %d)\n\n        Bin:      Count  %% Overlaps  %% Bases    cumAverage    binAverage\n", ctx->ovlBinSize );
-	}
+    else
+    {
+        printf( "# bin count.alignemnts local.alignments %%.alignments %%.bases cum.average\n" );
+    }
 
     uint64_t cum  = 0;
     uint64_t btot = 0;
@@ -366,97 +287,24 @@ static void stats_post( StatsContext* ctx, int last )
 
         if ( ( ctx->hist[ i ] > 0 ) )
         {
-			if (raw)
-			{
-				printf( "%d %d %.1f %.1f %" PRIu64 " %" PRIu64 "\n",
-						i * ctx->ovlBinSize,
-						ctx->hist[ i ],
-						( 100. * cum ) / ctx->nOverlaps,
-						( 100. * btot ) / nbases,
-						btot / cum,
-						ctx->bsum[ i ] / ctx->hist[ i ] );
-			}
-			else
-			{
-				printf( "%11d:   %8d       %5.1f    %5.1f     %9" PRIu64 "     %9" PRIu64 "\n",
-						i * ctx->ovlBinSize,
-						ctx->hist[ i ],
-						( 100. * cum ) / ctx->nOverlaps,
-						( 100. * btot ) / nbases,
-						btot / cum,
-						ctx->bsum[ i ] / ctx->hist[ i ] );
-			}
-        }
-    }
-
-    if ( !raw && last )
-    {
-        int used_g            = 0;
-        int useda_g           = 0;
-        int usedb_g           = 0;
-        int contained_g       = 0;
-        uint64_t containedb_g = 0;
-        uint64_t nfwd_g       = ctx->nAllOverlaps - ctx->nAllComplementOverlaps;
-
-        for ( i = 0; i < dbReads; i++ )
-        {
-            HITS_READ* read = ctx->db->reads + i;
-            int flags       = read->flags;
-
-            if ( flags & R_CONTAINED_G )
+            if ( raw )
             {
-                contained_g += 1;
-                containedb_g += DB_READ_LEN( ctx->db, i );
+                printf( "%d %d %.1f %.1f %" PRIu64 "\n",
+                        i * ctx->ovlBinSize,
+                        ctx->hist[ i ],
+                        ( 100. * cum ) / ctx->nOverlaps,
+                        ( 100. * btot ) / nbases,
+                        btot / cum );
             }
-
-            if ( flags & ( R_USED_A_G | R_USED_B_G ) )
+            else
             {
-                used_g += 1;
-            }
-
-            if ( flags & R_USED_A_G )
-            {
-                useda_g += 1;
-            }
-
-            if ( flags & R_USED_B_G )
-            {
-                usedb_g += 1;
-            }
-        }
-
-        if ( used_g != used )
-        {
-            printf( "#overall Areads: %d\n", useda_g );
-            printf( "#overall Breads: %d\n", usedb_g );
-            printf( "#overall reads: %d\n", used_g );
-
-            if ( contained_g > 0 )
-            {
-                printf( "#overall contained reads: %d  (%.2f%%), contained bases: %" PRIu64 " (%.2f%%), avgLen: %" PRIu64 "\n",
-                        contained_g, 100.0 * contained_g / used_g, containedb_g, 100.0 * containedb_g / ctx->nAllBases, containedb_g / contained_g );
-            }
-
-            if ( ctx->nAllIdentityOverlaps > 0 )
-            {
-                printf( "#overall identity overlaps %" PRIu64 " (%.2f%%) from %d reads\n",
-                        ctx->nAllIdentityOverlaps, 100.0 * ctx->nAllIdentityOverlaps / ctx->nAllOverlaps, useda_g );
-            }
-
-            if ( ctx->nAllOverlaps > 0 )
-            {
-                printf( "#overall overlaps %" PRIu64 ", n: %" PRIu64 ", (%.2f%%), c: %" PRIu64 " (%.2f%%) avgLen %" PRIu64 "\n",
-                        ctx->nAllOverlaps, nfwd_g, nfwd_g * 100.0 / ctx->nAllOverlaps,
-                        ctx->nAllComplementOverlaps, ctx->nAllComplementOverlaps * 100.0 / ctx->nAllOverlaps, ctx->nAllBases / ctx->nAllOverlaps );
-            }
-        }
-
-        if ( ctx->dumpOutContainedReads && last )
-        {
-            for ( i = 0; i < dbReads; i++ )
-            {
-                if ( ctx->db->reads[ i ].flags & R_CONTAINED_G )
-                    printf( "%d\n", i );
+                printf( "%7d   %8d %8d  %5.1f    %5.1f     %9" PRIu64 "\n",
+                        i * ctx->ovlBinSize,
+                        ctx->hist[ i ],
+                        ctx->hist_local[ i ],
+                        ( 100. * cum ) / ctx->nOverlaps,
+                        ( 100. * btot ) / nbases,
+                        btot / cum );
             }
         }
     }
@@ -468,22 +316,6 @@ static int stats_handler( void* _ctx, Overlap* ovls, int novl )
     int j;
 
     ctx->db->reads[ ovls->aread ].flags |= R_USED_A | R_USED_A_G;
-
-    // stitch
-    if ( ctx->stitch >= 0 )
-    {
-        int k;
-        j = k = 0;
-        while ( j < novl )
-        {
-            while ( k < novl - 1 && ovls[ j ].bread == ovls[ k + 1 ].bread )
-                k++;
-
-            stitch( ctx, ovls + j, k - j + 1, ctx->stitch );
-
-            j = k + 1;
-        }
-    }
 
     // contained stats
     {
@@ -502,19 +334,62 @@ static int stats_handler( void* _ctx, Overlap* ovls, int novl )
         }
     }
 
+    int trim_ab, trim_ae, trim_bb, trim_be;
+
+    if ( ctx->tracktrim )
+    {
+        get_trim( ctx->db, ctx->tracktrim, ovls->aread, &trim_ab, &trim_ae );
+    }
+    else
+    {
+        trim_ab = 0;
+        trim_ae = DB_READ_LEN( ctx->db, ovls->aread );
+    }
+
     // overlap length histogram
     for ( j = 0; j < novl; j++ )
     {
         Overlap* ovl = ovls + j;
 
         if ( ovl->flags & OVL_DISCARD )
+        {
             continue;
+        }
 
         int l = ovl->path.aepos - ovl->path.abpos;
         int b = l / ctx->ovlBinSize;
 
         if ( b >= ctx->nbin )
+        {
             b = ctx->nbin - 1;
+        }
+
+        if ( ctx->tracktrim )
+        {
+            get_trim( ctx->db, ctx->tracktrim, ovl->bread, &trim_bb, &trim_be );
+        }
+        else
+        {
+            trim_bb = 0;
+            trim_be = DB_READ_LEN( ctx->db, ovls->bread );
+        }
+
+        int bb = ovl->path.bbpos;
+        int be = ovl->path.bepos;
+
+        if ( ovl->flags & OVL_COMP )
+        {
+            int blen = DB_READ_LEN( ctx->db, ovl->bread );
+
+            bb = blen - be;
+            be = blen - bb;
+        }
+
+        if ( ( ( ovl->path.abpos - trim_ab ) > 0 && ( bb - trim_bb ) > 0 ) ||
+             ( ( trim_ae - ovl->path.aepos ) > 0 && ( trim_be - be ) > 0 ) )
+        {
+            ctx->hist_local[ b ] += 1;
+        }
 
         ctx->hist[ b ] += 1;
         ctx->bsum[ b ] += l;
@@ -523,16 +398,13 @@ static int stats_handler( void* _ctx, Overlap* ovls, int novl )
     return 1;
 }
 
-static void usage()
+static void usage( FILE* fout, const char* app )
 {
-    fprintf( stderr, "[-vdr] [-bfs <int>] <db> <overlaps_in> ... | <overlaps.#.las> \n" );
-    fprintf( stderr, "options: -v ... verbose\n" );
-    fprintf( stderr, "         -f ... containment fuzzing, i.e. #fuzzing bases, that are ignored from begin or end of overlap (default: %d)\n", DEF_ARG_F );
-    fprintf( stderr, "         -s ... stitch (%d)\n", DEF_ARG_S );
-    fprintf( stderr, "         -d ... dump out contained reads\n" );
-    fprintf( stderr, "         -b ... bucket size of histogram length (%d)\n", DEF_ARG_B );
-    fprintf( stderr, "         -t ... trim track (%s)\n", DEF_ARG_T );
-	fprintf( stderr, "         -r ... raw output\n");
+    fprintf( fout, "usage: %s [-r] [-t track] [-b n] database input.las [input2.las ...]\n\n", app );
+    fprintf( fout, "Output basic statistics on the alignments found in the las file(s).\n\n" );
+    fprintf( fout, "options: -b  bin size for the alignment lengths' histogram (%d)\n", DEF_ARG_B );
+    fprintf( fout, "         -t  trim track for local alignment classification\n" );
+    fprintf( fout, "         -r  raw (parsing friendly) output\n" );
 }
 
 int main( int argc, char* argv[] )
@@ -541,15 +413,14 @@ int main( int argc, char* argv[] )
     StatsContext sctx;
     PassContext* pctx;
     FILE* fileOvlIn;
+    char* app = argv[ 0 ];
 
     bzero( &sctx, sizeof( StatsContext ) );
 
-    sctx.db                    = &db;
-    sctx.fuzzing               = DEF_ARG_F;
-    sctx.stitch                = DEF_ARG_S;
-    sctx.dumpOutContainedReads = 0;
-    sctx.ovlBinSize            = DEF_ARG_B;
-	sctx.raw 				   = 0;
+    sctx.db         = &db;
+    sctx.fuzzing    = DEF_ARG_F;
+    sctx.ovlBinSize = DEF_ARG_B;
+    sctx.raw        = 0;
 
     // args
 
@@ -557,57 +428,40 @@ int main( int argc, char* argv[] )
     char* trimname = DEF_ARG_T;
     opterr         = 0;
 
-    while ( ( c = getopt( argc, argv, "rvdf:s:t:" ) ) != -1 )
+    while ( ( c = getopt( argc, argv, "rt:b:" ) ) != -1 )
     {
         switch ( c )
         {
-			case 'r':
-				sctx.raw = 1;
-				break;
+            case 'r':
+                sctx.raw = 1;
+                break;
 
             case 't':
                 trimname = optarg;
                 break;
 
-            case 'v':
-                sctx.verbose++;
-                break;
-
-            case 'd':
-                sctx.dumpOutContainedReads = 1;
-                break;
-
-            case 'f':
-                sctx.fuzzing = atoi( optarg );
-                if ( sctx.fuzzing < 0 )
+            case 'b':
+                sctx.ovlBinSize = atoi( optarg );
+                if ( sctx.ovlBinSize <= 0 )
                 {
-                    fprintf( stderr,
-                             "[ERROR] - LAstats: -f argument must be positive!\n" );
-                    usage();
+                    fprintf( stderr, "Invalid histogram bucket size of %d\n", sctx.ovlBinSize );
                     exit( 1 );
                 }
                 break;
 
-            case 's':
-                sctx.stitch = atoi( optarg );
-                break;
-
             default:
-                usage();
+                usage( stdout, app );
                 exit( 1 );
         }
     }
 
     if ( argc - optind < 2 )
     {
-        usage();
+        usage( stdout, app );
         exit( 1 );
     }
 
     char* pcPathReadsIn = argv[ optind++ ];
-
-    if ( sctx.verbose )
-        printf( "Open database: %s\n", pcPathReadsIn );
 
     if ( Open_DB( pcPathReadsIn, &db ) )
     {
@@ -615,60 +469,33 @@ int main( int argc, char* argv[] )
         exit( 1 );
     }
 
-    if ( !( sctx.tracktrim = track_load( &db, trimname ) ) )
+    if ( trimname != NULL )
     {
-        fprintf( stderr, "could not open %s\n", trimname );
+        if ( !( sctx.tracktrim = track_load( &db, trimname ) ) )
+        {
+            fprintf( stderr, "could not open %s\n", trimname );
+        }
     }
 
     char* pcPathOverlapsIn = argv[ optind ];
-    char* hashPos          = strchr( pcPathOverlapsIn, '#' );
     int blocks             = 1;
 
     char* pathLas = malloc( strlen( pcPathOverlapsIn ) + 100 );
-    char *prefix, *suffix;
 
-    if ( hashPos != NULL )
-    {
-        blocks = DB_Blocks( pcPathReadsIn );
+    blocks = argc - optind;
 
-        prefix   = pcPathOverlapsIn;
-        suffix   = hashPos + 1;
-        *hashPos = '\0';
-    }
-    else
-    {
-        blocks = argc - optind;
-    }
+    stats_pre( &sctx );
 
     int b;
     for ( b = 1; b <= blocks; b++ )
     {
-        if ( hashPos != NULL )
+        if ( ( fileOvlIn = fopen( argv[ optind ], "r" ) ) == NULL )
         {
-            sprintf( pathLas, "%s%d%s", prefix, b, suffix );
-
-            if ( ( fileOvlIn = fopen( pathLas, "r" ) ) == NULL )
-            {
-                fprintf( stderr, "could not open %s\n", pathLas );
-                exit( 1 );
-            }
-
-            if ( sctx.verbose )
-                printf( ANSI_COLOR_GREEN "PASS stats %s\n" ANSI_COLOR_RESET,
-                        pathLas );
+            fprintf( stderr, "could not open %s\n", argv[ optind ] );
+            exit( 1 );
         }
-        else
-        {
-            if ( ( fileOvlIn = fopen( argv[ optind ], "r" ) ) == NULL )
-            {
-                fprintf( stderr, "could not open %s\n", argv[ optind ] );
-                exit( 1 );
-            }
-            if ( sctx.verbose )
-                printf( ANSI_COLOR_GREEN "PASS stats %s\n" ANSI_COLOR_RESET,
-                        argv[ optind ] );
-            optind++;
-        }
+
+        optind++;
 
         // passes
 
@@ -680,8 +507,6 @@ int main( int argc, char* argv[] )
         pctx->write_overlaps  = 0;
         pctx->purge_discarded = 0;
 
-        stats_pre( &sctx );
-
         pass( pctx, stats_handler );
 
         int last = 0;
@@ -690,18 +515,13 @@ int main( int argc, char* argv[] )
             last = 1;
         }
 
-        stats_post( &sctx, last );
-
         // cleanup
 
         pass_free( pctx );
         fclose( fileOvlIn );
     }
 
-    if ( hashPos != NULL )
-    {
-        *hashPos = '#';
-    }
+    stats_post( &sctx );
 
     Close_DB( &db );
     free( pathLas );
