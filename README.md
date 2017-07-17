@@ -8,21 +8,24 @@ For questions, suggestions and complaints please contact [s.schloissnig@gmail.co
 
 ## SOURCE CODE ORGANIZATION
 
-Most of the codebase is in C with some utility scripts written in Python. We often prototype in Python and then move to a C implementation in case performance is sub-par or spare time is available. Due to this two track development we offer Python based interfaces to access the most commonly used file formats the various tools produce.
+Most of the codebase is in C with some utility scripts written in Python. Often Python is used to develop prototypes and which are then moved to a C implementation in case performance is sub-par or spare time is available. Due to this two track development Python based interfaces to access the most commonly used file formats the various tools produce are offered.
 
-For production purposes we discourage the use of Python to deal with las files. Due to the performance overhead involved.
+For production purposes the use of Python to deal with las files is discouraged. Due to the performance overhead involved.
 
-MARVEL is largely self-contained, meaning that we try to avoid relying on external code packages/libraries as much as possible. The only external dependencies are the HDF5 library, GTK3 and networkx. All of which are available through the package management system of the most popular linux distributions. If that is not the case for our platform, you need to have a look at [https://www.hdfgroup.org/downloads/hdf5/](https://www.hdfgroup.org/downloads/hdf5/), [https://developer.gnome.org/gtk3/3.0/](https://developer.gnome.org/gtk3/3.0/) and [https://networkx.github.io/](https://networkx.github.io/). Please note that the build will not fail of those libraries are not present, but rather skip the compilation of the tools depending on them.
+MARVEL is largely self-contained, meaning that external code packages/libraries are rarely relied on. The only external dependencies are the HDF5 library, GTK3 and networkx. All of which are available through the package management system of the most popular linux distributions. If that is not the case for our platform, you need to have a look at [https://www.hdfgroup.org/downloads/hdf5/](https://www.hdfgroup.org/downloads/hdf5/), [https://developer.gnome.org/gtk3/3.0/](https://developer.gnome.org/gtk3/3.0/) and [https://networkx.github.io/](https://networkx.github.io/). Please note that the build will not fail of those libraries are not present, but rather skip the compilation of the tools depending on them.
 
 The build system is based on automake/conf and build utility scripts are located in the build/ subdir.
 
+    build/          build utility scripts
     corrector/      read correction
-    dalign/         our fork of Gene's daligner
-    db/             our fork of the DB module underlying Gene's daligner package
+    dalign/         fork of Gene's daligner
+    db/             fork of the DB module underlying Gene's daligner package
+    docs/           documentation
     examples/       example datasets and assembly scripts
     lib/            utility functions
     lib.ext/        utility functions based on external code
     lib.python/     Python modules for interacting with the assembler's data files
+    m4/             autoconf macros
     msa/            multiple sequence aligner
     scripts/        various Python based utility scripts
     scrub/          read scrubbing
@@ -72,7 +75,7 @@ The assembly can now be performed by running the included do.py script. Which wi
 
 The do.py script only serves as an example of how to perform an assembly using MARVEL and can be changed to your liking or replaced altogether with a custom setup of your own.
 
-    # At the beginning we set various constants
+    # set various constants
 
     DB         = "ECOL"                         # database name
     COVERAGE   = 25                             # coverage of the dataset
@@ -213,12 +216,12 @@ Keep track of read specific information like quality values, repeat annotation, 
 
 ### A/B reads
 
-In the context of alignments and overlaps we refer to the two reads participating in it as the A
+In the context of alignments and overlaps the two reads participating in it are refered to as the A
 and B read.
 
 ### Alignment trace points
 
-Since storing the alignments explicitely would result in excessive storage requirements, we only keep track of the position of the alignments at so called trace points. For the A read they are evenly spaced with the trace width (usually 100bp) and give the offset from the previous trace point in B and the number of differences (edit distance).
+Since storing the alignments explicitely would result in excessive storage requirements, only the position of the alignments at so called trace points is kept track of. For the A read they are evenly spaced with the trace width (usually 100bp) and give the offset from the previous trace point in B and the number of differences (edit distance).
 
 For example, the alignment starts at (a.begin, b.begin) the first trace point would contain
 (a.begin + 100, b.begin + offset.b.1, diffs.1),
@@ -230,7 +233,7 @@ Based on the trace points and all alignments to a given A read be can now use th
 
 ### Pre-loading (the -L parameter)
 
-Some tools scan the las files sequentially and require both the sequence of the A and B read. The A read sequence essentially can be read sequentially from the file containing the sequences. But reading the B read induces a random-access pattern, which results in sub-par performance on many (distributed) file systems. For the tools which require the B reads, we offer the -L option, often called the pre-loading option. When this option is used, we perform an addition sequential scan of the las file, in which we collect the identifiers of all reads that need to be loaded and then load these reads in one sequential pass and caching them in memory.
+Some tools scan the las files sequentially and require both the sequence of the A and B read. The A read sequence essentially can be read sequentially from the file containing the sequences. But reading the B read induces a random-access pattern, which results in sub-par performance on many (distributed) file systems. For the tools which require the B reads, the -L option is offered, often called the pre-loading option. When this option is used, an addition sequential scan of the las file is performed, in which the identifiers of all reads that need to be loaded are collected, then subsequently fetched from the database in one sequential pass and cached in memory.
 
 ### Stitching
 
@@ -242,7 +245,7 @@ MARVEL breaks with the established paradigm of correcting the reads to >99% iden
 
 ### Patching (in lieu of correction)
 
-Instead of correcting reads, we opted for a process we called patching, which repairs large scale errors (missed adaptors, large “random” inserts, high-error regions, missing sequence) that result in a stop of the alignments one it reaches said erroneous regions. The main point here is, that when restoring large scale errors with uncorrected parts of others reads, the sequence used for the correction only needs to be good enough to allow the alignment to continue at the native error rate and doesn’t actually have to be the right one.
+Instead of correcting reads, a process called patching patching is employed. Therein, large scale errors (missed adaptors, large “random” inserts, high-error regions, missing sequence) that result in a stop of the alignments one it reaches said erroneous regions are repaired. The main point here is, that when restoring large scale errors with uncorrected parts of others reads, the sequence used for the correction only needs to be good enough to allow the alignment to continue at the native error rate and doesn’t actually have to be the right one.
 
 Since the chance of encountering a large-scale error in a read goes up with its length the most valuable long reads are most afflicted by them and therefore patching represents an important way to preserve the availability of long reads for use in assembly. Patching essentially works by finding regions in reads that are
 
@@ -250,7 +253,7 @@ a. of low quality. The quality (i.e. error rate) across a read is derived from t
 b. not spanned by any alignment.
 
 a. Is corrected by taking the sequence of a read that spans the low-quality region and replacing the low-quality region with it.
-b. Here we look to the left/right of the break and see if the same reads are on both sides and that the size of the gap from the perspective of those reads is roughly the same. The region in the read is then replaced by sequence taken from one of the reads that align to it.
+b. Look to the left/right of the break and see if the same reads are on both sides and that the size of the gap from the perspective of those reads is roughly the same. The region in the read is then replaced by sequence taken from one of the reads that align to it.
 
 ### Post-assembly correction
 
