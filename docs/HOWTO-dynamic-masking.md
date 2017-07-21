@@ -4,7 +4,7 @@
 
 0) You can use already existing masking tracks by passing them with the -i option to the masking server for initialization.
 
-1) Launch the DMserver process with the databse, expected coverage and other optional arguments. The server process then initializes and waits for incoming messages on the default or given hostname and port.
+1) Launch the DMserver process with the database, expected coverage and other optional arguments. The server process then initializes and waits for incoming messages on the default or given hostname and port.
 
 2) Launch the daligner jobs with the -D option. Thereby ensuring daligner notifies the masking server that new las files are available and that daligner fetches masking tracks from the msking server.
 
