@@ -4,8 +4,6 @@ This file contains the steps we took to assemble the axolotl genome.
 
 ##### READ PATCHING PHASE
 
-### replace SERVER and PORT also in do_patching.py and do_assembly.py !!!
-
 # create initial database
 FA2db -v -x 2000 -b AXOLOTL -f axoFiles.txt
 
@@ -68,7 +66,7 @@ DMctl -h HOST -p PORT shutdown
 ### run LAmerge to merge overlap blocks
 AXOLOTL_FIX.merge.plan
 
-### start scrubbing pipeline
+### SCRUBBING PHASE
 
 # repair alignments that prematurely stopped due to left-over errors in the reads
 for each database block

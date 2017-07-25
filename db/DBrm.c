@@ -47,31 +47,37 @@
  *
  ********************************************************************************************/
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "DB.h"
 
-static char *Usage = "<path:db> ... ";
+static char* Usage = "<path:db> ... ";
 
-static void HANDLER(char *path, char *name)
-{ (void) name;
-  unlink(path);
+static void HANDLER( char* path, char* name )
+{
+    (void)name;
+    if ( unlink( path ) != 0 )
+    {
+        fprintf( stderr, "unlink of %s failed\n", path );
+        exit( 1 );
+    }
 }
 
-int main(int argc, char *argv[])
-{ int   i;
+int main( int argc, char* argv[] )
+{
+    int i;
 
-  Prog_Name = Strdup("DBrm","");
+    Prog_Name = Strdup( "DBrm", "" );
 
-  if (argc <= 1)
-    fprintf(stderr,"Usage: %s %s\n",Prog_Name,Usage);
+    if ( argc <= 1 )
+        fprintf( stderr, "Usage: %s %s\n", Prog_Name, Usage );
 
-  for (i = 1; i < argc; i++)
-    if (List_DB_Files(argv[i],HANDLER))
-      fprintf(stderr,"%s: Could not list database %s\n",Prog_Name,argv[i]);
+    for ( i = 1; i < argc; i++ )
+        if ( List_DB_Files( argv[ i ], HANDLER ) )
+            fprintf( stderr, "%s: Could not list database %s\n", Prog_Name, argv[ i ] );
 
-  exit (0);
+    exit( 0 );
 }

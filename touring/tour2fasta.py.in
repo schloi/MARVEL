@@ -75,7 +75,7 @@ def reverse(edir):
     else:
         return 'l'
 
-g_revcomp = string.maketrans("ACGTacgt", "TGCAtgca")
+g_revcomp = str.maketrans("ACGTacgt", "TGCAtgca")
 def revcomp(seq):
     seq = str(seq).translate(g_revcomp)
     return seq[::-1]

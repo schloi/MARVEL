@@ -29,7 +29,14 @@
 #define TRACK_INTERVAL          1
 #define TRACK_POINT             2
 
+// development toggles
+
 #undef DEBUG
+#undef EXP_PRINT
+
+#ifdef EXP_PRINT
+    #include <cairo/cairo-ps.h>
+#endif
 
 // sort type
 typedef enum
@@ -942,6 +949,12 @@ static gboolean track_draw_callback(GtkWidget* widget, cairo_t* cr, gpointer dat
 
     int width = gtk_widget_get_allocated_width(widget);
 
+#ifdef EXP_PRINT
+    int height = gtk_widget_get_allocated_height( widget );
+    cairo_surface_t* surface = cairo_ps_surface_create( "output_track.ps", width, height );
+    cr = cairo_create (surface);
+#endif
+
     GdkRectangle clip;
     gdk_cairo_get_clip_rectangle(cr, &clip);
 
@@ -1063,6 +1076,12 @@ static gboolean track_draw_callback(GtkWidget* widget, cairo_t* cr, gpointer dat
 
     }
 
+#ifdef EXP_PRINT
+    cairo_show_page (cr);
+    cairo_destroy (cr);
+    cairo_surface_finish (surface);
+    cairo_surface_destroy (surface);
+#endif
 
     return FALSE;
 }
@@ -1077,6 +1096,12 @@ static gboolean read_draw_callback(GtkWidget* widget, cairo_t* cr, gpointer data
 
     width = gtk_widget_get_allocated_width(widget);
     // height = gtk_widget_get_allocated_height(widget);
+
+#ifdef EXP_PRINT
+    int height = gtk_widget_get_allocated_height( widget );
+    cairo_surface_t* surface = cairo_ps_surface_create( "output_overlaps.ps", width, height );
+    cr = cairo_create (surface);
+#endif
 
     GdkRectangle clip;
     gdk_cairo_get_clip_rectangle(cr, &clip);
@@ -1151,6 +1176,13 @@ static gboolean read_draw_callback(GtkWidget* widget, cairo_t* cr, gpointer data
 
         draw_ovl(cr, ovls_sorted[idx], y, scale, clip_xb, clip_xe, highlight);
     }
+
+#ifdef EXP_PRINT
+    cairo_show_page (cr);
+    cairo_destroy (cr);
+    cairo_surface_finish (surface);
+    cairo_surface_destroy (surface);
+#endif
 
     return FALSE;
 }

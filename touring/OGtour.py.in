@@ -206,7 +206,7 @@ def best_next_node(g, vstart, vflags, vread, eflags, eend, next_dir, lookahead):
             dicCounts[vnext] = count
 
     maxv = None
-    items = list( sorted( dicCounts.items(), cmp = lambda x,y: cmp(y[1], x[1] ) ) )
+    items = list( sorted( dicCounts.items(), key = lambda x: x[1], reverse = True ) )
     for (v, count) in items:
         if not (vflags[v] & V_MODULE):
             maxv = v
@@ -354,11 +354,10 @@ def backbone(g, vstart, vflags, vread, eflags, eend, ediv, elen, vpath, bid, cir
         # TODO --- best sorting criterion ???
 
         out_edges = list(v_out_edges(g, v))
-        out_edges.sort( lambda x,y: cmp( elen[y], elen[x] ) )
 
         bTerminate = False
 
-        for e in out_edges:
+        for e in sorted(out_edges, key = lambda x: elen[x], reverse = True):
             eflag = eflags[e]
 
             if eflag & ( E_INVERSION | LAS.OVL_OPTIONAL ):

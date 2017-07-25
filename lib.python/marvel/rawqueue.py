@@ -54,7 +54,7 @@ class rawqueue(object):
         bargs = {}
 
         for (k, v) in args.items():
-            if type(v) in (types.TupleType, types.ListType):
+            if type(v) in ( type( () ), type([]) ):
                 bargs[k] = v[block - 1]
             else:
                 bargs[k] = v
@@ -65,7 +65,7 @@ class rawqueue(object):
         if self.disable_add:
             return None
 
-        if self.blocks == None:
+        if self.blocks is None:
             logging.error("WARNING: number of blocks not set. ignoring block() call.")
             return None
 
@@ -132,7 +132,7 @@ class rawqueue(object):
         return threads
 
     def plan(self, plan, first = 1, last = -1, threads = 1, path = None):
-        if type(plan) is types.StringType:
+        if isinstance(plan, str):
             plan = self.replace_variables(plan)
             commands = open(plan).readlines()
         else:

@@ -7,7 +7,6 @@ import array
 # import numpy
 
 class Track(object):
-
     STRUCT_TRACK_HEADER    = "@ii"
 
     STRUCT_TRACK_HEADER_V2 = "@HHLQQQQQQ"
@@ -78,9 +77,9 @@ class Track(object):
             t.anno.frombytes( fileAnno.read() )
 
             # t.anno = numpy.fromfile(fileAnno, numpy.uint64).tolist()
-            t.anno = [ x / 4 for x in t.anno ]
+            t.anno = [ int(x / 4) for x in t.anno ]
 
-            t.data = array.array("l")
+            t.data = array.array("i")
             t.data.frombytes( fileData.read() )
 
             # t.data = numpy.fromfile(fileData, numpy.int32).tolist()
@@ -92,9 +91,9 @@ class Track(object):
             t.anno.frombytes( Track.uncompress_chunks(fileAnno) )
 
             # t.anno = numpy.frombuffer(Track.uncompress_chunks(fileAnno), numpy.uint64).tolist()
-            t.anno = [ int(x / 8) for x in t.anno ]
+            t.anno = [ int(x / 4) for x in t.anno ]
 
-            t.data = array.array("l")
+            t.data = array.array("i")
             t.data.frombytes( Track.uncompress_chunks(fileData) )
 
             # t.data = numpy.frombuffer(Track.uncompress_chunks(fileData), numpy.int32).tolist()
@@ -122,8 +121,8 @@ class Track(object):
 
         if ob < oe:
             return self.data[ ob : oe ]
-        else:
-            return []
+
+        return []
 
 
 class DB(object):
@@ -201,7 +200,7 @@ class DB(object):
     def sequence(self, rid):
         (rlen, boff, dummy, dummy) = self.arrReads[rid]
 
-        letter = ('a', 'c', 'g', 't')
+        letter = (ord('a'), ord('c'), ord('g'), ord('t'))
 
         self.fileBps.seek(boff)
 
@@ -211,8 +210,6 @@ class DB(object):
         read = bytearray()
 
         for c in cread:
-            c = ord(c)
-
             read.append( letter[ (c >> 6) & 0x3 ] )
             read.append( letter[ (c >> 4) & 0x3 ] )
             read.append( letter[ (c >> 2) & 0x3 ] )

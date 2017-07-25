@@ -583,7 +583,7 @@ int main(int argc, char* argv[])
     actx.trim_q = DEF_ARG_D;
     actx.segmin = DEF_ARG_S;
     actx.segmax = DEF_ARG_SS;
-    actx.track_trim_in = DEF_ARG_T;
+    actx.track_trim_in = NULL;
     actx.track_trim_out = DEF_ARG_T;
     actx.track_q_in = DEF_ARG_Q;
     actx.track_q_out = DEF_ARG_Q;
@@ -667,9 +667,15 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    if (actx.track_q_in != NULL && arg_u == 0)
+    if (actx.track_q_in == NULL && arg_u == 1)
     {
-        fprintf( stderr, "error: -q specified without -u\n" );
+        fprintf( stderr, "error: -u specified without -q\n" );
+        exit( 1 );
+    }
+
+    if (actx.track_trim_in == NULL && arg_u == 1)
+    {
+        fprintf( stderr, "error: -u specified without -t\n" );
         exit( 1 );
     }
 

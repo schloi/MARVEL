@@ -56,8 +56,8 @@
  *
  ********************************************************************************************/
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -69,131 +69,141 @@
 #define PATHSEP "/"
 #endif
 
-extern char *optarg;
+#define DEF_ARG_S 200
+#define DEF_ARG_F 0
+
+extern char* optarg;
 extern int optind, opterr, optopt;
 
-
 static void usage()
-  {
-    fprintf(stderr, "usage: [-s<int(200)>] <path:db|dam>\n");
-    fprintf(stderr, "         -s ... set block size of -s * 1Mbp (default: 200MBs)\n");
-  }
+{
+    fprintf( stderr, "usage: [-s<int(%d)>] <path:db|dam>\n", DEF_ARG_S );
+    fprintf( stderr, "         -s ... set block size of -s * 1Mbp (default: %dMBs)\n", DEF_ARG_S );
+    fprintf( stderr, "         -f ... force Yes on all interactive queries\n" );
+}
 
-int main(int argc, char *argv[])
-  {
+int main( int argc, char* argv[] )
+{
     HITS_DB db, dbs;
     int64 dbpos;
     FILE *dbfile, *ixfile;
     int status;
 
-    int SIZE = 200;
+    int force = DEF_ARG_F;
+    int SIZE  = DEF_ARG_S;
 
     // parse arguments
-      {
+    {
         int c;
         opterr = 0;
 
-        while ((c = getopt(argc, argv, "s:")) != -1)
-          {
-            switch (c)
+        while ( ( c = getopt( argc, argv, "s:f" ) ) != -1 )
+        {
+            switch ( c )
             {
-              case 's':
+                case 'f':
+                    force = 1;
+                    break;
+
+                case 's':
                 {
-                  SIZE = atoi(optarg);
-                  if (SIZE <= 0)
+                    SIZE = atoi( optarg );
+                    if ( SIZE <= 0 )
                     {
-                      fprintf(stderr, "invalid split size value of %d\n", SIZE);
-                      exit(1);
+                        fprintf( stderr, "invalid split size value of %d\n", SIZE );
+                        exit( 1 );
                     }
                 }
                 break;
-              default:
-                fprintf(stderr, "[ERROR] Unsupported option: %s\n", argv[optind]);
-                usage();
-                exit(1);
+                default:
+                    fprintf( stderr, "[ERROR] Unsupported option: %s\n", argv[ optind ] );
+                    usage();
+                    exit( 1 );
             }
-          }
+        }
 
-        if (optind + 1 > argc)
-          {
-            fprintf(stderr, "[ERROR] - Database is required!\n");
+        if ( optind + 1 > argc )
+        {
+            fprintf( stderr, "[ERROR] - Database is required!\n" );
             usage();
-            exit(1);
-          }
-      }
+            exit( 1 );
+        }
+    }
 
     //  Open db
 
-    status = Open_DB(argv[optind], &db);
-    if (status < 0)
-      {
-        fprintf(stderr, "[ERROR] Cannot open database %s\n", argv[optind]);
-        exit(1);
-      }
-    if (db.part > 0)
-      {
-        fprintf(stderr, "[ERROR] Cannot be called on a block: %s\n", argv[optind]);
-        exit(1);
-      }
+    status = Open_DB( argv[ optind ], &db );
+    if ( status < 0 )
+    {
+        fprintf( stderr, "[ERROR] Cannot open database %s\n", argv[ optind ] );
+        exit( 1 );
+    }
+    if ( db.part > 0 )
+    {
+        fprintf( stderr, "[ERROR] Cannot be called on a block: %s\n", argv[ optind ] );
+        exit( 1 );
+    }
 
-      {
+    {
         char *pwd, *root;
-        char buffer[2 * MAX_NAME + 100];
+        char buffer[ 2 * MAX_NAME + 100 ];
         int nfiles;
         int i, nblocks;
 
-        pwd = PathTo(argv[optind]);
-        if (status)
-          {
-            root = Root(argv[optind], ".dam");
-            dbfile = Fopen(Catenate(pwd, "/", root, ".dam"), "r+");
-          }
+        pwd = PathTo( argv[ optind ] );
+        if ( status )
+        {
+            root   = Root( argv[ optind ], ".dam" );
+            dbfile = Fopen( Catenate( pwd, "/", root, ".dam" ), "r+" );
+        }
         else
-          {
-            root = Root(argv[optind], ".db");
-            dbfile = Fopen(Catenate(pwd, "/", root, ".db"), "r+");
-          }
-        ixfile = Fopen(Catenate(pwd, PATHSEP, root, ".idx"), "r+");
-        if (dbfile == NULL || ixfile == NULL)
-          exit(1);
-        free(pwd);
-        free(root);
+        {
+            root   = Root( argv[ optind ], ".db" );
+            dbfile = Fopen( Catenate( pwd, "/", root, ".db" ), "r+" );
+        }
+        ixfile = Fopen( Catenate( pwd, PATHSEP, root, ".idx" ), "r+" );
+        if ( dbfile == NULL || ixfile == NULL )
+            exit( 1 );
+        free( pwd );
+        free( root );
 
-        if (fscanf(dbfile, DB_NFILE, &nfiles) != 1)
-          SYSTEM_ERROR
-        for (i = 0; i < nfiles; i++)
-          if (fgets(buffer, 2 * MAX_NAME + 100, dbfile) == NULL)
+        if ( fscanf( dbfile, DB_NFILE, &nfiles ) != 1 )
+            SYSTEM_ERROR
+        for ( i = 0; i < nfiles; i++ )
+            if ( fgets( buffer, 2 * MAX_NAME + 100, dbfile ) == NULL )
+                SYSTEM_ERROR
+
+        if ( fread( &dbs, sizeof( HITS_DB ), 1, ixfile ) != 1 )
             SYSTEM_ERROR
 
-        if (fread(&dbs, sizeof(HITS_DB), 1, ixfile) != 1)
-          SYSTEM_ERROR
+        dbpos = ftello( dbfile );
+        if ( fscanf( dbfile, DB_NBLOCK, &nblocks ) == 1 && !force )
+        {
+            printf( "You are about to overwrite the current partition settings. This\n" );
+            printf( "will invalidate any tracks, overlaps, and other derivative files.\n" );
+            printf( "Are you sure you want to proceed? [Y/N] " );
+            fflush( stdout );
 
-        dbpos = ftello(dbfile);
-        if (fscanf(dbfile, DB_NBLOCK, &nblocks) == 1)
-          {
-            printf("You are about to overwrite the current partition settings.  This\n");
-            printf("will invalidate any tracks, overlaps, and other derivative files.\n");
-            printf("Are you sure you want to proceed? [Y/N] ");
-            fflush(stdout);
-            if (fgets(buffer, 100, stdin) == NULL)
-              SYSTEM_ERROR
-            if (index(buffer, 'n') != NULL || index(buffer, 'N') != NULL)
-              {
-                printf("Aborted\n");
-                fflush(stdout);
-                fclose(dbfile);
-                exit(1);
-              }
-          }
+            if ( fgets( buffer, 100, stdin ) == NULL )
+                SYSTEM_ERROR
 
-        fseeko(dbfile, dbpos, SEEK_SET);
-        fprintf(dbfile, DB_NBLOCK, 0);
-        fprintf(dbfile, DB_PARAMS, (int64) SIZE);
-      }
+            if ( index( buffer, 'n' ) != NULL || index( buffer, 'N' ) != NULL )
+            {
+                printf( "Aborted\n" );
+                fflush( stdout );
+                fclose( dbfile );
+                exit( 1 );
+            }
+        }
 
-      {
-        HITS_READ *reads = db.reads;
-        int nreads = db.ureads;
+        fseeko( dbfile, dbpos, SEEK_SET );
+        fprintf( dbfile, DB_NBLOCK, 0 );
+        fprintf( dbfile, DB_PARAMS, (int64)SIZE );
+    }
+
+    {
+        HITS_READ* reads = db.reads;
+        int nreads       = db.ureads;
         int64 size, totlen;
         int nblock, ireads, rlen, fno;
         int i;
@@ -203,43 +213,42 @@ int main(int argc, char *argv[])
         nblock = 0;
         totlen = 0;
         ireads = 0;
-        fprintf(dbfile, DB_BDATA, 0);
-        for (i = 0; i < nreads; i++)
-          {
-            rlen = reads[i].rlen;
+        fprintf( dbfile, DB_BDATA, 0 );
+        for ( i = 0; i < nreads; i++ )
+        {
+            rlen = reads[ i ].rlen;
             ireads += 1;
             totlen += rlen;
-            if (totlen >= size)
-              {
-                fprintf(dbfile, DB_BDATA, i + 1);
+            if ( totlen >= size )
+            {
+                fprintf( dbfile, DB_BDATA, i + 1 );
                 totlen = 0;
                 ireads = 0;
                 nblock += 1;
-              }
+            }
+        }
 
-          }
-
-        if (ireads > 0)
-          {
-            fprintf(dbfile, DB_BDATA, nreads);
+        if ( ireads > 0 )
+        {
+            fprintf( dbfile, DB_BDATA, nreads );
             nblock += 1;
-          }
+        }
 
-        fno = fileno(dbfile);
-        if (ftruncate(fno, ftello(dbfile)) < 0)
-          SYSTEM_ERROR
+        fno = fileno( dbfile );
+        if ( ftruncate( fno, ftello( dbfile ) ) < 0 )
+            SYSTEM_ERROR
 
-        fseeko(dbfile, dbpos, SEEK_SET);
+        fseeko( dbfile, dbpos, SEEK_SET );
 
-        fprintf(dbfile, DB_NBLOCK, nblock);
+        fprintf( dbfile, DB_NBLOCK, nblock );
 
-        rewind(ixfile);
-        fwrite(&dbs, sizeof(HITS_DB), 1, ixfile);
-      }
+        rewind( ixfile );
+        fwrite( &dbs, sizeof( HITS_DB ), 1, ixfile );
+    }
 
-    fclose(ixfile);
-    fclose(dbfile);
-    Close_DB(&db);
+    fclose( ixfile );
+    fclose( dbfile );
+    Close_DB( &db );
 
     return 0;
-  }
+}
