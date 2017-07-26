@@ -2,6 +2,7 @@
 import os
 import struct
 import zlib
+import sys
 
 import array
 # import numpy
@@ -66,6 +67,16 @@ class Track(object):
         if not os.path.exists(pathAnno) or not os.path.exists(pathData):
             return None
 
+        # TODO - move to configure script
+
+        if array.array("i").itemsize == 4:
+            typecode4b = "i"
+        elif array.array("l").itemsize == 4:
+            typecode4b = "l"
+        else:
+            print("failed to find a 4-byte typecode")
+            sys.exit(1)
+
         fileAnno = open(pathAnno, "rb")
         fileData = open(pathData, "rb")
 
@@ -79,7 +90,7 @@ class Track(object):
             # t.anno = numpy.fromfile(fileAnno, numpy.uint64).tolist()
             t.anno = [ int(x / 4) for x in t.anno ]
 
-            t.data = array.array("i")
+            t.data = array.array(typecode4b)
             t.data.frombytes( fileData.read() )
 
             # t.data = numpy.fromfile(fileData, numpy.int32).tolist()
@@ -93,7 +104,7 @@ class Track(object):
             # t.anno = numpy.frombuffer(Track.uncompress_chunks(fileAnno), numpy.uint64).tolist()
             t.anno = [ int(x / 4) for x in t.anno ]
 
-            t.data = array.array("i")
+            t.data = array.array(typecode4b)
             t.data.frombytes( Track.uncompress_chunks(fileData) )
 
             # t.data = numpy.frombuffer(Track.uncompress_chunks(fileData), numpy.int32).tolist()

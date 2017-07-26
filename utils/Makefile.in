@@ -3,9 +3,9 @@ include ../Makefile.settings
 
 ALL = LAcartoons LAshow LAcheck LAcount LAmerge \
       LAneighbors LAindex \
-      LAstats LAextract LAZtest \
+      LAstats LAextract \
 	  TKshow TKcombine \
-	  gff2track kmers
+	  gff2track 
 
 have_gtk = @have_gtk@
 have_hdf5 = @have_hdf5@
@@ -36,14 +36,8 @@ install: all
 clean:
 	rm -rf $(ALL) *.dSYM
 
-LAZtest: LAZtest.c $(PATH_LIB)/laz.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/compression.c
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o LAZtest LAZtest.c $(PATH_LIB)/laz.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_LIB)/oflags.c $(PATH_DB)/DB.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(CLIBS)
-
 LAexplorer: LAexplorer.c $(PATH_LIB)/lasidx.h $(PATH_LIB)/lasidx.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/compression.c
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o LAexplorer LAexplorer.c $(PATH_LIB)/lasidx.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_LIB)/oflags.c $(PATH_DB)/DB.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(CLIBS) $(GTK_LIBS)
-
-kmers: kmers.c $(PATH_LIB)/lasidx.h $(PATH_LIB)/lasidx.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/compression.c
-	$(CC) $(CFLAGS) -o kmers kmers.c $(PATH_LIB)/lasidx.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_LIB)/pass.c $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_LIB)/oflags.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)
 
 gff2track: gff2track.c $(PATH_LIB)/lasidx.h $(PATH_LIB)/lasidx.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/compression.c
 	$(CC) $(CFLAGS) -o gff2track gff2track.c $(PATH_LIB)/lasidx.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_LIB)/pass.c $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_LIB)/oflags.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)

@@ -1642,12 +1642,17 @@ int DB_block_range( char* db, int block, int* _beg, int* _end )
     }
 
     FILE* fileDb;
-    char* path = (char*)malloc( strlen( db ) + 20 );
-    char* root = Root( db, NULL );
+    size_t ndb = strlen( db );
+    char* path = (char*)malloc( ndb + 20 );
 
-    sprintf( path, "%s.db", root );
-
-    free( root );
+    if ( strcmp(db + ndb - 3, ".db") != 0 )
+    {
+        sprintf( path, "%s.db", db );
+    }
+    else
+    {
+        strcpy( path, db );
+    }
 
     if ( ( fileDb = fopen( path, "r" ) ) == NULL )
     {
@@ -1702,12 +1707,17 @@ int DB_block_range( char* db, int block, int* _beg, int* _end )
 int DB_Blocks( char* db ) // HEIDELBERG_MODIFICATION
 {
     FILE* fileDb;
-    char* path = (char*)malloc( strlen( db ) + 20 );
-    char* root = Root( db, NULL );
+    size_t ndb    = strlen( db );
+    char* path = (char*)malloc( ndb + 20 );
 
-    sprintf( path, "%s.db", root );
-
-    free( root );
+    if ( strcmp(db + ndb - 3, ".db") != 0 )
+    {
+        sprintf( path, "%s.db", db );
+    }
+    else
+    {
+        strcpy( path, db );
+    }
 
     if ( ( fileDb = fopen( path, "r" ) ) == NULL )
     {
@@ -1740,7 +1750,7 @@ int DB_Blocks( char* db ) // HEIDELBERG_MODIFICATION
 
     if ( fscanf( fileDb, "blocks = %d\n", &nblocks ) != 1 )
     {
-        fprintf( stderr, "could not locale 'blocks' entry\n" );
+        fprintf( stderr, "could not locate 'blocks' entry\n" );
         return -1;
     }
 
@@ -1752,7 +1762,7 @@ int DB_Blocks( char* db ) // HEIDELBERG_MODIFICATION
 
 char* getDir( int RUN_ID, int subjectID ) // HEIDELBERG_MODIFICATION
 {
-    char* out = malloc( 11 );
+    char* out = malloc( 32 );
 
     if ( subjectID == 0 ) // complete DB
     {
@@ -1761,75 +1771,7 @@ char* getDir( int RUN_ID, int subjectID ) // HEIDELBERG_MODIFICATION
         return out;
     }
 
-    if ( RUN_ID < 10 )
-    {
-        if ( subjectID < 10 )
-        {
-            sprintf( out, "d00%d_0000%d", RUN_ID, subjectID );
-        }
-        else if ( subjectID < 100 )
-        {
-            sprintf( out, "d00%d_000%d", RUN_ID, subjectID );
-        }
-        else if ( subjectID < 1000 )
-        {
-            sprintf( out, "d00%d_00%d", RUN_ID, subjectID );
-        }
-        else if ( subjectID < 10000 )
-        {
-            sprintf( out, "d00%d_0%d", RUN_ID, subjectID );
-        }
-        else
-        {
-            sprintf( out, "d00%d_%d", RUN_ID, subjectID );
-        }
-    }
-    else if ( RUN_ID < 100 )
-    {
-        if ( subjectID < 10 )
-        {
-            sprintf( out, "d0%d_0000%d", RUN_ID, subjectID );
-        }
-        else if ( subjectID < 100 )
-        {
-            sprintf( out, "d0%d_000%d", RUN_ID, subjectID );
-        }
-        else if ( subjectID < 1000 )
-        {
-            sprintf( out, "d0%d_00%d", RUN_ID, subjectID );
-        }
-        else if ( subjectID < 10000 )
-        {
-            sprintf( out, "d0%d_0%d", RUN_ID, subjectID );
-        }
-        else
-        {
-            sprintf( out, "d0%d_%d", RUN_ID, subjectID );
-        }
-    }
-    else
-    {
-        if ( subjectID < 10 )
-        {
-            sprintf( out, "d%d_0000%d", RUN_ID, subjectID );
-        }
-        else if ( subjectID < 100 )
-        {
-            sprintf( out, "d%d_000%d", RUN_ID, subjectID );
-        }
-        else if ( subjectID < 1000 )
-        {
-            sprintf( out, "d%d_00%d", RUN_ID, subjectID );
-        }
-        else if ( subjectID < 10000 )
-        {
-            sprintf( out, "d%d_0%d", RUN_ID, subjectID );
-        }
-        else
-        {
-            sprintf( out, "d%d_%d", RUN_ID, subjectID );
-        }
-    }
+    sprintf( out, "d%03d_%05d", RUN_ID, subjectID );
 
     return out;
 }
