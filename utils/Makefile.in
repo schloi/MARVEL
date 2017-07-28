@@ -2,10 +2,7 @@
 include ../Makefile.settings
 
 ALL = LAcartoons LAshow LAcheck LAcount LAmerge \
-      LAneighbors LAindex \
-      LAstats LAextract \
-	  TKshow TKcombine \
-	  gff2track 
+      LAindex LAstats  TKshow TKcombine gff2track 
 
 have_gtk = @have_gtk@
 have_hdf5 = @have_hdf5@

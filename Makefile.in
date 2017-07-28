@@ -47,8 +47,7 @@ install:
 	@echo "---------------------------------------------------------------"
 
 prebuild: lib/oflags.h
-	build/oflags.py lib/oflags.h lib.python/marvel/oflags.py
-	build/colorramp.py touring/colorramp.py
+	build/oflags.sh lib/oflags.h lib.python/marvel/oflags.py
 	build/version.sh
 
 Makefile: Makefile.in config.status Makefile.settings.in

@@ -9,36 +9,42 @@
  *
  *******************************************************************************************/
 
+#include <assert.h>
+#include <ctype.h>
+#include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
-#include <ctype.h>
-#include <assert.h>
-#include <unistd.h>
-#include <math.h>
 #include <sys/param.h>
+#include <unistd.h>
 
 #include "lib/colors.h"
 #include "lib/oflags.h"
-#include "lib/utils.h"
 #include "lib/pass.h"
 #include "lib/tracks.h"
+#include "lib/utils.h"
 
-#include "db/DB.h"
 #include "dalign/align.h"
+#include "db/DB.h"
 
-#define OVL_HIDE OVL_TEMP       // use the temp flag to hide overlaps
-                                // not matching the criteria
+#define OVL_HIDE OVL_TEMP // use the temp flag to hide overlaps
+                          // not matching the criteria
 
 #define SORT_ID 1
 #define SORT_AB 2
 #define SORT_LENGTH 3
 
-#define SCALE(x, tw)     ( (int) ((x)/(float)(tw)) )
-#define REVSCALE(x, tw)  ( (int) ((x)*(float)(tw)) )
+#define SCALE( x, tw ) ( (int)( ( x ) / (float)( tw ) ) )
+#define REVSCALE( x, tw ) ( (int)( ( x ) * (float)( tw ) ) )
 
-#define REPEAT(c,n) { char strrep[1024]; memset(strrep, c, n); strrep[(n)] = '\0'; printf("%s", strrep); }
+#define REPEAT( c, n )          \
+    {                           \
+        char strrep[ 10 * 1024 ];    \
+        memset( strrep, c, n ); \
+        strrep[ ( n ) ] = '\0'; \
+        printf( "%s", strrep ); \
+    }
 
 typedef struct
 {
@@ -66,38 +72,38 @@ typedef struct
     int min_len;
     float min_identity;
 
-    int  ranges_in;
+    int ranges_in;
     int* ranges;
-    int  ranges_npt;
-    int  ranges_idx;
+    int ranges_npt;
+    int ranges_idx;
 } CartoonsContext;
 
-extern char *optarg;
+extern char* optarg;
 extern int optind, opterr, optopt;
 
-static int ORDER(const void* l, const void* r)
+static int ORDER( const void* l, const void* r )
 {
-    int x = *((int32*) l);
-    int y = *((int32*) r);
-    return (x - y);
+    int x = *( (int32*)l );
+    int y = *( (int32*)r );
+    return ( x - y );
 }
 
-static int cmp_ovls_abpos(const void* a, const void* b)
+static int cmp_ovls_abpos( const void* a, const void* b )
 {
     Overlap* o1 = (Overlap*)a;
     Overlap* o2 = (Overlap*)b;
 
     int cmp = o1->path.abpos - o2->path.abpos;
 
-    if (!cmp)
+    if ( !cmp )
     {
-        cmp = (o1->path.aepos - o1->path.abpos) - (o2->path.aepos - o2->path.abpos);
+        cmp = ( o1->path.aepos - o1->path.abpos ) - ( o2->path.aepos - o2->path.abpos );
     }
 
     return cmp;
 }
 
-static int cmp_ovls_id(const void* a, const void* b)
+static int cmp_ovls_id( const void* a, const void* b )
 {
     Overlap* o1 = (Overlap*)a;
     Overlap* o2 = (Overlap*)b;
@@ -105,21 +111,21 @@ static int cmp_ovls_id(const void* a, const void* b)
     return o1->bread - o2->bread;
 }
 
-static int cmp_ovls_length(const void* a, const void* b)
+static int cmp_ovls_length( const void* a, const void* b )
 {
     Overlap* o1 = (Overlap*)a;
     Overlap* o2 = (Overlap*)b;
 
-    return (o1->path.aepos - o1->path.abpos) - (o2->path.aepos - o2->path.abpos);
+    return ( o1->path.aepos - o1->path.abpos ) - ( o2->path.aepos - o2->path.abpos );
 }
 
-static char* match_string(CartoonsContext* cctx, Overlap* ovl, ovl_header_twidth twidth)
+static char* match_string( CartoonsContext* cctx, Overlap* ovl, ovl_header_twidth twidth )
 {
-    static char match[64 * 1024];
+    static char match[ 64 * 1024 ];
 
     int i, q;
-    char* color = "";
-    char* cur = match;
+    char* color  = "";
+    char* cur    = match;
     char* pcolor = NULL;
     int width;
     char c;
@@ -127,159 +133,159 @@ static char* match_string(CartoonsContext* cctx, Overlap* ovl, ovl_header_twidth
 
     int bp = ovl->path.bbpos;
 
-    if (ovl->path.tlen == 0)
+    if ( ovl->path.tlen == 0 )
     {
-        int len = (ovl->path.aepos - ovl->path.abpos) / twidth;
-        memset(match, '*', len);
-        match[len] = '\0';
+        int len = ( ovl->path.aepos - ovl->path.abpos ) / twidth;
+        memset( match, '*', len );
+        match[ len ] = '\0';
 
         return match;
     }
 
-    for (i = 0; i < ovl->path.tlen; i += 2)
+    for ( i = 0; i < ovl->path.tlen; i += 2 )
     {
-        if (i == 0)
+        if ( i == 0 )
         {
-            width = twidth - (ovl->path.abpos % twidth) + trace[i + 1];
-            bp += trace[i + 1];
+            width = twidth - ( ovl->path.abpos % twidth ) + trace[ i + 1 ];
+            bp += trace[ i + 1 ];
         }
-        else if (i == ovl->path.tlen - 1)
+        else if ( i == ovl->path.tlen - 1 )
         {
-            width = (ovl->path.aepos % twidth) + (ovl->path.bepos - bp);
-            bp = ovl->path.bepos;
+            width = ( ovl->path.aepos % twidth ) + ( ovl->path.bepos - bp );
+            bp    = ovl->path.bepos;
         }
         else
         {
-            width = twidth + trace[i + 1];
-            bp += trace[i + 1];
+            width = twidth + trace[ i + 1 ];
+            bp += trace[ i + 1 ];
         }
 
-        q = 200. * trace[i] / width * cctx->q_scale;
+        q = 200. * trace[ i ] / width * cctx->q_scale;
 
-        if (q < 5)
+        if ( q < 5 )
         {
             color = ANSI_COLOR_WHITE;
-            c = '0';
+            c     = '0';
         }
-        else if (q < 10)
+        else if ( q < 10 )
         {
             color = ANSI_COLOR_GREEN;
-            c = '1';
+            c     = '1';
         }
-        else if (q < 20)
+        else if ( q < 20 )
         {
             color = ""; // ANSI_COLOR_YELLOW;
-            c = '2';
+            c     = '2';
         }
-        else if (q < 30)
+        else if ( q < 30 )
         {
             color = ANSI_COLOR_YELLOW;
-            c = '3';
+            c     = '3';
         }
         else
         {
             color = ANSI_COLOR_RED;
-            c = '.';
+            c     = '.';
         }
 
-        if (pcolor != color)
+        if ( pcolor != color )
         {
-            sprintf(cur, "%s", ANSI_COLOR_RESET);
-            cur += strlen(ANSI_COLOR_RESET);
+            sprintf( cur, "%s", ANSI_COLOR_RESET );
+            cur += strlen( ANSI_COLOR_RESET );
 
-            sprintf(cur, "%s", color);
+            sprintf( cur, "%s", color );
             pcolor = color;
 
-            cur += strlen(color);
+            cur += strlen( color );
         }
 
         *cur = c;
         cur++;
     }
 
-    sprintf(cur, "%s", ANSI_COLOR_RESET);
-    cur += strlen(ANSI_COLOR_RESET);
+    sprintf( cur, "%s", ANSI_COLOR_RESET );
+    cur += strlen( ANSI_COLOR_RESET );
 
     *cur = '\0';
 
     return match;
 }
 
-static int round_up(int n, int f)
+static int round_up( int n, int f )
 {
-    return (n + f - 1) - ((n - 1) % f);
+    return ( n + f - 1 ) - ( ( n - 1 ) % f );
 }
 
-static int round_down(int n, int f)
+static int round_down( int n, int f )
 {
     return n - n % f;
 }
 
-static char* read_string(int len, int a, HITS_TRACK* track_q)
+static char* read_string( int len, int a, HITS_TRACK* track_q )
 {
-    static char string[128*1024];
-    char* cur = string;
-    char* color = "";
+    static char string[ 128 * 1024 ];
+    char* cur    = string;
+    char* color  = "";
     char* pcolor = NULL;
 
-    if (track_q != NULL)
+    if ( track_q != NULL )
     {
         track_anno* q_anno = track_q->anno;
         track_data* q_data = track_q->data;
 
-        track_anno aob = q_anno[a] / sizeof(track_data);
-        track_anno aoe = q_anno[a+1] / sizeof(track_data);
+        track_anno aob = q_anno[ a ] / sizeof( track_data );
+        track_anno aoe = q_anno[ a + 1 ] / sizeof( track_data );
 
         track_anno aoc = 0;
         int q;
         char c;
 
-        assert((track_anno)len == aoe - aob);
+        assert( (track_anno)len == aoe - aob );
 
-        for (; aoc < (aoe-aob); aoc++)
+        for ( ; aoc < ( aoe - aob ); aoc++ )
         {
-            q = q_data[aob + aoc];
+            q = q_data[ aob + aoc ];
 
-            if (q == 0)
+            if ( q == 0 )
             {
                 color = "";
-                c = '*';
+                c     = '*';
             }
-            else if (q < 5)
+            else if ( q < 5 )
             {
                 color = ANSI_COLOR_WHITE;
-                c = '0';
+                c     = '0';
             }
-            else if (q < 10)
+            else if ( q < 10 )
             {
                 color = ANSI_COLOR_GREEN;
-                c = '1';
+                c     = '1';
             }
-            else if (q < 20)
+            else if ( q < 20 )
             {
                 color = ""; // ANSI_COLOR_GREEN;
-                c = '2';
+                c     = '2';
             }
-            else if (q < 30)
+            else if ( q < 30 )
             {
                 color = ANSI_COLOR_YELLOW;
-                c = '3';
+                c     = '3';
             }
             else
             {
                 color = ANSI_COLOR_RED;
-                c = '.';
+                c     = '.';
             }
 
-            if (pcolor != color)
+            if ( pcolor != color )
             {
-                sprintf(cur, "%s", ANSI_COLOR_RESET);
-                cur += strlen(ANSI_COLOR_RESET);
+                sprintf( cur, "%s", ANSI_COLOR_RESET );
+                cur += strlen( ANSI_COLOR_RESET );
 
-                sprintf(cur, "%s", color);
+                sprintf( cur, "%s", color );
                 pcolor = color;
 
-                cur += strlen(color);
+                cur += strlen( color );
             }
 
             *cur = c;
@@ -291,312 +297,311 @@ static char* read_string(int len, int a, HITS_TRACK* track_q)
     else
     {
         int i;
-        for (i = 0; i < len; i++)
+        for ( i = 0; i < len; i++ )
         {
-            string[i] = '*';
+            string[ i ] = '*';
         }
 
-        string[len] = '\0';
+        string[ len ] = '\0';
     }
 
     return string;
 }
 
-static char* ruler_string(int len, int twidth)
+static char* ruler_string( int len, int twidth )
 {
-    static char str[1024];
-    char num[10];
+    static char str[ 10 * 1024 ];
+    char num[ 10 ];
 
     int i = 0;
 
-    while (i < len)
+    while ( i < len )
     {
-        if (i % 10)
+        if ( i % 10 )
         {
-            str[i++] = ' ';
+            str[ i++ ] = ' ';
         }
         else
         {
-            str[i] = '|';
+            str[ i ] = '|';
 
-            sprintf(num, "%d", (i * twidth) / 1000);
+            sprintf( num, "%d", ( i * twidth ) / 1000 );
 
             i++;
 
             char* c = num;
 
-            while (*c)
+            while ( *c )
             {
-                str[i++] = *c++;
+                str[ i++ ] = *c++;
             }
         }
     }
 
-    str[i] = '\0';
+    str[ i ] = '\0';
 
     return str;
 }
 
-static void draw(CartoonsContext* ctx, Overlap* pOvls, int novls)
+static void draw( CartoonsContext* ctx, Overlap* pOvls, int novls )
 {
-    HITS_DB* db = ctx->db;
+    HITS_DB* db        = ctx->db;
     HITS_TRACK* qtrack = ctx->qtrack;
-    char flags[OVL_FLAGS+1];
+    char flags[ OVL_FLAGS + 1 ];
 
     ovl_header_twidth twidth = ctx->twidth;
-    int ovhtrim = ctx->trim;
-    int ruler = ctx->ruler;
-    int rev = ctx->revsort;
-    int coverage = ctx->coverage;
-    int show_flags = ctx->flags;
+    int ovhtrim              = ctx->trim;
+    int ruler                = ctx->ruler;
+    int rev                  = ctx->revsort;
+    int coverage             = ctx->coverage;
+    int show_flags           = ctx->flags;
 
-    int flags_width = show_flags * (OVL_FLAGS + 2);
+    int flags_width = show_flags * ( OVL_FLAGS + 2 );
 
     int nMaxLeftOvh, left;
     int i;
 
-    int ovlALen = DB_READ_LEN(db, pOvls[0].aread);
-    int alen = round_up( ovlALen, twidth );
+    int ovlALen = DB_READ_LEN( db, pOvls[ 0 ].aread );
+    int alen    = round_up( ovlALen, twidth );
 
-    if (ovhtrim)
+    if ( ovhtrim )
     {
-        nMaxLeftOvh = REVSCALE(10, twidth);
+        nMaxLeftOvh = REVSCALE( 10, twidth );
     }
     else
     {
         nMaxLeftOvh = 0;
 
-        for (i = 0; i < novls; i++)
+        for ( i = 0; i < novls; i++ )
         {
-            left = round_down(pOvls[i].path.bbpos, twidth) - round_down(pOvls[i].path.abpos, twidth);
-            nMaxLeftOvh = MAX(left, nMaxLeftOvh);
+            left        = round_down( pOvls[ i ].path.bbpos, twidth ) - round_down( pOvls[ i ].path.abpos, twidth );
+            nMaxLeftOvh = MAX( left, nMaxLeftOvh );
         }
 
-        nMaxLeftOvh += REVSCALE(1, twidth);
+        nMaxLeftOvh += REVSCALE( 1, twidth );
     }
 
-    if (ruler)
+    if ( ruler )
     {
-        REPEAT(' ', SCALE(nMaxLeftOvh, twidth) + 25 + flags_width);
-        printf("%s\n", ruler_string( SCALE(ovlALen, twidth), twidth ));
+        REPEAT( ' ', SCALE( nMaxLeftOvh, twidth ) + 25 + flags_width );
+        printf( "%s\n", ruler_string( SCALE( ovlALen, twidth ), twidth ) );
     }
 
-    printf(ANSI_COLOR_CYAN "% 10d#[%5d..%5d]", pOvls[0].aread + 1, 0, ovlALen );
-    REPEAT(' ', SCALE(nMaxLeftOvh, twidth) + flags_width);
-    printf("%s" ANSI_COLOR_RESET, read_string( SCALE(alen, twidth), pOvls->aread, qtrack ) );
+    printf( ANSI_COLOR_CYAN "% 10d#[%5d..%5d]", pOvls[ 0 ].aread + 1, 0, ovlALen );
+    REPEAT( ' ', SCALE( nMaxLeftOvh, twidth ) + flags_width );
+    printf( "%s" ANSI_COLOR_RESET, read_string( SCALE( alen, twidth ), pOvls->aread, qtrack ) );
 
-    printf("\n");
+    printf( "\n" );
 
-    if (coverage)
+    if ( coverage )
     {
         // UNDECIDED: count partial segments or not
 
         int alen_seg = alen / ctx->twidth;
 
-        bzero(ctx->histo_cov, sizeof(int64) * ctx->histo_max);
+        bzero( ctx->histo_cov, sizeof( int64 ) * ctx->histo_max );
 
-        for (i = 0; i < novls; i++)
+        for ( i = 0; i < novls; i++ )
         {
             int j;
-            int last = pOvls[i].path.aepos / ctx->twidth;
+            int last = pOvls[ i ].path.aepos / ctx->twidth;
 
-
-            for (j = pOvls[i].path.abpos / ctx->twidth; j <= last; j++)
+            for ( j = pOvls[ i ].path.abpos / ctx->twidth; j <= last; j++ )
             {
-                ctx->histo_cov[j]++;
+                ctx->histo_cov[ j ]++;
             }
         }
 
         int cov_max = 0;
 
-        for (i = 0; i <= alen_seg; i++)
+        for ( i = 0; i <= alen_seg; i++ )
         {
-            if (ctx->histo_cov[i] == 0)
+            if ( ctx->histo_cov[ i ] == 0 )
             {
                 continue;
             }
 
-            ctx->histo_cov[i] = log10( ctx->histo_cov[i] );
+            ctx->histo_cov[ i ] = log10( ctx->histo_cov[ i ] );
 
-            if (ctx->histo_cov[i] > cov_max)
+            if ( ctx->histo_cov[ i ] > cov_max )
             {
-                cov_max = ctx->histo_cov[i];
+                cov_max = ctx->histo_cov[ i ];
             }
         }
 
-        for (i = cov_max; i != 0; i--)
+        for ( i = cov_max; i != 0; i-- )
         {
-            REPEAT(' ', SCALE(nMaxLeftOvh, twidth) + 25 + flags_width);
+            REPEAT( ' ', SCALE( nMaxLeftOvh, twidth ) + 25 + flags_width );
 
             int j;
-            for (j = 0; j < alen_seg; j++)
+            for ( j = 0; j < alen_seg; j++ )
             {
-                if (ctx->histo_cov[j] >= i)
+                if ( ctx->histo_cov[ j ] >= i )
                 {
-                    printf("*");
+                    printf( "*" );
                 }
                 else
                 {
-                    printf(" ");
+                    printf( " " );
                 }
             }
-            printf(" %5dx\n", (int)pow(10, i));
+            printf( " %5dx\n", (int)pow( 10, i ) );
         }
     }
 
-    if (ctx->show_overlaps)
+    if ( ctx->show_overlaps )
     {
         int pre, post, indent, pre_match, incr, end;
         char orient;
         char* color;
 
-        if (rev)
+        if ( rev )
         {
             incr = -1;
-            end = -1;
-            i = novls - 1;
+            end  = -1;
+            i    = novls - 1;
         }
         else
         {
             incr = 1;
-            end = novls;
-            i = 0;
+            end  = novls;
+            i    = 0;
         }
 
         int ovlBLen;
-        for (; i != end; i += incr)
+        for ( ; i != end; i += incr )
         {
-            if ( (!ctx->discarded && (pOvls[i].flags & OVL_DISCARD)) || pOvls[i].flags & OVL_HIDE )
+            if ( ( !ctx->discarded && ( pOvls[ i ].flags & OVL_DISCARD ) ) || pOvls[ i ].flags & OVL_HIDE )
             {
                 continue;
             }
-            ovlBLen = DB_READ_LEN(db,pOvls[i].bread);
-            pre = round_down(pOvls[i].path.bbpos, twidth);
-            post = round_up(ovlBLen, twidth) - round_up(pOvls[i].path.bepos, twidth);
-            indent = nMaxLeftOvh + round_down(pOvls[i].path.abpos, twidth) - pre;
+            ovlBLen = DB_READ_LEN( db, pOvls[ i ].bread );
+            pre     = round_down( pOvls[ i ].path.bbpos, twidth );
+            post    = round_up( ovlBLen, twidth ) - round_up( pOvls[ i ].path.bepos, twidth );
+            indent  = nMaxLeftOvh + round_down( pOvls[ i ].path.abpos, twidth ) - pre;
 
-            orient = pOvls[i].flags & OVL_COMP  ? '<' : '>';
+            orient = pOvls[ i ].flags & OVL_COMP ? '<' : '>';
 
-            if (pOvls[i].flags & OVL_DISCARD)
+            if ( pOvls[ i ].flags & OVL_DISCARD )
             {
                 color = ANSI_COLOR_RED;
             }
             else
             {
-                color = pOvls[i].flags & OVL_COMP ? ANSI_COLOR_BLUE : "";
+                color = pOvls[ i ].flags & OVL_COMP ? ANSI_COLOR_BLUE : "";
             }
 
-            pre_match = SCALE(indent + pre, twidth);
-            indent = SCALE(indent, twidth);
-            pre = pre_match - indent;
-            post = SCALE(post, twidth);
+            pre_match = SCALE( indent + pre, twidth );
+            indent    = SCALE( indent, twidth );
+            pre       = pre_match - indent;
+            post      = SCALE( post, twidth );
 
-            printf("%s%10d%c[%5d..%5d]" ANSI_COLOR_RESET, color, pOvls[i].bread + 1, orient, pOvls[i].path.abpos, pOvls[i].path.aepos);
+            printf( "%s%10d%c[%5d..%5d]" ANSI_COLOR_RESET, color, pOvls[ i ].bread + 1, orient, pOvls[ i ].path.abpos, pOvls[ i ].path.aepos );
 
-            if (show_flags)
+            if ( show_flags )
             {
-                flags2str(flags, pOvls[i].flags);
-                printf("[%s]", flags);
+                flags2str( flags, pOvls[ i ].flags );
+                printf( "[%-*s]", flags_width - 2, flags );
             }
 
-            if (ovhtrim)
+            if ( ovhtrim )
             {
-                indent = SCALE(round_down(pOvls[i].path.abpos, twidth), twidth);
+                indent = SCALE( round_down( pOvls[ i ].path.abpos, twidth ), twidth );
 
-                if (pre < 10)
+                if ( pre < 10 )
                 {
-                    REPEAT(' ', 10 - pre + indent);
-                    REPEAT('-', pre);
+                    REPEAT( ' ', 10 - pre + indent );
+                    REPEAT( '-', pre );
                 }
                 else
                 {
-                    REPEAT(' ', indent);
-                    printf(" %5d]", pOvls[i].path.bbpos);
-                    REPEAT('-', 3);
+                    REPEAT( ' ', indent );
+                    printf( " %5d]", pOvls[ i ].path.bbpos );
+                    REPEAT( '-', 3 );
                 }
             }
             else
             {
-                REPEAT(' ', indent);
-                REPEAT('-', pre);
+                REPEAT( ' ', indent );
+                REPEAT( '-', pre );
             }
 
-            printf("%s", match_string(ctx, pOvls + i, twidth) );
+            printf( "%s", match_string( ctx, pOvls + i, twidth ) );
 
-            if (ovhtrim && post > 9)
+            if ( ovhtrim && post > 9 )
             {
-                REPEAT('-', 3);
-                printf("[%d", ovlBLen - pOvls[i].path.bepos);
+                REPEAT( '-', 3 );
+                printf( "[%d", ovlBLen - pOvls[ i ].path.bepos );
             }
             else
             {
-                REPEAT('-', post);
+                REPEAT( '-', post );
             }
 
-            printf("\n");
+            printf( "\n" );
         }
     }
 
-    printf("\n");
+    printf( "\n" );
 }
 
-static int parse_ranges(int argc, char* argv[], int* _reps, int** _pts)
+static int parse_ranges( int argc, char* argv[], int* _reps, int** _pts )
 {
-    int *pts = (int*)malloc(sizeof(int) * 2 * (2 + argc));
+    int* pts = (int*)malloc( sizeof( int ) * 2 * ( 2 + argc ) );
     int reps = 0;
 
-    if (argc > 0)
+    if ( argc > 0 )
     {
-        int   c, b, e;
-        char* eptr, *fptr;
+        int c, b, e;
+        char *eptr, *fptr;
 
-        for (c = 0; c < argc; c++)
+        for ( c = 0; c < argc; c++ )
         {
-            if (argv[c][0] == '#')
+            if ( argv[ c ][ 0 ] == '#' )
             {
-                fprintf(stderr, "# is not allowed as range start, '%s'\n", argv[c]);
+                fprintf( stderr, "# is not allowed as range start, '%s'\n", argv[ c ] );
                 return 0;
             }
             else
             {
-                b = strtol(argv[c], &eptr, 10);
+                b = strtol( argv[ c ], &eptr, 10 );
 
-                if (b < 1)
+                if ( b < 1 )
                 {
-                    fprintf(stderr, "Non-positive index?, '%d'\n", b);
+                    fprintf( stderr, "Non-positive index?, '%d'\n", b );
                     return 0;
                 }
             }
 
-            if (eptr > argv[c])
+            if ( eptr > argv[ c ] )
             {
-                if (*eptr == '\0')
+                if ( *eptr == '\0' )
                 {
-                    pts[reps++] = b;
-                    pts[reps++] = b;
+                    pts[ reps++ ] = b;
+                    pts[ reps++ ] = b;
 
                     continue;
                 }
-                else if (*eptr == '-')
+                else if ( *eptr == '-' )
                 {
-                    if (eptr[1] == '#')
+                    if ( eptr[ 1 ] == '#' )
                     {
-                        e = INT32_MAX;
+                        e    = INT32_MAX;
                         fptr = eptr + 2;
                     }
                     else
                     {
-                        e = strtol(eptr + 1, &fptr, 10);
+                        e = strtol( eptr + 1, &fptr, 10 );
                     }
 
-                    if (fptr > eptr + 1 && *fptr == 0 && eptr[1] != '-')
+                    if ( fptr > eptr + 1 && *fptr == 0 && eptr[ 1 ] != '-' )
                     {
-                        pts[reps++] = b;
-                        pts[reps++] = e;
+                        pts[ reps++ ] = b;
+                        pts[ reps++ ] = e;
 
-                        if (b > e)
+                        if ( b > e )
                         {
-                            fprintf(stderr, "Empty range '%s'\n", argv[c]);
+                            fprintf( stderr, "Empty range '%s'\n", argv[ c ] );
                             return 0;
                         }
 
@@ -605,75 +610,75 @@ static int parse_ranges(int argc, char* argv[], int* _reps, int** _pts)
                 }
             }
 
-            fprintf(stderr, "argument '%s' is not an integer range\n", argv[c]);
+            fprintf( stderr, "argument '%s' is not an integer range\n", argv[ c ] );
             return 0;
         }
 
-        qsort(pts, reps / 2, sizeof(int64), ORDER);
+        qsort( pts, reps / 2, sizeof( int64 ), ORDER );
 
         b = 0;
 
-        for (c = 0; c < reps; c += 2)
+        for ( c = 0; c < reps; c += 2 )
         {
-            if (b > 0 && pts[b - 1] >= pts[c] - 1)
+            if ( b > 0 && pts[ b - 1 ] >= pts[ c ] - 1 )
             {
-                if (pts[c + 1] > pts[b - 1])
+                if ( pts[ c + 1 ] > pts[ b - 1 ] )
                 {
-                    pts[b - 1] = pts[c + 1];
+                    pts[ b - 1 ] = pts[ c + 1 ];
                 }
             }
             else
             {
-                pts[b++] = pts[c];
-                pts[b++] = pts[c + 1];
+                pts[ b++ ] = pts[ c ];
+                pts[ b++ ] = pts[ c + 1 ];
             }
         }
 
-        pts[b++] = INT32_MAX;
-        reps = b;
+        pts[ b++ ] = INT32_MAX;
+        reps       = b;
     }
     else
     {
-        pts[reps++] = 1;
-        pts[reps++] = INT32_MAX;
+        pts[ reps++ ] = 1;
+        pts[ reps++ ] = INT32_MAX;
     }
 
     *_reps = reps;
-    *_pts = pts;
+    *_pts  = pts;
 
     return 1;
 }
 
-static void pre_cartoons(PassContext* pctx, CartoonsContext* cctx)
+static void pre_cartoons( PassContext* pctx, CartoonsContext* cctx )
 {
     cctx->twidth = pctx->twidth;
 
     cctx->ranges_idx = 1;
-    cctx->ranges_npt = cctx->ranges[0];
+    cctx->ranges_npt = cctx->ranges[ 0 ];
 
-    cctx->histo_max = (DB_READ_MAXLEN(cctx->db) + pctx->twidth - 1) / pctx->twidth;
-    cctx->histo_cov = (int64*)malloc(sizeof(int64) * cctx->histo_max);
+    cctx->histo_max = ( DB_READ_MAXLEN( cctx->db ) + pctx->twidth - 1 ) / pctx->twidth;
+    cctx->histo_cov = (int64*)malloc( sizeof( int64 ) * cctx->histo_max );
 
-    if (cctx->q)
+    if ( cctx->q )
     {
-        cctx->qtrack = track_load(cctx->db, TRACK_Q);
+        cctx->qtrack = track_load( cctx->db, TRACK_Q );
 
-        if (!cctx->qtrack)
+        if ( !cctx->qtrack )
         {
-            fprintf(stderr, "could not load track %s\n", TRACK_Q);
-            exit(1);
+            fprintf( stderr, "could not load track %s\n", TRACK_Q );
+            exit( 1 );
         }
     }
 }
 
-static void post_cartoons(CartoonsContext* cctx)
+static void post_cartoons( CartoonsContext* cctx )
 {
-    free(cctx->histo_cov);
+    free( cctx->histo_cov );
 
-    Close_Track(cctx->db, TRACK_Q);
+    Close_Track( cctx->db, TRACK_Q );
 }
 
-static int handler_cartoons(void* _ctx, Overlap* ovls, int novl)
+static int handler_cartoons( void* _ctx, Overlap* ovls, int novl )
 {
     CartoonsContext* ctx = (CartoonsContext*)_ctx;
 
@@ -683,118 +688,117 @@ static int handler_cartoons(void* _ctx, Overlap* ovls, int novl)
     int kept = 0;
     int len;
 
-    if (DB_READ_LEN(ctx->db, ovls->aread) < ctx->min_len)
+    if ( DB_READ_LEN( ctx->db, ovls->aread ) < ctx->min_len )
     {
         return 1;
     }
 
-    for (i = 0; i < novl; i++)
+    for ( i = 0; i < novl; i++ )
     {
-        if (DB_READ_LEN(ctx->db, ovls[i].bread) < ctx->min_len)
+        if ( DB_READ_LEN( ctx->db, ovls[ i ].bread ) < ctx->min_len )
         {
-            ovls[i].flags |= OVL_HIDE;
+            ovls[ i ].flags |= OVL_HIDE;
             continue;
         }
 
-        len = ovls[i].path.aepos - ovls[i].path.abpos;
+        len = ovls[ i ].path.aepos - ovls[ i ].path.abpos;
 
-        if (100 - (100.0 * ovls[i].path.diffs / len) < ctx->min_identity)
+        if ( 100 - ( 100.0 * ovls[ i ].path.diffs / len ) < ctx->min_identity )
         {
-            ovls[i].flags |= OVL_HIDE;
+            ovls[ i ].flags |= OVL_HIDE;
             continue;
         }
 
         kept++;
     }
 
-    if (kept == 0)
+    if ( kept == 0 )
     {
         return 1;
     }
 
     int a = ovls->aread + 1;
 
-    if (ctx->ranges_in)
+    if ( ctx->ranges_in )
     {
-        while (a > ctx->ranges_npt)
+        while ( a > ctx->ranges_npt )
         {
-            ctx->ranges_npt = ctx->ranges[ctx->ranges_idx++];
+            ctx->ranges_npt = ctx->ranges[ ctx->ranges_idx++ ];
 
-            if (a < ctx->ranges_npt)
+            if ( a < ctx->ranges_npt )
             {
                 ctx->ranges_in = 0;
                 break;
             }
 
-            ctx->ranges_npt = ctx->ranges[ctx->ranges_idx++];
+            ctx->ranges_npt = ctx->ranges[ ctx->ranges_idx++ ];
         }
     }
     else
     {
-        if (ctx->ranges_npt == INT32_MAX)
+        if ( ctx->ranges_npt == INT32_MAX )
         {
             return 0;
         }
 
-        while (a >= ctx->ranges_npt)
+        while ( a >= ctx->ranges_npt )
         {
-            ctx->ranges_npt = ctx->ranges[ctx->ranges_idx++];
+            ctx->ranges_npt = ctx->ranges[ ctx->ranges_idx++ ];
 
-            if (a <= ctx->ranges_npt)
+            if ( a <= ctx->ranges_npt )
             {
                 ctx->ranges_in = 1;
                 break;
             }
 
-            ctx->ranges_npt = ctx->ranges[ctx->ranges_idx++];
+            ctx->ranges_npt = ctx->ranges[ ctx->ranges_idx++ ];
         }
     }
 
-    if (ctx->ranges_in)
+    if ( ctx->ranges_in )
     {
-        switch (ctx->sort)
+        switch ( ctx->sort )
         {
             case SORT_ID:
-                qsort(ovls, novl, sizeof(Overlap), cmp_ovls_id);
+                qsort( ovls, novl, sizeof( Overlap ), cmp_ovls_id );
                 break;
 
             case SORT_LENGTH:
-                qsort(ovls, novl, sizeof(Overlap), cmp_ovls_length);
+                qsort( ovls, novl, sizeof( Overlap ), cmp_ovls_length );
                 break;
 
             case SORT_AB:
             default:
-                qsort(ovls, novl, sizeof(Overlap), cmp_ovls_abpos);
+                qsort( ovls, novl, sizeof( Overlap ), cmp_ovls_abpos );
                 break;
         }
 
-        draw(ctx, ovls, novl);
+        draw( ctx, ovls, novl );
     }
-
 
     return 1;
 }
 
-
 static void usage()
 {
-    printf("[-rtqdF] [-s <l|i>] [-x <int>] [-i <double>] [-F <double>] <reads:db> <overlaps:ovl> [ <reads:range> ... ]\n");
+    printf( "[-rtqdF] [-s [li]] [-x n] [-F n] database input.las [ <reads:range> ... ]\n\n" );
 
-    printf("options: -r          ... show ruler\n");
-    printf("         -t          ... trim overhangs\n");
-    printf("         -q          ... show a read quality (requires a quality track)\n");
-    printf("         -d          ... show discarded overlaps\n");
-    printf("         -c          ... show coverage\n");
-    printf("         -C          ... only coverage (hide overlaps)\n");
-    printf("         -f          ... show flags\n");
+    printf( "Displays the contents of a local alignment file on the console\n\n" );
 
-    printf("         -s [li]     ... oder by length or read id\n");
-    printf("         -x <int>    ... set minimum read length to <int>\n");
-    printf("         -i <float>  ... set minimum identity to <float>\n");
-    printf("         -F <float>  ... scale quality scores by <float>\n");
+    printf( "options: -r  show ruler\n" );
+    printf( "         -t  don't trim overhangs\n" );
+    printf( "         -q  show a read quality (requires a quality track)\n" );
+    printf( "         -d  show discarded overlaps\n" );
+    printf( "         -c  show coverage\n" );
+    printf( "         -C  only coverage (hide overlaps)\n" );
+    printf( "         -f  show alignment flags\n" );
+
+    printf( "         -s [li]  order by (l)ength or read (i)d\n" );
+    printf( "         -x n  set minimum read length to n\n" );
+    printf( "         -F f  scale quality scores by f\n" );
 };
 
-int main(int argc, char* argv[])
+int main( int argc, char* argv[] )
 {
     HITS_DB db;
     FILE* fileOvlIn;
@@ -802,7 +806,7 @@ int main(int argc, char* argv[])
     PassContext* pctx;
     CartoonsContext cctx;
 
-    bzero(&cctx, sizeof(CartoonsContext));
+    bzero( &cctx, sizeof( CartoonsContext ) );
 
     // process arguments
 
@@ -810,133 +814,137 @@ int main(int argc, char* argv[])
 
     opterr = 0;
 
-    cctx.q_scale = 1.0;
-    cctx.min_len = 0;
-    cctx.min_identity = -1;
+    cctx.trim          = 1;
+    cctx.q_scale       = 1.0;
+    cctx.min_len       = 0;
+    cctx.min_identity  = -1;
     cctx.show_overlaps = 1;
 
-    while ((c = getopt(argc, argv, "cCdqotrx:i:s:F:f")) != -1)
+    while ( ( c = getopt( argc, argv, "cCdqotrx:i:s:F:f" ) ) != -1 )
     {
-        switch (c)
+        switch ( c )
         {
             case 'f':
-                      cctx.flags = 1;
-                      break;
+                cctx.flags = 1;
+                break;
 
             case 'C':
-                      cctx.show_overlaps = 0;
-                      cctx.coverage = 1;
-                      break;
+                cctx.show_overlaps = 0;
+                cctx.coverage      = 1;
+                break;
 
             case 'c':
-                      cctx.coverage = 1;
-                      break;
+                cctx.coverage = 1;
+                break;
 
             case 'd':
-                      cctx.discarded = 1;
-                      break;
+                cctx.discarded = 1;
+                break;
 
             case 'F':
-                      cctx.q_scale = atof(optarg);
-                      break;
+                cctx.q_scale = atof( optarg );
+                break;
 
             case 'q':
-                      cctx.q = 1;
-                      break;
+                cctx.q = 1;
+                break;
 
             case 't':
-                      cctx.trim = 1;
-                      break;
+                cctx.trim = 0;
+                break;
 
             case 'r':
-                      cctx.ruler = 1;
-                      break;
+                cctx.ruler = 1;
+                break;
 
             case 'x':
-                      cctx.min_len = atoi(optarg);
-                      break;
+                cctx.min_len = atoi( optarg );
+                break;
 
             case 's':
-                      if (islower(optarg[0]))
-                      {
-                        cctx.revsort = 1;
-                      }
+                if ( islower( optarg[ 0 ] ) )
+                {
+                    cctx.revsort = 1;
+                }
 
-                      switch( tolower(optarg[0]) )
-                      {
-                        case 'i': cctx.sort = SORT_ID;
-                                  break;
-                        case 'l': cctx.sort = SORT_LENGTH;
-                                  break;
-                        case 'a':
-                        default : cctx.sort = SORT_AB;
-                                  break;
-                      }
+                switch ( tolower( optarg[ 0 ] ) )
+                {
+                    case 'i':
+                        cctx.sort = SORT_ID;
+                        break;
+                    case 'l':
+                        cctx.sort = SORT_LENGTH;
+                        break;
+                    case 'a':
+                    default:
+                        cctx.sort = SORT_AB;
+                        break;
+                }
 
-                      break;
+                break;
 
             case 'i':
-                      cctx.min_identity = atof(optarg);
-                      break;
+                cctx.min_identity = atof( optarg );
+                break;
 
             default:
-                      usage();
-                      exit(1);
+                usage();
+                exit( 1 );
         }
     }
 
-    if (argc - optind < 2)
+    if ( argc - optind < 2 )
     {
         usage();
-        exit(1);
+        exit( 1 );
     }
 
-    char* pcPathReadsIn = argv[optind++];
-    char* pcPathOverlaps = argv[optind++];
+    char* pcPathReadsIn  = argv[ optind++ ];
+    char* pcPathOverlaps = argv[ optind++ ];
 
-    if ( (fileOvlIn = fopen(pcPathOverlaps, "r")) == NULL )
+    if ( ( fileOvlIn = fopen( pcPathOverlaps, "r" ) ) == NULL )
     {
-        fprintf(stderr, "could not open '%s'\n", pcPathOverlaps);
-        exit(1);
+        fprintf( stderr, "could not open '%s'\n", pcPathOverlaps );
+        exit( 1 );
     }
 
-    if (Open_DB(pcPathReadsIn, &db))
+    if ( Open_DB( pcPathReadsIn, &db ) )
     {
-        printf("could not open '%s'\n", pcPathReadsIn);
+        printf( "could not open '%s'\n", pcPathReadsIn );
     }
 
     int reps;
     int* pts = NULL;
 
-    parse_ranges(argc - optind, argv + optind, &reps, &pts);
+    parse_ranges( argc - optind, argv + optind, &reps, &pts );
 
     // init
 
     cctx.ranges = pts;
-    cctx.db = &db;
+    cctx.db     = &db;
 
-    pctx = pass_init(fileOvlIn, NULL);
+    pctx = pass_init( fileOvlIn, NULL );
 
-    pctx->split_b = 0;
-    pctx->load_trace = 1;
+    pctx->split_b      = 0;
+    pctx->load_trace   = 1;
     pctx->unpack_trace = 1;
-    pctx->data = &cctx;
+    pctx->data         = &cctx;
 
     // pass
 
-    pre_cartoons(pctx, &cctx);
+    pre_cartoons( pctx, &cctx );
 
-//    Trim_DB(&db);
+    //    Trim_DB(&db);
 
-    pass(pctx, handler_cartoons);
+    pass( pctx, handler_cartoons );
 
-    post_cartoons(&cctx);
+    post_cartoons( &cctx );
 
     // cleanup
 
-    Close_DB(&db);
+    Close_DB( &db );
 
-    fclose(fileOvlIn);
+    fclose( fileOvlIn );
 
     return 0;
 }

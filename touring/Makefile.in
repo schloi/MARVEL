@@ -2,7 +2,7 @@
 include ../Makefile.settings
 
 ALL = OGbuild OGtour OGlayout
-SCRIPTS = OGtour.py tour2fasta.py constants.py colormap.py colorramp.py
+SCRIPTS = OGtour.py tour2fasta.py constants.py colormap.py
 
 all: $(ALL)
 
