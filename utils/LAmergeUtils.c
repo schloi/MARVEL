@@ -391,8 +391,8 @@ int checkOverlapFile(MERGE_OPT *mopt, char *filename, int silent)
     // check
     if (mopt->CHECK_SORT_ORDER || mopt->CHECK_TRACE_POINTS)
       {
-        FILE *fileOvlIn;
-        if ((fileOvlIn = fopen(filename, "r")) == NULL)
+          FILE* fileOvlIn;
+          if ( ( fileOvlIn = fopen( filename, "r" ) ) == NULL )
           {
             if (!silent)
               fprintf(stderr, "could not open '%s'\n", filename);
@@ -779,13 +779,16 @@ MERGE_OPT* parseMergeOptions(int argc, char* argv[])
         mopt->nameDB = Root(mopt->pathDB, ".db");
 
         // open database
-        mopt->db = (HITS_DB*) malloc(sizeof(HITS_DB));
-        Open_DB(mopt->pathDB, mopt->db);
-        if (mopt->db == NULL)
-          {
-            fprintf(stderr, "[ERROR] - LAmerge : Cannot open database \'%s\'!\n", mopt->pathDB);
-            exit(1);
-          }
+        if ( mopt->CHECK_SORT_ORDER || mopt->CHECK_TRACE_POINTS )
+        {
+          mopt->db = (HITS_DB*) malloc(sizeof(HITS_DB));
+          Open_DB(mopt->pathDB, mopt->db);
+          if (mopt->db == NULL)
+            {
+              fprintf(stderr, "[ERROR] - LAmerge : Cannot open database \'%s\'!\n", mopt->pathDB);
+              exit(1);
+            }
+        }
 
         optind++;
       }

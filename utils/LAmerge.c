@@ -746,9 +746,7 @@ static void doMergeAll(MERGE_OPT *mopt)
 
 		}
 	}
-	// check final las file, this file must fulfill at least
-	if (mopt->CHECK_SORT_ORDER == 0)
-		mopt->CHECK_SORT_ORDER = 1;
+
 	if (checkOverlapFile(mopt, fout, 0))
 	{
 		fprintf(stderr,
