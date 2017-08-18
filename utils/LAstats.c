@@ -68,9 +68,9 @@ typedef struct
     // overlap length binning
     int ovlBinSize;
     int nbin;
-    int* hist;
+    uint64_t* hist;
     uint64_t* bsum;
-    int* hist_local;
+    uint64_t* hist_local;
 
     // db
     HITS_DB* db;
@@ -169,9 +169,9 @@ static void stats_pre( StatsContext* fctx )
     if ( fctx->hist == NULL )
     {
         fctx->nbin       = DB_READ_MAXLEN( fctx->db ) / fctx->ovlBinSize + 1;
-        fctx->hist       = (int*)malloc( sizeof( int ) * fctx->nbin );
-        fctx->hist_local = (int*)malloc( sizeof( int ) * fctx->nbin );
-        fctx->bsum       = (uint64_t*)malloc( sizeof( uint64_t ) * fctx->nbin );
+        fctx->hist       = malloc( sizeof( uint64_t ) * fctx->nbin );
+        fctx->hist_local = malloc( sizeof( uint64_t ) * fctx->nbin );
+        fctx->bsum       = malloc( sizeof( uint64_t ) * fctx->nbin );
     }
 
     int i;
@@ -181,8 +181,8 @@ static void stats_pre( StatsContext* fctx )
         reads[ i ].flags &= R_MASK_G;
     }
 
-    bzero( fctx->hist, sizeof( int ) * fctx->nbin );
-    bzero( fctx->hist_local, sizeof( int ) * fctx->nbin );
+    bzero( fctx->hist, sizeof( uint64_t ) * fctx->nbin );
+    bzero( fctx->hist_local, sizeof( uint64_t ) * fctx->nbin );
     bzero( fctx->bsum, sizeof( uint64_t ) * fctx->nbin );
 }
 
@@ -289,16 +289,17 @@ static void stats_post( StatsContext* ctx )
         {
             if ( raw )
             {
-                printf( "%d %d %.1f %.1f %" PRIu64 "\n",
+                printf( "%d %" PRIu64 " %" PRIu64 " %.1f %.1f %" PRIu64 "\n",
                         i * ctx->ovlBinSize,
                         ctx->hist[ i ],
+                        ctx->hist_local[ i ],
                         ( 100. * cum ) / ctx->nOverlaps,
                         ( 100. * btot ) / nbases,
                         btot / cum );
             }
             else
             {
-                printf( "%7d   %8d %8d  %5.1f    %5.1f     %9" PRIu64 "\n",
+                printf( "%7d   %8" PRIu64 "%8" PRIu64 "  %5.1f    %5.1f     %9" PRIu64 "\n",
                         i * ctx->ovlBinSize,
                         ctx->hist[ i ],
                         ctx->hist_local[ i ],
@@ -367,28 +368,21 @@ static int stats_handler( void* _ctx, Overlap* ovls, int novl )
         if ( ctx->tracktrim )
         {
             get_trim( ctx->db, ctx->tracktrim, ovl->bread, &trim_bb, &trim_be );
-        }
-        else
-        {
-            trim_bb = 0;
-            trim_be = DB_READ_LEN( ctx->db, ovls->bread );
-        }
 
-        int bb = ovl->path.bbpos;
-        int be = ovl->path.bepos;
+            if ( ovl->flags & OVL_COMP )
+            {
+                int blen = DB_READ_LEN( ctx->db, ovl->bread );
+                int t    = trim_bb;
 
-        if ( ovl->flags & OVL_COMP )
-        {
-            int blen = DB_READ_LEN( ctx->db, ovl->bread );
+                trim_bb  = blen - trim_be;
+                trim_be  = blen - t;
+            }
 
-            bb = blen - be;
-            be = blen - bb;
-        }
-
-        if ( ( ( ovl->path.abpos - trim_ab ) > 0 && ( bb - trim_bb ) > 0 ) ||
-             ( ( trim_ae - ovl->path.aepos ) > 0 && ( trim_be - be ) > 0 ) )
-        {
-            ctx->hist_local[ b ] += 1;
+            if ( ( ( ovl->path.abpos - trim_ab ) > 0 && ( ovl->path.bbpos - trim_bb ) > 0 ) ||
+                 ( ( trim_ae - ovl->path.aepos ) > 0 && ( trim_be - ovl->path.bepos ) > 0 ) )
+            {
+                ctx->hist_local[ b ] += 1;
+            }
         }
 
         ctx->hist[ b ] += 1;
