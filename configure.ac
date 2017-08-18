@@ -15,11 +15,22 @@ AC_PROG_INSTALL
 
 # check python installation
 
-AC_PATH_PROGS([PYTHON3], [python3.6 python3 python3.5], [no])
-[if test "$PYTHON3" == "no"]
-[then]
-    AM_PATH_PYTHON([3.5])
-[fi]
+AC_ARG_WITH([python3],
+    [  --with-python3=PATH     Specify the location of the python3 binary ],
+    [
+        PYTHON3=$withval
+
+        if [[ ! -f $PYTHON3 ]]; then
+            AC_MSG_ERROR([Invalid python3 binary specified.])
+        fi
+    ],
+    [
+        AC_PATH_PROGS([PYTHON3], [python3.6 python3 python3.5], [no])
+        [if test "$PYTHON3" == "no"]
+        [then]
+            AM_PATH_PYTHON([3.5])
+        [fi]
+    ])
 
 AC_PYTHON_MODULE([networkx])
 
@@ -29,6 +40,20 @@ AC_CHECK_LIB([m], [sin])
 AC_CHECK_LIB([z], [compress])
 AC_CHECK_LIB([pthread], [pthread_create])
 AC_CHECK_LIB([bsd], [fgetln])
+
+# Check for pkg-config program, used for configuring some libraries.
+m4_define_default([PKG_PROG_PKG_CONFIG],
+    [AC_MSG_CHECKING([pkg-config])
+    AC_MSG_RESULT([no])])
+
+PKG_PROG_PKG_CONFIG
+
+# If the pkg-config autoconf support isn't installed, define its
+# autoconf macro to disable any packages depending on it.
+m4_define_default([PKG_CHECK_MODULES],
+    [AC_MSG_CHECKING([$1])
+    AC_MSG_RESULT([no])
+    $4])
 
 PKG_CHECK_MODULES([GTK], [gtk+-3.0], [have_gtk=yes], [have_gtk=no])
 
