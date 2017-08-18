@@ -1188,7 +1188,10 @@ static int filter( FilterContext* ctx, Overlap* ovl )
 
     if ( ctx->nMaxUnalignedBases != -1 )
     {
-        if ( ( ( ovl->path.abpos - trim_ab ) > ctx->nMaxUnalignedBases && ( ovl->path.bbpos - trim_bb ) > ctx->nMaxUnalignedBases ) || ( ( trim_ae - ovl->path.aepos ) > ctx->nMaxUnalignedBases && ( trim_be - ovl->path.bepos ) > ctx->nMaxUnalignedBases ) )
+        if ( ( ( ovl->path.abpos - trim_ab ) > ctx->nMaxUnalignedBases &&
+               ( ovl->path.bbpos - trim_bb ) > ctx->nMaxUnalignedBases ) ||
+             ( ( trim_ae - ovl->path.aepos ) > ctx->nMaxUnalignedBases &&
+               ( trim_be - ovl->path.bepos ) > ctx->nMaxUnalignedBases ) )
         {
             if ( ctx->nVerbose )
             {
