@@ -45,7 +45,7 @@ class LAS(object):
 
         self.lasPath = path
 
-        self.fileLas = open(self.lasPath, "r")
+        self.fileLas = open(self.lasPath, "rb")
 
         self.rlen = struct.calcsize(self.STRUCT_LAS_RECORD)
 
