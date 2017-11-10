@@ -47,6 +47,8 @@ In case configure is not able to locate your hdf5 and/or gtk installation you mi
     export CPPFLAGS='-I/path/to/include'
     export LDFLAGS='-L/path/to/lib'
 
+Alternatively you can pass the location of the h5cc/h5pcc binary to configure using the --with-hdf5 argument.
+
 After performing the above steps you will find MARVEL installed in <marvel.install.dir> with all binaries in the bin/, scripts in the scripts/ and python modules in the lib.python/ subdir. Note that these three directories are symlinks to dirs inside another directory in <marvel.install.dir>. This subdir is named either according to the current git revision hash (in case you checked the code out directly from the git) or contains the version number.
 
 ## USAGE

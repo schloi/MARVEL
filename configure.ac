@@ -35,7 +35,8 @@ AC_ARG_WITH([python3],
 AC_PYTHON_MODULE([networkx])
 
 # Checks for libraries.
-AC_CHECK_LIB([hdf5], [H5Dopen2], [have_hdf5=yes], [have_hdf5=no])
+AX_LIB_HDF5()
+
 AC_CHECK_LIB([m], [sin])
 AC_CHECK_LIB([z], [compress])
 AC_CHECK_LIB([pthread], [pthread_create])
@@ -60,16 +61,6 @@ PKG_CHECK_MODULES([GTK], [gtk+-3.0], [have_gtk=yes], [have_gtk=no])
 # Checks for header files.
 AC_HEADER_RESOLV
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h limits.h locale.h netdb.h netinet/in.h stddef.h stdint.h stdlib.h string.h strings.h sys/file.h sys/param.h sys/socket.h unistd.h])
-
-AC_ARG_WITH([hdf5-lib],
-    [  --with-hdf5-lib=DIR     Specify the location of the hdf5 libraries ],
-    [have_hdf5=yes
-    HDF5_LIB=$withval])
-
-AC_ARG_WITH(hdf5-include,
-    [  --with-hdf5-include=DIR Specify the location of the hdf5 include files ],
-    [have_hdf5=yes
-    HDF5_INC=$withval])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
@@ -116,9 +107,7 @@ AM_COND_IF([HAS_MOD_PATCHER], [AC_CONFIG_FILES([patcher/Makefile])])
 # make variables available
 AC_SUBST([PYTHON3], ${PYTHON3})
 AC_SUBST([have_gtk], ${have_gtk})
-AC_SUBST([have_hdf5], ${have_hdf5})
-AC_SUBST(HDF5_INC)
-AC_SUBST(HDF5_LIB)
+
 
 AC_OUTPUT
 
@@ -130,7 +119,7 @@ if test "x${have_gtk}" = xno; then
     echo "--------------------------------"
 fi
 
-if test "x${have_hdf5}" = xno; then
+if test "x${with_hdf5}" = xno; then
     echo "--------------------------------"
     echo " hdf5 not found"
     echo " skipping apps depending on it"

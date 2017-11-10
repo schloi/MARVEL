@@ -2,27 +2,18 @@
 include ../Makefile.settings
 
 ALL = LAcartoons LAshow LAcheck LAcount LAmerge \
-      LAindex LAstats  TKshow TKcombine gff2track 
+      LAindex LAstats  TKshow TKcombine gff2track
 
-have_gtk = @have_gtk@
-have_hdf5 = @have_hdf5@
-hdf5_inc = @HDF5_INC@
-hdf5_lib = @HDF5_LIB@
+with_gtk = @with_gtk@
+with_hdf5 = @with_hdf5@
+hdf5_flags = @HDF5_CFLAGS@ @HDF5_LDFLAGS@
 
-ifeq ($(have_gtk), yes)
+ifeq ($(with_gtk), yes)
 	ALL += LAexplorer
 endif
 
-ifeq ($(have_hdf5), yes)
+ifeq ($(with_hdf5), yes)
 	ALL += H5dextract
-endif
-
-ifneq ($(hdf5_inc), )
-	hdf5_inc=-I @HDF5_INC@
-endif
-
-ifneq ($(hdf5_lib), )
-	hdf5_lib=-L @HDF5_LIB@
 endif
 
 all: $(ALL)
@@ -58,7 +49,7 @@ LAmerge: LAmerge.c LAmergeUtils.c $(PATH_DALIGN)/align.h $(PATH_DALIGN)/align.c 
 	$(CC) $(CFLAGS) -o LAmerge LAmerge.c LAmergeUtils.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_DB)/QV.c $(CLIBS)
 
 H5dextract: H5dextract.c H5dextractUtils.c $(PATH_LIB)/stats.h $(PATH_LIB)/stats.c
-	$(CC) $(CFLAGS) $(hdf5_inc) $(hdf5_lib) -o H5dextract H5dextract.c H5dextractUtils.c $(PATH_LIB)/stats.c -lhdf5 $(CLIBS)
+	$(CC) $(CFLAGS) $(hdf5_flags) -o H5dextract H5dextract.c H5dextractUtils.c $(PATH_LIB)/stats.c -lhdf5 $(CLIBS)
 
 mapTrack: mapTrack.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h
 	$(CC) $(CFLAGS) -o mapTrack mapTrack.c $(PATH_LIB)/tracks.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(CLIBS)
