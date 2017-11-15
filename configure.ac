@@ -32,6 +32,16 @@ AC_ARG_WITH([python3],
         [fi]
     ])
 
+AC_ARG_ENABLE(versioned-dirs, [  --enable-versioned-dirs         enable versioned directories
+[[default=no]]],[
+  if test "$enableval" = no; then
+    ac_enable_versioned=no
+  else
+    ac_enable_versioned=yes
+  fi
+  ],[ ac_enable_versioned=no])
+
+
 AC_PYTHON_MODULE([networkx])
 
 # Checks for libraries.
@@ -107,6 +117,7 @@ AM_COND_IF([HAS_MOD_PATCHER], [AC_CONFIG_FILES([patcher/Makefile])])
 # make variables available
 AC_SUBST([PYTHON3], ${PYTHON3})
 AC_SUBST([have_gtk], ${have_gtk})
+AC_SUBST([ac_enable_versioned], ${ac_enable_versioned})
 
 
 AC_OUTPUT

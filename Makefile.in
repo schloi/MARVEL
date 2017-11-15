@@ -2,8 +2,14 @@
 prefix         = @prefix@
 exec_prefix    = @exec_prefix@
 bindir         = @bindir@
+enable_versioned_dirs = @ac_enable_versioned@
 
-VERSION := $(shell cat VERSION)
+ifeq ($(enable_versioned_dirs), no)
+	VERSION=
+else
+	VERSION := $(shell cat VERSION)
+endif
+
 export VERSION
 
 include Makefile.settings
@@ -36,15 +42,26 @@ install:
 			$(MAKE) -C $$dir $@ ; \
 		fi	\
 	done
+
+ifeq ($(enable_versioned_dirs), yes)
 	rm -f $(bindir) $(prefix)/scripts $(prefix)/lib.python
 	ln -s $(install_bin) $(bindir)
 	ln -s $(install_scripts) $(prefix)/scripts
 	ln -s $(install_python) $(prefix)/lib.python
 	echo "$(VERSION)" > $(prefix)/VERSION
+
 	@echo "---------------------------------------------------------------"
-	@echo "Installation into $(prefix) finished"
-	@echo "Don't forget to include $(prefix)/lib.python in your PYTHONPATH"
+	@echo "Versioned installation into $(prefix)/$(VERSION) finished."
+	@echo "Symlinks in $(prefix) created."
+	@echo "Don't forget to include $(prefix)/lib.python in your PYTHONPATH."
 	@echo "---------------------------------------------------------------"
+else
+	@echo "---------------------------------------------------------------"
+	@echo "Installation into $(prefix) finished."
+	@echo "Don't forget to include $(prefix)/lib.python in your PYTHONPATH."
+	@echo "---------------------------------------------------------------"
+endif
+
 
 prebuild: lib/oflags.h
 	build/oflags.sh lib/oflags.h lib.python/marvel/oflags.py
