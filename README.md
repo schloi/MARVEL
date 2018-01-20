@@ -2,6 +2,10 @@
 
 MARVEL consists of a set of tools that facilitate the overlapping, patching, correction and assembly of noisy (not so noisy ones as well) long reads.
 
+## 2018-01-20 Note from the maintainer
+
+I am in the process of leaving my current place of work and will most likely have limited access to compute resources in February. This means, bug fixes that require testing on non-trivial genomes might take a while before they make it into the repository. So don't despair if your issue report has been pending for a couple of days.
+
 ## CONTACT
 
 For questions, suggestions and complaints please contact [s.schloissnig@gmail.com](s.schloissnig@gmail.com)
