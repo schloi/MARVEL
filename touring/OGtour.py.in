@@ -48,12 +48,12 @@ COLOR_WHITE    = "#FFFFFF"
 def e_apply_attributes(g, aname, avalues):
     for (e, val) in avalues.items():
         if g.has_edge(e[0],e[1]):
-            g.edge[e[0]][e[1]][aname] = val
+            g.edges[e[0], e[1]][aname] = val
 
 def v_apply_attributes(g, aname, avalues):
     for (n, val) in avalues.items():
         if n in g.node:
-            g.node[n][aname] = val
+            g.nodes[n][aname] = val
 
 def e_source(e):
     return e[0]
@@ -62,7 +62,13 @@ def e_target(e):
     return e[1]
 
 def v_all_edges(g, v):
-    return g.in_edges(v) + g.out_edges(v)
+    for e in g.in_edges(v):
+        yield e
+
+    for e in g.out_edges(v):
+        yield e
+
+    # return g.in_edges(v) + g.out_edges(v)
 
 def v_in_edges(g, v):
     return g.in_edges(v)
@@ -276,7 +282,7 @@ def is_dead_end(g, v, eend, eflags):
 def mark_dead_ends(g, vflags, eend, eflags):
     nFlagged = 0
 
-    for v in g.nodes():
+    for v in g:
         if is_dead_end(g, v, eend, eflags):
             vflags[v] |= V_DEAD_END
             nFlagged += 1
@@ -286,7 +292,7 @@ def mark_dead_ends(g, vflags, eend, eflags):
 def update_bbdist(g, vflags, eflags, bbdist):
     stack = set()
 
-    for v in g.nodes():
+    for v in g:
 
         if vflags[v] & V_BACKBONE and bbdist[v] == -1:
             stack.add(v)
@@ -817,20 +823,20 @@ def process_graph(g, dropinversions, circular, lookahead, ilookahead):
     elabel_prop = {}
     vcolor_prop = {}
     vstyle_prop = {}
-    bbdist_prop = { key : -1 for key in g.nodes() }
-    vpath_prop = { key : -1 for key in g.nodes() }
+    bbdist_prop = { key : -1 for key in g }
+    vpath_prop = { key : -1 for key in g }
 
-    vflags_prop = { key : 0 for key in g.nodes() }
+    vflags_prop = { key : 0 for key in g }
 
     edir_prop = {}
     ewidth_prop = { key : 1.0 for key in g.edges() }
 
-    vsize_prop = { key : 0.2 for key in g.nodes() }
+    vsize_prop = { key : 0.2 for key in g }
 
-    vquality_prop = { key : 0.0 for key in g.nodes() }
+    vquality_prop = { key : 0.0 for key in g }
 
-    vread_prop = { n : g.node[n]["read"] for n in g.nodes() }
-    vopt_prop = {  n : int(g.node[n]["optional"]) for n in g.nodes() }
+    vread_prop = { n : g.nodes[n]["read"] for n in g }
+    vopt_prop = {  n : int(g.nodes[n]["optional"]) for n in g }
 
     seen = set()
 
@@ -841,10 +847,10 @@ def process_graph(g, dropinversions, circular, lookahead, ilookahead):
         else:
             seen.add(key)
 
-    eflags_prop = { e : int(g.edge[e[0]][e[1]]["flags"]) for e in g.edges() }
-    ediv_prop = { e : int(g.edge[e[0]][e[1]]["divergence"]) for e in g.edges() }
-    elen_prop = { e : int(g.edge[e[0]][e[1]]["length"]) for e in g.edges() }
-    eend_prop = { e : g.edge[e[0]][e[1]]["end"] for e in g.edges() }
+    eflags_prop = { e : int(g.edges[e[0], e[1]]["flags"]) for e in g.edges() }
+    ediv_prop = { e : int(g.edges[e[0], e[1]]["divergence"]) for e in g.edges() }
+    elen_prop = { e : int(g.edges[e[0], e[1]]["length"]) for e in g.edges() }
+    eend_prop = { e : g.edges[e[0], e[1]]["end"] for e in g.edges() }
     epath_prop = { key : -1 for key in g.edges() }
 
 
@@ -935,7 +941,7 @@ def process_graph(g, dropinversions, circular, lookahead, ilookahead):
 
     arrStartVertices = []
 
-    for v in g.nodes():
+    for v in g:
         fQuality = vertexEdgeQuality(g, v, eflags_prop, eend_prop, ediv_prop)
         vquality_prop[v] = fQuality
 
@@ -960,8 +966,8 @@ def process_graph(g, dropinversions, circular, lookahead, ilookahead):
     if len(arrPaths) > 0 and len(potential_edges) > 0:
         ### reset touring data
 
-        bbdist_prop = { key : -1 for key in g.nodes() }
-        vpath_prop = { key : -1 for key in g.nodes() }
+        bbdist_prop = { key : -1 for key in g }
+        vpath_prop = { key : -1 for key in g }
         vflags_prop = { key : vflags_prop[key] & ~( V_PATH_END | V_BACKBONE | V_VISITED | V_RETRY ) for key in vflags_prop }
         # eflags_prop = { key : eflags_prop[key] & ~( E_INVERSION | E_BACKBONE ) for key in eflags_prop }
         eflags_prop = { key : eflags_prop[key] & ~( E_BACKBONE ) for key in eflags_prop }
@@ -992,7 +998,7 @@ def process_graph(g, dropinversions, circular, lookahead, ilookahead):
 
     #### apply styles
 
-    for v in g.nodes():
+    for v in g:
         vstyle_prop[v] = "filled"
 
         if vflags_prop[v] & V_DISCARD:
@@ -1064,7 +1070,7 @@ def process_graph(g, dropinversions, circular, lookahead, ilookahead):
 def drop_inversions(g, eend, eflags):
     setBadEdges = set()
 
-    for v in g.nodes():
+    for v in g:
         dicTargetStats = {}
 
         for e in v_all_edges(g, v):
@@ -1109,8 +1115,8 @@ def drop_inversions(g, eend, eflags):
 
     setDiscard = set()
 
-    for v in g.nodes():
-        if len( v_all_edges(g, v) ) == 0: # v.in_degree() == 0 and v.out_degree() == 0:
+    for v in g:
+        if len( list( v_all_edges(g, v) ) ) == 0: # v.in_degree() == 0 and v.out_degree() == 0:
             setDiscard.add(v)
 
     for v in reversed(sorted(setDiscard)):
@@ -1215,7 +1221,7 @@ def main():
                 #if e[0] in setContigEnds or e[1] in setContigEnds:
                 #    continue
 
-                eflags = g.edge[e[0]][e[1]]["flags"]
+                eflags = g.edges[e[0], e[1]]["flags"]
 
                 if (eflags & LAS.OVL_OPTIONAL) or ((eflags & LAS.OVL_MODULE) and not (eflags & E_BACKBONE)):
                     drop.append(e)
@@ -1225,7 +1231,7 @@ def main():
 
             drop = []
 
-            for v in g.nodes():
+            for v in g:
                 if len( v_all_edges(g, v) ) == 0 or bbdist[v] > 2:
                     drop.append(v)
 
