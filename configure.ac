@@ -1,10 +1,12 @@
 # Process this file with autoreconf to produce a configure script.
 
-AC_CONFIG_MACRO_DIR([m4/])
-
+AC_INIT([MARVEL], [1.0], [s.schloissnig@gmail.com])
 AC_PREREQ([2.69])
 
-AC_INIT([MARVEL], [1.0], [s.schloissnig@gmail.com])
+# AC_CONFIG_MACRO_DIR([m4])
+
+m4_include([m4/ax_lib_hdf5.m4])
+m4_include([m4/utils.m4])
 
 AC_CONFIG_SRCDIR([corrector/consensus.c])
 AC_CONFIG_HEADERS([config.h])
