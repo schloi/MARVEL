@@ -2,13 +2,13 @@
 
 MARVEL consists of a set of tools that facilitate the overlapping, patching, correction and assembly of noisy (not so noisy ones as well) long reads.
 
-## 2018-01-20 Note from the maintainer
-
-I am in the process of leaving my current place of work and will most likely have limited access to compute resources in February. This means, bug fixes that require testing on non-trivial genomes might take a while before they make it into the repository. So don't despair if your issue report has been pending for a couple of days.
-
 ## CONTACT
 
 For questions, suggestions and complaints please contact [s.schloissnig@gmail.com](s.schloissnig@gmail.com)
+
+## 2018-01-20 Note from the maintainer
+
+I am in the process of leaving my current place of work and will most likely have limited access to compute resources in February. This means, bug fixes that require testing on non-trivial genomes might take a while before they make it into the repository. So don't despair if your issue report has been pending for a couple of days.
 
 ## SOURCE CODE ORGANIZATION
 
@@ -265,3 +265,8 @@ b. Look to the left/right of the break and see if the same reads are on both sid
 
 MARVEL performs read correction post-assembly. This ensures that true overlaps are used for the correction and only the reads used to build the contigs need to be corrected, thereby resulting in often significant compute time savings. The correction module can also be used without performing an assembly to produce a complete set of corrected reads, if that is desired
 
+### Dynamic masking
+
+Large repeat-rich genomes often result in excessive CPU and storage requirements. We added an on-the-fly repeat masker that works jointly with the overlapper to lower said requirements. On the server side you need to launch the dynamic masking server DMserver on a dedicated node (with enough main memory) and on the client side the overlapper is told where the server runs using the -D argument. When the overlapper starts processing a new block, it retrieves a masking track from the server (network traffic is negligible) and uses the track to soft mask intervals in the block, thereby excluding them from the k-mer seeding. When a block comparison is finished, the overlapper notifies the server of the location of the resulting .las file(s) (note that overlapper and masking server need to have a shared filesystem for that to work). The server processes the alignments and updates internal data structures which maintain data on the reads' repetitiveness.
+
+For additional information please refer to docs/HOWTO-dynamic-masking.txt
