@@ -37,7 +37,7 @@ q.single("!cat {db}.*.fixed.fasta > {db}.fixed.fasta")
 # create a new Database of fixed reads (-j numOfThreads, -g genome size)
 q.single("{path_scripts}/DBprepare.py -s 50 -r 2 -j 4 -g 4600000 {db_fixed} {db}.fixed.fasta", db_fixed = DB_FIX)
 
-# q.process()
+q.process()
 
 ##### assemble patched reads
 
