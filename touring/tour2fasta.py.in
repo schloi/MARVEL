@@ -269,9 +269,9 @@ def write_path(fileOut, seqname_prefix, db, track_source, track_trim, vread, efl
 def process_graph(g, db, dbc, fileSeq, arrPaths, track_trim_name, seqname_prefix):
     vread_prop = { n : g.node[n]["read"] for n in g.nodes() }
 
-    eflags_prop = { e : g.edge[e[0]][e[1]]["flags"] for e in g.edges() }
-    elen_prop = { e : g.edge[e[0]][e[1]]["length"] for e in g.edges() }
-    eend_prop = { e : g.edge[e[0]][e[1]]["end"] for e in g.edges() }
+    eflags_prop = { e : g.edges[e[0], e[1]]["flags"] for e in g.edges() }
+    elen_prop = { e : g.edges[e[0], e[1]]["length"] for e in g.edges() }
+    eend_prop = { e : g.edges[e[0], e[1]]["end"] for e in g.edges() }
 
     track_source = db.track("source")
     track_trim = db.track(track_trim_name)
