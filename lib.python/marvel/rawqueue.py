@@ -10,6 +10,8 @@ import glob
 import types
 import logging
 
+import marvel.config as mconfig
+
 try:
     from subprocess import DEVNULL
 except ImportError:
@@ -131,7 +133,7 @@ class rawqueue(object):
     def command_to_threads(self, cmd, threads):
         return threads
 
-    def plan(self, plan, first = 1, last = -1, threads = 1, path = None):
+    def plan(self, plan, first = 1, last = -1, threads = 1, path = mconfig.PATH_BIN):
         if isinstance(plan, str):
             plan = self.replace_variables(plan)
             commands = open(plan).readlines()
