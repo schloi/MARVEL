@@ -70,6 +70,7 @@
 #include "fileUtils.h"
 #include "lib/tracks.h"
 #include "FA2x.h"
+#include "lib/utils.h"
 
 #ifdef HIDE_FILES
 #define PATHSEP "/."
@@ -702,8 +703,6 @@ static void readFastaFile( CreateContext* ctx, char* name )
     prBest = ( ctx->BEST ) ? NULL : ctx->pr1;
 
     {
-        int x;
-
         ctx->pr1->seqIDinFasta = -1;
         ctx->pr2->seqIDinFasta = -1;
         while ( !eof )
@@ -715,29 +714,43 @@ static void readFastaFile( CreateContext* ctx, char* name )
             rlen = 0;
             while ( 1 )
             {
-                eof = ( fgets( ctx->read + rlen, MAX_NAME, input ) == NULL );
-                nline += 1;
-                x = strlen( ctx->read + rlen ) - 1;
-                if ( ctx->read[ rlen + x ] != '\n' )
+                char* line = NULL;
+                size_t linelen;
+                line = fgetln(input, &linelen);
+
+                if (!line)
                 {
-                    fprintf( stderr, "File %s.fasta, Line %d:", core, nline );
-                    fprintf( stderr, " Fasta line is too long (> %d chars)\n", MAX_NAME - 2 );
-                    errorExit( ctx );
-                }
-                if ( eof || ctx->read[ rlen ] == '>' )
+                    eof = 1;
                     break;
-                rlen += x;
-                if ( rlen + MAX_NAME > ctx->rmax )
+                }
+
+                if ( rlen + linelen > (size_t)ctx->rmax )
                 {
-                    ctx->rmax = ( (int)( 1.2 * ctx->rmax ) ) + 1000 + MAX_NAME;
+                    ctx->rmax = ( (int)( 1.2 * ctx->rmax ) ) + 1000 + linelen;
                     ctx->read = (char*)realloc( ctx->read, ctx->rmax + 1 );
                     if ( ctx->read == NULL )
                     {
                         fprintf( stderr, "File %s.fasta, Line %d:", core, nline );
-                        fprintf( stderr, " Out of memory (Allocating line buffer)\n" );
+                        fprintf( stderr, "Out of memory (Allocating line buffer)\n" );
                         errorExit( ctx );
                     }
                 }
+
+                if ( line[linelen - 1] == '\n' )
+                {
+                    linelen -= 1;
+                }
+
+                memcpy(ctx->read + rlen, line, linelen);
+
+                nline += 1;
+
+                if (line[0] == '>')
+                {
+                    break;
+                }
+
+                rlen += linelen;
             }
 
             if ( rlen < ctx->opt_min_length )
@@ -929,7 +942,6 @@ static void usage(const char* progname)
     fprintf( stderr, "         -x ... min read length (%d)\n", DEF_OPT_X );
     fprintf( stderr, "         -c ... convert fasta header arguments (NAME=x,y) into database tracks\n" );
 }
-
 
 static void parseOptions( int argc, char* argv[], CreateContext* ctx )
 {

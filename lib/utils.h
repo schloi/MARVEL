@@ -21,3 +21,12 @@ char* format_bytes(unsigned long bytes);
 char* bp_format(uint64_t num, int dec);
 char* bp_format_alloc(uint64_t num, int dec, int alloc);
 uint64_t bp_parse(const char* num);
+
+#if !defined( fgetln )
+
+char* fgetln_( FILE* stream, size_t* len );
+
+#define fgetln fgetln_
+
+#endif
+

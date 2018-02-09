@@ -11,8 +11,8 @@ all: $(ALL)
 install: all
 	$(INSTALL_PROGRAM) -m 0755 $(ALL) $(install_bin)
 
-FA2db: FA2db.c DB.c DB.h FA2x.h FA2x.c QV.c QV.h fileUtils.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(PATH_LIB)/compression.c
-	$(CC) $(CFLAGS) -o FA2db FA2db.c FA2x.c DB.c QV.c fileUtils.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(CLIBS)
+FA2db: FA2db.c DB.c DB.h FA2x.h FA2x.c QV.c QV.h fileUtils.c $(PATH_LIB)/utils.h $(PATH_LIB)/utils.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(PATH_LIB)/compression.c
+	$(CC) $(CFLAGS) -o FA2db FA2db.c FA2x.c DB.c QV.c fileUtils.c $(PATH_LIB)/utils.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(CLIBS)
 
 DB2fa: DB2fa.c DB.c DB.h QV.c QV.h $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c
 	$(CC) $(CFLAGS) -o DB2fa DB2fa.c DB.c QV.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(CLIBS)
