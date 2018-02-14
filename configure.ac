@@ -95,6 +95,7 @@ AC_CONFIG_FILES([Makefile
                  corrector/Makefile
                  dalign/Makefile
                  db/Makefile
+                 hic/Makefile
                  lib.python/Makefile
                  lib.python/marvel/config.py
                  scripts/Makefile
