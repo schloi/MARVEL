@@ -6,7 +6,7 @@ ALL =
 all: $(ALL)
 
 install: all
-	$(INSTALL_PROGRAM) -m 0755 $(ALL) $(install_bin)
+	# $(INSTALL_PROGRAM) -m 0755 $(ALL) $(install_bin)
 
 clean:
 	rm -rf $(ALL) *.dSYM
