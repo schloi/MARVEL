@@ -615,7 +615,8 @@ int read_graphml(OgLayoutContext* octx)
 
 //        printf("%s", tline);
 
-        if (strncmp(tline, "<key", 4) == 0)
+        // if (strncmp(tline, "<key", 4) == 0)
+        if (strstr(tline, "<key") != 0)
         {
 #ifdef DEBUG_READ_GRAPHML
             printf("found attr: %d -> %s\n", nnodeattr + nedgeAttr, tline);
@@ -623,6 +624,8 @@ int read_graphml(OgLayoutContext* octx)
 
             if (nattr == maxAttr)
             {
+                int prev = maxAttr;
+
                 maxAttr = maxAttr * 1.2 + 10;
                 attrLookup = (OgAttribute*) realloc(attrLookup, sizeof(OgAttribute) * maxAttr);
                 if (attrLookup == NULL)
@@ -630,6 +633,8 @@ int read_graphml(OgLayoutContext* octx)
                     fprintf(stderr, "Cannot increase attribute lookup buffer!\n");
                     exit(1);
                 }
+
+                bzero(attrLookup + prev, sizeof(OgAttribute) * (maxAttr - prev));
             }
 
             OgAttribute * cattr = attrLookup + nattr;
@@ -652,10 +657,12 @@ int read_graphml(OgLayoutContext* octx)
 
             *pchrl = '\0';
             len = strlen(pchrf + 11);
+
             if(cattr->name == NULL)
                 cattr->name = (char*) malloc(sizeof(char) * (len + 1));
             else
                 cattr->name = (char*) realloc(cattr->name, sizeof(char) * (len + 1));
+
             assert(cattr->name != NULL);
             strncpy(cattr->name, pchrf + 11, len);
             cattr->name[len] = '\0';
@@ -680,10 +687,12 @@ int read_graphml(OgLayoutContext* octx)
 
             *pchrl = '\0';
             len = strlen(pchrf + 11);
+
             if(cattr->type == NULL)
                 cattr->type = (char*) malloc(sizeof(char) * (len + 1));
             else
                 cattr->type = (char*) realloc(cattr->type, sizeof(char) * (len + 1));
+
             assert(cattr->type != NULL);
             strncpy(cattr->type, pchrf + 11, len);
             cattr->type[len] = '\0';
@@ -766,13 +775,15 @@ int read_graphml(OgLayoutContext* octx)
         }
 
         // parse edges
-        if (strncmp(tline, "<edge", 5) == 0)
+        else if (strncmp(tline, "<edge", 5) == 0)
         {
 #ifdef DEBUG_READ_GRAPHML
             printf("found edge: %d\n", nedges);
 #endif
             if (nedges == maxEdges)
             {
+                int prev = maxEdges;
+
                 maxEdges = maxEdges * 1.2 + 10;
                 edges = (OgEdge*) realloc(edges, sizeof(OgEdge) * maxEdges);
                 if (edges == NULL)
@@ -780,6 +791,8 @@ int read_graphml(OgLayoutContext* octx)
                     fprintf(stderr, "Cannot increase edge buffer!\n");
                     exit(1);
                 }
+
+                bzero(edges + prev, sizeof(OgEdge) * (maxEdges - prev) );
             }
 
             // parse source id
@@ -923,11 +936,15 @@ int read_graphml(OgLayoutContext* octx)
             }
             nedges++;
         }
+
         // parse nodes
-        else if (strncmp(tline, "<node", 5) == 0)
+        // else if (strncmp(tline, "<node", 5) == 0)
+        else if (strstr(tline, "<node") != 0)
         {
             if (nnodes == maxNodes)
             {
+                int prev = maxNodes;
+
                 maxNodes = maxNodes * 1.2 + 10;
                 nodes = (OgNode*) realloc(nodes, sizeof(OgNode) * maxNodes);
                 if (nodes == NULL)
@@ -935,6 +952,8 @@ int read_graphml(OgLayoutContext* octx)
                     fprintf(stderr, "Cannot increase node buffer!\n");
                     exit(1);
                 }
+
+                bzero(nodes + prev, sizeof(OgNode) * (maxNodes - prev));
             }
 
             // parse id
@@ -2480,11 +2499,9 @@ static Graph * createInitialGraph(OgLayoutContext *octx)
 
     g->maxNodes = octx->graph->numNodes;
     g->maxEdges = octx->graph->numEdges;
-    g->nodes = (Node*) malloc(sizeof(Node) * g->maxNodes);
-    g->edges = (Edge*) malloc(sizeof(Edge) * g->maxEdges);
+    g->nodes = (Node*) calloc(g->maxNodes, sizeof(Node));
+    g->edges = (Edge*) calloc(g->maxEdges, sizeof(Edge));
 
-    bzero(g->nodes, sizeof(Node) * g->maxNodes);
-    bzero(g->edges, sizeof(Edge) * g->maxEdges);
     int i, j;
     char *pchr;
 
@@ -2493,6 +2510,7 @@ static Graph * createInitialGraph(OgLayoutContext *octx)
         OgNode *node = octx->graph->nodes + i;
         g->nodes[i].id = node->nodeID;
         g->nodes[i].pathID = -1;
+
         // check if coordinates are available
         for (j = 0; j < node->numAttributes; j++)
         {
@@ -2540,6 +2558,7 @@ static Graph * createInitialGraph(OgLayoutContext *octx)
         dummy.id = octx->graph->edges[i].sourceId;
         Node *a = bsearch(&dummy, g->nodes, g->curNodes, sizeof(Node), cmpNodesById);
         assert(a != NULL);
+
         dummy.id = octx->graph->edges[i].targetId;
         Node *b = bsearch(&dummy, g->nodes, g->curNodes, sizeof(Node), cmpNodesById);
         assert(b != NULL);
