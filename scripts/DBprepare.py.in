@@ -61,8 +61,12 @@ def prepare_db(args):
         subprocess.call(cmd, shell = True)
 
     print("converting fasta to db ( min read length {minreadlen} )".format(minreadlen = minreadlen))
-    opts = " -x{minreadlen} {db} {fasta}".format(minreadlen = minreadlen, db = db_name,  fasta = fasta)
-    cmd = os.path.join(root, "FA2db -c") + opts
+
+    opts = ""
+    if args.tracks:
+        opts += " ".join( [ "-c " + t for t in args.tracks ] )
+    opts += " -x{minreadlen} {db} {fasta}".format(minreadlen = minreadlen, db = db_name,  fasta = fasta)
+    cmd = os.path.join(root, "FA2db ") + opts
     subprocess.call(cmd, shell = True)
 
     print("partitioning db ( blocksize {blocksize} )".format(blocksize = blocksize))
@@ -112,6 +116,10 @@ def main():
                         dest = "runid", metavar = "run.id", type = int,
                         default = 1,
                         help = "Run ID for overlap directory naming")
+    parser.add_argument("-c",
+                        dest = "tracks", metavar = "track.name", type = str,
+                        action = "append",
+                        help = "convert key=value from fasta header to a track")
     parser.add_argument("-x", "--minreadlength",
                         dest = "minreadlen", metavar = "min.read.length", type = int,
                         default = marvel.config.DEF_DBSPLIT_X,

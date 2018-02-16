@@ -166,7 +166,7 @@ void resetPacbioRead(pacbio_read* pr)
 }
 
 
-static void parse_header( char* header, pacbio_read* pr, int createTracks )
+static void parse_header( CreateContext* ctx, char* header, pacbio_read* pr )
 {
     // reset pr
     resetPacbioRead( pr );
@@ -194,7 +194,7 @@ static void parse_header( char* header, pacbio_read* pr, int createTracks )
         pr->end  = -1;
     }
 
-    if ( createTracks )
+    if ( ctx->t_create_n )
     {
         while ( *c != '\0' && *c != '\n' && *c != ' ' )
             c++;
@@ -216,6 +216,38 @@ static void parse_header( char* header, pacbio_read* pr, int createTracks )
             {
                 fprintf( stderr, "malformed track name: '%s'\n", c );
                 exit( 1 );
+            }
+
+            int i;
+            int skip = 1;
+            for ( i = 0 ; i < ctx->t_create_n ; i++ )
+            {
+                printf("header %s <-> %.*s\n", ctx->t_create[i], (int)(c-name), name);
+
+                if ( strlen(ctx->t_create[i]) == (size_t)(c - name) && strncmp(ctx->t_create[i], name, c - name) == 0 )
+                {
+                    skip = 0;
+                    break;
+                }
+            }
+
+            if (skip)
+            {
+                c++;
+
+                while ( *c != '\0' && *c != '\n' && *c != ' ' )
+                    c++;
+
+                int cont = ( *c == ' ' );
+
+                *c = '\0';
+
+                if (cont)
+                {
+                    c += 1;
+                }
+
+                continue;
             }
 
             if ( pr->ntracks >= pr->maxtracks )
@@ -253,7 +285,9 @@ static void parse_header( char* header, pacbio_read* pr, int createTracks )
                 pr->maxName = len + 10;
                 int i;
                 for ( i                = 0; i < cur; i++ )
+                {
                     pr->trackName[ i ] = (char*)realloc( pr->trackName[ i ], pr->maxName );
+                }
             }
 
             *c = '\0';
@@ -272,7 +306,7 @@ static void parse_header( char* header, pacbio_read* pr, int createTracks )
 
                 value = c;
 
-                while ( *c != '\n' && *c != ' ' && *c != ',' )
+                while ( *c != '\0' && *c != '\n' && *c != ' ' && *c != ',' )
                     c++;
 
                 mval = ( *c == ',' );
@@ -329,7 +363,9 @@ static void parse_header( char* header, pacbio_read* pr, int createTracks )
             pr->ntracks++;
 
             if ( cont )
+            {
                 c++;
+            }
         }
     }
 }
@@ -521,8 +557,10 @@ void initDB( int argc, char** argv, CreateContext* ctx )
             ctx->boff          = ctx->offset;
             ctx->ioff          = ftello( ctx->indx );
 
-            if ( ctx->createTracks )
+            if ( ctx->t_create_n > 0 )
+            {
                 findAndAddAvailableTracks( ctx );
+            }
         }
 
         ctx->flist = (char**)Malloc( sizeof( char* ) * ( ctx->ofiles + ctx->ifiles ), "Allocating file list" );
@@ -547,8 +585,8 @@ void initDB( int argc, char** argv, CreateContext* ctx )
     ctx->pr1 = (pacbio_read*)malloc( sizeof( pacbio_read ) );
     ctx->pr2 = (pacbio_read*)malloc( sizeof( pacbio_read ) );
 
-    initPacbioRead( ctx->pr1, ctx->createTracks );
-    initPacbioRead( ctx->pr2, ctx->createTracks );
+    initPacbioRead( ctx->pr1, ctx->t_create_n );
+    initPacbioRead( ctx->pr2, ctx->t_create_n );
 
     ctx->rmax = MAX_NAME + 60000;
     ctx->read = (char*)malloc( ctx->rmax + 1 );
@@ -677,6 +715,7 @@ static void readFastaFile( CreateContext* ctx, char* name )
         fprintf( stderr, "File %s.fasta, Line 1: Fasta line is too long (> %d chars)\n", core, MAX_NAME - 2 );
         errorExit( ctx );
     }
+
     if ( !eof && ctx->read[ 0 ] != '>' )
     {
         fprintf( stderr, "File %s.fasta, Line 1: First header in fasta file is missing\n", core );
@@ -708,7 +747,7 @@ static void readFastaFile( CreateContext* ctx, char* name )
         while ( !eof )
         {
             // parse header
-            parse_header( ctx->read + ( rlen + 1 ), prNext, ctx->createTracks );
+            parse_header( ctx, ctx->read + ( rlen + 1 ), prNext );
             prNext->seqIDinFasta += 1;
 
             rlen = 0;
@@ -736,12 +775,17 @@ static void readFastaFile( CreateContext* ctx, char* name )
                     }
                 }
 
-                if ( line[linelen - 1] == '\n' )
+                if ( line[0] == '>' )
                 {
-                    linelen -= 1;
+                    memcpy(ctx->read + rlen, line, linelen + 1);
                 }
+                else if ( line[linelen - 1] == '\n' )
+                {
+                    line[linelen - 1] = '\0';
+                    linelen -= 1;
 
-                memcpy(ctx->read + rlen, line, linelen);
+                    memcpy(ctx->read + rlen, line, linelen);
+                }
 
                 nline += 1;
 
@@ -762,7 +806,7 @@ static void readFastaFile( CreateContext* ctx, char* name )
                 continue;
             }
 
-            if ( ctx->createTracks && ctx->useFullHqReadsOnly )
+            if ( ctx->t_create_n && ctx->useFullHqReadsOnly )
             {
                 int i;
 
@@ -934,7 +978,7 @@ static void updateBlockDBOffsets( CreateContext* ctx )
 
 static void usage(const char* progname)
 {
-    fprintf( stderr, "usage: %s [-vabQc] [-x <int>] <path:db> (-f file  | <path:string> <input:fasta> ...)\n", progname );
+    fprintf( stderr, "usage: %s [-vabQ] [-c <track>] [-x <int>] <path:db> (-f file  | <path:string> <input:fasta> ...)\n", progname );
     fprintf( stderr, "options: -v ... verbose\n" );
     fprintf( stderr, "         -Q ... only use pacbio reads with readtype FullHqRead\n" );
     fprintf( stderr, "         -a ... append new reads to new block\n" );
@@ -949,7 +993,7 @@ static void parseOptions( int argc, char* argv[], CreateContext* ctx )
     // set default values
     ctx->VERBOSE               = 0;
     ctx->useFullHqReadsOnly    = 0;
-    ctx->createTracks          = 0;
+    // ctx->createTracks          = 0;
     ctx->BEST                  = 0;
     ctx->appendReadsToNewBlock = 0;
     ctx->opt_min_length        = DEF_OPT_X;
@@ -959,7 +1003,7 @@ static void parseOptions( int argc, char* argv[], CreateContext* ctx )
     int c;
     opterr = 0;
 
-    while ( ( c = getopt( argc, argv, "vcabQx:f:" ) ) != -1 )
+    while ( ( c = getopt( argc, argv, "vc:abQx:f:" ) ) != -1 )
     {
         switch ( c )
         {
@@ -972,7 +1016,17 @@ static void parseOptions( int argc, char* argv[], CreateContext* ctx )
                 break;
 
             case 'c':
-                ctx->createTracks = 1;
+                // ctx->createTracks = 1;
+
+                if ( ctx->t_create_n + 1 >= ctx->t_create_max )
+                {
+                    ctx->t_create_max += 10;
+                    ctx->t_create = realloc( ctx->t_create, sizeof(char*) * ctx->t_create_max );
+                }
+
+                ctx->t_create[ ctx->t_create_n ] = optarg;
+                ctx->t_create_n += 1;
+
                 break;
 
             case 'x':

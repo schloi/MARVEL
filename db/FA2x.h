@@ -36,6 +36,10 @@ typedef struct
     track_anno** t_anno;
     track_data** t_data;
 
+    int t_create_max;
+    int t_create_n;
+    char** t_create;
+
     int* t_max_anno;
     int* t_max_data;
     int* t_cur_anno;
@@ -48,7 +52,7 @@ typedef struct
     int appendReadsToNewBlock;
     int lastParameterIdx;
     int useFullHqReadsOnly;
-    int createTracks;
+    // int createTracks;
 
     FILE* IFILE;
 

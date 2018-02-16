@@ -35,7 +35,7 @@ q.block("{path}/LAfix -g -1 {db} {db}.{block}.las {db}.{block}.fixed.fasta")
 q.single("!cat {db}.*.fixed.fasta > {db}.fixed.fasta")
 
 # create a new Database of fixed reads (-j numOfThreads, -g genome size)
-q.single("{path_scripts}/DBprepare.py -s 50 -r 2 -j 4 -g 4600000 {db_fixed} {db}.fixed.fasta", db_fixed = DB_FIX)
+q.single("{path_scripts}/DBprepare.py -c source -s 50 -r 2 -j 4 -g 4600000 {db_fixed} {db}.fixed.fasta", db_fixed = DB_FIX)
 
 q.process()
 
@@ -97,13 +97,9 @@ q.single("{path}/OGbuild -t trim1 {db} {db}.filtered.las {db}.graphml")
 q.single("{path_scripts}/OGtour.py -c {db} {db}.graphml")
 
 q.single("{path}/LAcorrect -j 4 -r {db}.tour.rids {db} {db}.filtered.las {db}.corrected")
-q.single("{path}/FA2db -c {db}_CORRECTED [expand:{db}.corrected.*.fasta]")
+q.single("{path}/FA2db -c source -c postrace {db}_CORRECTED [expand:{db}.corrected.*.fasta]")
 
 ##### create contig fasta files
 q.single("{path_scripts}/tour2fasta.py -c {db}_CORRECTED -t trim1 {db} {db}.tour.graphml {db}.tour.paths")
-
-### optional: create a layout of the overlap graph which can viewed in a Browser (svg) or Gephi (dot)
-# q.single("{path}/OGlayout -R {db}.tour.graphml {db}.tour.layout.svg")
-q.single("{path}/OGlayout -R {db}.tour.graphml {db}.tour.layout.dot")
 
 q.process()
