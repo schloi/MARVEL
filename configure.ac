@@ -44,7 +44,7 @@ AC_ARG_ENABLE(versioned-dirs, [  --enable-versioned-dirs         enable versione
   ],[ ac_enable_versioned=no])
 
 
-AC_PYTHON_MODULE([networkx])
+AC_PYTHON_MODULE_VERSION([networkx], [2.1])
 
 # Checks for libraries.
 AX_LIB_HDF5()

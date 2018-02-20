@@ -10,6 +10,12 @@ For questions, suggestions and complaints please contact [s.schloissnig@gmail.co
 
 I am in the process of leaving my current place of work and will most likely have limited access to compute resources in February. This means, bug fixes that require testing on non-trivial genomes might take a while before they make it into the repository. So don't despair if your issue report has been pending for a couple of days.
 
+## REQUIREMENTS
+
+- GTK3 3.x (optional)
+- libhdf5 (optional)
+- networkx 2.1+ (Python library)
+
 ## SOURCE CODE ORGANIZATION
 
 Most of the codebase is in C with some utility scripts written in Python. Often Python is used to develop prototypes and which are then moved to a C implementation in case performance is sub-par or spare time is available. Due to this two track development Python based interfaces to access the most commonly used file formats the various tools produce are offered.
