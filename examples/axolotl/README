@@ -86,7 +86,7 @@ for each database block
 TKmerge -d AXOLOTL_FIX repeats
 
 # merge duplicate & overlapping annotation repeat annotation and masking server output
-TKcombine {db} frepeats repeats maskc maskr
+TKcombine AXOLOTL_FIX frepeats repeats maskc maskr
 
 # remove gaps (ie. due to chimeric reads, ...)
 for each database block
