@@ -37,7 +37,7 @@ TKmerge -d SMED q
 TKmerge -d SMED trim
 
 for each SMED.[0..database blocks].las
-    LAfix -c -x 4000 SMED SMED.<block>.las SMED.<block>.fixed.fasta
+    LAfix -x 4000 SMED SMED.<block>.las SMED.<block>.fixed.fasta
 
 ##### ASSEMBLY PHASE
 
