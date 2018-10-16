@@ -26,7 +26,8 @@
 
 #define DEF_ARG_X    1000
 #define DEF_ARG_G     500   // don't patch gaps above a certain size
-#define DEF_ARG_Q      28   // low quality cutoff
+#define DEF_ARG_QQ     28   // low quality cutoff
+#define DEF_ARG_Q    TRACK_Q
 
 // settings
 
@@ -67,9 +68,11 @@ typedef struct
     int trim;
     int maxspanners;
     int minsupport;
+    int a_anno_only;
 
     HITS_TRACK* qtrack;
-    char *trimName;
+    char* trimName;
+    char* qName;
     HITS_TRACK* trimtrack;
 
     HITS_TRACK** convertTracks;
@@ -93,6 +96,11 @@ typedef struct
     char** qv_patched;
 
     int* apatches;
+
+    // precomputed spanners
+
+    uint16_t* spanners;
+    uint64_t allocspanners;
 
 } FixContext;
 
@@ -122,9 +130,9 @@ static void fix_pre(PassContext* pctx, FixContext* fctx)
 
     fctx->twidth = pctx->twidth;
 
-    if ( !(fctx->qtrack = track_load(fctx->db, TRACK_Q)) )
+    if ( !(fctx->qtrack = track_load(fctx->db, fctx->qName)) )
     {
-        fprintf(stderr, "failed to open track %s\n", TRACK_Q);
+        fprintf(stderr, "failed to open track %s\n", fctx->qName);
         exit(1);
     }
 
@@ -186,6 +194,7 @@ static void fix_post(PassContext* pctx, FixContext* fctx)
     }
 
     free(fctx->apatches);
+    free(fctx->spanners);
 }
 
 static int cmp_gaps(const void* x, const void* y)
@@ -225,26 +234,44 @@ static int spanners_interval(Overlap* ovls, int novl, int b, int e)
     return span;
 }
 
-static int spanners_point(Overlap* ovls, int novl, int p, int max)
+static void spanners_compute(FixContext* fctx, Overlap* ovls, int novls)
 {
-    int span = 0;
-    int i;
-    for (i = 0; i < novl; i++)
+    uint16_t* spanners = fctx->spanners;
+    uint64_t allocspanners = fctx->allocspanners;
+    uint64_t rlen = DB_READ_LEN(fctx->db, ovls->aread);
+
+    if ( rlen >= allocspanners )
     {
-        Overlap* ovl = ovls + i;
-
-        if (ovl->path.abpos < p - MIN_SPAN && ovl->path.aepos > p + MIN_SPAN)
-        {
-            span++;
-
-            if ( span > max )
-            {
-                break;
-            }
-        }
+        allocspanners = fctx->allocspanners = rlen * 1.2 + 1000;
+        spanners = fctx->spanners = realloc(spanners, allocspanners * sizeof(uint16_t) );
     }
 
-    return (span > max);
+    bzero( spanners, rlen * sizeof(uint16_t) );
+
+    int i;
+    for ( i = 0; i < novls; i++)
+    {
+        Overlap* ovl = ovls + i;
+        int ab = ovl->path.abpos + MIN_SPAN;
+        int ae = ovl->path.aepos - MIN_SPAN;
+
+        while ( ab < ae )
+        {
+            if ( spanners[ab] < UINT16_MAX )
+            {
+                spanners[ab] += 1;
+            }
+
+            ab += 1;
+        }
+    }
+}
+
+static int spanners_point(FixContext* fctx, int p)
+{
+    uint16_t* spanners = fctx->spanners;
+
+    return spanners[p];
 }
 
 static int filter_flips(FixContext* fctx, Overlap* ovls, int novl, int* trim_b, int* trim_e)
@@ -402,8 +429,10 @@ static int filter_flips(FixContext* fctx, Overlap* ovls, int novl, int* trim_b, 
     return trimmed;
 }
 
-static int fix_process(void* _ctx, Overlap* ovl, int novl)
+static int fix_handler(void* _ctx, Overlap* ovl, int novl)
 {
+    printf("%d %d\n", ovl->aread, novl);
+
 // #warning "REMOVE ME"
 //    if ( ovl->aread != 166815 ) return 1;
 
@@ -475,6 +504,8 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
         exit(1);
     }
 
+    spanners_compute(fctx, ovl, novl);
+
     // locate breaks in A and move outwards to the next segment boundary
 
     int i;
@@ -539,30 +570,42 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
                 be = blen - t;
             }
 
-            int weak_b = 0;
-            track_data* qb = qdata + (qanno[ovl[i].bread] / sizeof(track_data));
-            int beg = bb / twidth;
-            int end = be / twidth + 1;
-            int q = 0;
-            j = beg;
-            while (j < end)
+            int diff;
+            if ( !fctx->a_anno_only )
             {
-                if (qb[j] == 0)
+                int weak_b = 0;
+                track_data* qb = qdata + (qanno[ovl[i].bread] / sizeof(track_data));
+                int beg = bb / twidth;
+                int end = be / twidth + 1;
+                int q = 0;
+                j = beg;
+                while (j < end)
                 {
-                    weak_b = 1;
+                    if (qb[j] == 0)
+                    {
+                        weak_b = 1;
+                    }
+
+                    q += qb[j];
+                    j++;
                 }
 
-                q += qb[j];
-                j++;
-            }
+                if (weak_b)
+                {
+                    continue;
+                }
 
-            if (weak_b)
+                diff = 100.0 * q / (be - bb);
+            }
+            else
             {
-                continue;
+                // TODO: can this be done more accurately ???
+
+                diff = 100.0 * ( ocur->path.bepos - ocur->path.bbpos ) / ocur->path.diffs * ( be - bb );
             }
 
-            if ( spanners_point(ovl, novl, ab * twidth, maxspanners) &&
-                 spanners_point(ovl, novl, ae * twidth, maxspanners) )
+            if ( spanners_point(fctx, ab * twidth) > maxspanners &&
+                 spanners_point(fctx, ae * twidth) > maxspanners )
             {
                 continue;
             }
@@ -603,7 +646,7 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
             data[dcur].bb = bb;
             data[dcur].be = be;
             data[dcur].support = 1;
-            data[dcur].diff = 100.0 * q / (be - bb);
+            data[dcur].diff = diff;
             data[dcur].comp = (ovl[i].flags & OVL_COMP);
 
             // printf("OVL %d..%d -> %d..%d\n", ovl[i-1].path.abpos, ovl[i-1].path.aepos, ovl[i].path.abpos, ovl[i].path.aepos);
@@ -813,31 +856,44 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
                 }
 
                 // get Q in B read
-                track_data* qb = qdata + (qanno[ovl[j].bread] / sizeof(track_data));
-                int beg = bb / twidth;
-                int end = be / twidth;
-                int q = 0;
-                k = beg;
-                while (k < end)
+
+                float q_new;
+
+                if ( fctx->a_anno_only )
                 {
-                    if (qb[k] == 0)
+                    // TODO: can this be done more accurately
+
+                    q_new =  100.0 * ovl[j].path.diffs / ( ovl[j].path.bepos - ovl[j].path.bbpos ) * ( be - bb );
+                }
+                else
+                {
+                    track_data* qb = qdata + (qanno[ovl[j].bread] / sizeof(track_data));
+                    int beg = bb / twidth;
+                    int end = be / twidth;
+                    int q = 0;
+                    k = beg;
+                    while (k < end)
                     {
-                        q = 0;
-                        break;
+                        if (qb[k] == 0)
+                        {
+                            q = 0;
+                            break;
+                        }
+
+                        q += qb[k];
+                        k++;
                     }
 
-                    q += qb[k];
-                    k++;
-                }
+                    if (q == 0)
+                    {
+                        continue;
+                    }
 
-                if (q == 0)
-                {
-                    continue;
+                    q_new = 100.0 * q / (end - beg);
                 }
 
                 // printf("%d..%d %d..%d\n", bb, be, beg, end);
 
-                float q_new = 1.0 * q / (end - beg);
 
                 if (ovl_q_min == -1 || q_new < q_min)
                 {
@@ -875,6 +931,12 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
                                                         ovlrep->path.bbpos, ovlrep->path.bepos,
                                                         q_min);
 #endif
+
+        if ( dcur >= dmax )
+        {
+            dmax = dmax * 1.2 + 1000;
+            data = realloc(data, sizeof(Gap) * dmax);
+        }
 
         data[dcur].bb = bb_q_min;
         data[dcur].be = be_q_min;
@@ -1286,17 +1348,19 @@ static int fix_process(void* _ctx, Overlap* ovl, int novl)
 
 static void usage()
 {
-    printf( "usage: [-l] [-x n] [-Q n] [-g n] [ [-c track] ...] [-t track] [-q file] database input.las patched.fasta\n\n" );
+    printf( "usage: [-al] [-gQx n] [ [-c track] ...] [-qt track] [-f file] database input.las patched.fasta\n\n" );
 
     printf( "Patches larger sequencing errors in the reads based on the alignments.\n" );
     printf( "Errors include polymerase strand changes, missed adaptors, missing sequence\n" );
     printf( "excessively noisy sequence and inserts of random noise.\n\n" );
 
     printf( "options:\n" );
+    printf( "   -a        only use annotation for the A read\n" );
     printf( "   -c track  adjust the track intervals based on the changes made to the read\n" );
-    printf( "   -q file   adjust the quality values based on the change made to the read and write them to a file\n" );
+    printf( "   -f file   adjust the quality values based on the change made to the read and write them to a file\n" );
     printf( "   -x n      minimum read length after patching\n" );
-    printf( "   -Q n      minimum segment quality (default %d)\n", DEF_ARG_Q );
+    printf( "   -q track  quality track (default %s)\n", DEF_ARG_Q );
+    printf( "   -Q n      minimum segment quality (default %d)\n", DEF_ARG_QQ );
     printf( "   -g n      maximum gap in the read that gets patched (default %d, -1 to patch all gaps)\n", DEF_ARG_G );
     printf( "   -t track  trim reads based on a track and the -Q value\n" );
     printf( "   -l        enable the low-coverage mode, recommended for <= 10x\n" );
@@ -1312,9 +1376,11 @@ int main(int argc, char* argv[])
     bzero(&fctx, sizeof(FixContext));
     fctx.db = &db;
     fctx.minlen = DEF_ARG_X;
-    fctx.lowq = DEF_ARG_Q;
+    fctx.lowq = DEF_ARG_QQ;
     fctx.maxgap = DEF_ARG_G;
     fctx.trimName = NULL;
+    fctx.qName = DEF_ARG_Q;
+    fctx.a_anno_only = 0;
 
     // process arguments
 
@@ -1323,12 +1389,20 @@ int main(int argc, char* argv[])
     int lowc = 0;
     opterr = 0;
 
-    while ((c = getopt(argc, argv, "lx:q:c:Q:g:t:")) != -1)
+    while ((c = getopt(argc, argv, "alf:x:c:q:Q:g:t:")) != -1)
     {
         switch (c)
         {
+            case 'a':
+                      fctx.a_anno_only = 1;
+                      break;
+
             case 'l':
                       lowc = 1;
+                      break;
+
+            case 'q':
+                      fctx.qName = optarg;
                       break;
 
             case 'Q':
@@ -1343,7 +1417,7 @@ int main(int argc, char* argv[])
                       fctx.minlen = atoi(optarg);
                       break;
 
-            case 'q':
+            case 'f':
                       pathQvOut = optarg;
                       break;
 
@@ -1452,7 +1526,7 @@ int main(int argc, char* argv[])
 
     fix_pre(pctx, &fctx);
 
-    pass(pctx, fix_process);
+    pass(pctx, fix_handler);
 
     fix_post(pctx, &fctx);
 
