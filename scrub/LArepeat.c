@@ -8,8 +8,6 @@
  *  -n ... max number of overlap groups that should be used for the coverage estimate
  *  -m ... merge consecutive repeats with distance less than -m
  *
- *  Date   :  February 2017
- *
  *  Author :  MARVEL Team
  *
  *******************************************************************************************/
@@ -33,11 +31,13 @@
 
 // constants
 
-#define MAX_COVERAGE 100        // max for coverage histogram
-#define MIN_OVERLAP_GROUPS 1000 // min number of groups for coverage estimate
+#define BINSIZE_COVERAGE 100
 
-#define EDGE_TAGGING_DIST   1000        // max distance of the repeat to the repeat ends
-#define EDGE_TAGGING_FUZZ    200        // number of wiggle bases for alignment termination at repeat ends
+#define MAX_COVERAGE 100        // max for coverage histogram
+#define MIN_OVERLAP_GROUPS 10 // min number of groups for coverage estimate
+
+// #define EDGE_TAGGING_DIST 1000 // max distance of the repeat to the repeat ends
+// #define EDGE_TAGGING_FUZZ 200  // number of wiggle bases for alignment termination at repeat ends
 
 #define DEFAULT_RP_XCOV_ENTER 2.0
 #define DEFAULT_RP_XCOV_LEAVE 1.7
@@ -46,8 +46,11 @@
 #define DEFAULT_COV_MAX_READS -1
 
 #define DEF_ARG_IC 0
-#define DEF_ARG_O  0
+#define DEF_ARG_O 0
 #define DEF_ARG_LL 0
+
+#define DEF_ARG_R 0
+#define DEF_ARG_RR 0
 
 // toggles
 
@@ -65,18 +68,23 @@ typedef struct
     int inccov;   // include coverage in the resulting track
     int min_aln_len;
     int min_rlen;
+    int min_repeat_len;
+    int max_repeat_len;
 
     // coverage pass
 
-    int64 cov_histo[ MAX_COVERAGE ];
-    int64 cov_bases;
-    int64 cov_inactive_bases;
+    uint64_t cov_histo[ MAX_COVERAGE ];
+    uint64_t cov_bases;
+    uint64_t cov_inactive_bases;
     char* cov_read_active;
+
+    uint64_t* cov_binned;
+
     int cov_areads;
     int cov_max_areads;
 
-    int64 bases;
-    int64 reads;
+    uint64_t bases;
+    uint64_t reads;
 
     // repeat pass
 
@@ -90,8 +98,8 @@ typedef struct
     int rp_merge_dist;
 
     int rp_merged;
-    int64 rp_bases;
-    int64 rp_repeat_bases;
+    uint64_t rp_bases;
+    uint64_t rp_repeat_bases;
 
     char* rp_track;
     int rp_block;
@@ -125,15 +133,16 @@ static void pre_coverage( RepeatContext* ctx )
     printf( ANSI_COLOR_GREEN "PASS estimate coverage\n" ANSI_COLOR_RESET );
 #endif
 
-    ctx->cov_read_active = (char*)malloc( DB_READ_MAXLEN( ctx->db ) );
+    ctx->cov_read_active = malloc( DB_READ_MAXLEN( ctx->db ) );
+    ctx->cov_binned = malloc( sizeof(uint64_t) * ( DB_READ_MAXLEN(ctx->db) + BINSIZE_COVERAGE ) / BINSIZE_COVERAGE );
 
-    bzero( ctx->cov_histo, sizeof( int64 ) * MAX_COVERAGE );
+    bzero( ctx->cov_histo, sizeof( int64_t ) * MAX_COVERAGE );
 }
 
 static void post_coverage( RepeatContext* ctx )
 {
     int max = 0;
-    int cov = ctx->cov_histo[ 0 ];
+    uint64_t cov = ctx->cov_histo[ 0 ];
 
     ctx->avg_rlen = ctx->bases / ctx->reads;
 
@@ -149,55 +158,90 @@ static void post_coverage( RepeatContext* ctx )
 
     ctx->cov = max;
     free( ctx->cov_read_active );
+    free( ctx->cov_binned );
 
 #ifdef VERBOSE
     for ( j = 0; j < MAX_COVERAGE; j++ )
     {
-        printf( "COV %d READS %lld\n", j, ctx->cov_histo[ j ] );
+        printf( "COV %d READS %" PRIu64 "\n", j, ctx->cov_histo[ j ] );
     }
 
     printf( "MAX %d\n", max );
-    printf( "INACTIVE %lld (%d%%) OF %lld\n",
+    printf( "INACTIVE %" PRIu64 " (%d%%) OF %" PRIu64 "\n",
             ctx->cov_inactive_bases, (int)( 100.0 * ctx->cov_inactive_bases / ctx->cov_bases ), ctx->cov_bases );
     printf( "AVG_RLEN %d\n", ctx->avg_rlen );
 #endif
 }
 
-static int handler_coverage( void* _ctx, Overlap* ovl, int novl )
+static int handler_coverage( void* _ctx, Overlap* ovls, int novl )
 {
     RepeatContext* ctx = (RepeatContext*)_ctx;
+    char* cov_read_active = ctx->cov_read_active;
+    uint64_t* cov_binned = ctx->cov_binned;
+    uint64_t* cov_histo = ctx->cov_histo;
+    int aread = ovls->aread;
 
-    int ovlArlen = DB_READ_LEN( ctx->db, ovl->aread );
+    int ovlArlen = DB_READ_LEN( ctx->db, aread );
     ctx->bases += ovlArlen;
     ctx->reads++;
 
     int i;
-    int64 cov;
-    int64 bases = 0;
+    int64_t cov;
+    int64_t bases = 0;
 
-    bzero( ctx->cov_read_active, DB_READ_MAXLEN( ctx->db ) );
+    bzero( cov_read_active, ovlArlen );
+    bzero( cov_binned, sizeof(uint64_t) * ( DB_READ_MAXLEN(ctx->db) + BINSIZE_COVERAGE ) / BINSIZE_COVERAGE );
 
     for ( i = 0; i < novl; i++ )
     {
-        if ( !( DB_READ_FLAGS( ctx->db, ovl[ i ].bread ) & DB_BEST ) || ( ovl[ i ].flags & OVL_DISCARD ) )
+        Overlap* ovl = ovls + i;
+
+        if ( !( DB_READ_FLAGS( ctx->db, ovl->bread ) & DB_BEST ) || ( ovl->flags & OVL_DISCARD ) )
         {
             continue;
         }
 
-        if ( ovl[ i ].aread == ovl[ i ].bread )
+        if ( aread == ovl->bread )
             continue;
 
-        bases += ovl[ i ].path.bepos - ovl[ i ].path.bbpos;
+        bases += ovl->path.bepos - ovl->path.bbpos;
 
-        memset( ctx->cov_read_active + ovl[ i ].path.abpos, 1, ovl[ i ].path.aepos - ovl[ i ].path.abpos );
+        memset( cov_read_active + ovl->path.abpos, 1, ovl->path.aepos - ovl->path.abpos );
+
+        int j;
+        for ( j = ovl->path.abpos / BINSIZE_COVERAGE;
+              j < ovl->path.aepos / BINSIZE_COVERAGE;
+              j += 1)
+        {
+            cov_binned[j] += 1;
+        }
+
     }
 
     int active = 0;
+    int bin_active = 0;
     for ( i = 0; i < ovlArlen; i++ )
     {
-        active += ctx->cov_read_active[ i ];
+        if ( i % BINSIZE_COVERAGE == 0 && i > 0 )
+        {
+            if ( bin_active == BINSIZE_COVERAGE )
+            {
+                cov = cov_binned[ i / BINSIZE_COVERAGE - 1];
+
+                if ( cov < MAX_COVERAGE )
+                {
+                    cov_histo[ cov ] += 1;
+                }
+            }
+
+            bin_active = 0;
+        }
+
+        bin_active += cov_read_active[ i ];
+        active += cov_read_active[ i ];
     }
 
+    /*
     if ( active > 0 )
     {
         cov = bases / active;
@@ -209,13 +253,16 @@ static int handler_coverage( void* _ctx, Overlap* ovl, int novl )
 
     if ( cov < MAX_COVERAGE )
     {
-        ctx->cov_histo[ cov ]++;
+        cov_histo[ cov ]++;
     }
+    */
 
     ctx->cov_bases += ovlArlen;
     ctx->cov_inactive_bases += ovlArlen - active;
 
     ctx->cov_areads++;
+
+    printf("%" PRIu64 " %" PRIu64 "\n", ctx->cov_bases, ctx->cov_inactive_bases);
 
     if ( ctx->cov_areads > ctx->cov_max_areads )
     {
@@ -266,26 +313,28 @@ static void post_repeats( RepeatContext* ctx )
     printf( "COV_LEAVE %.1f\n", ctx->rp_xcov_leave );
     printf( "REGIONS %d\n", ( ctx->rp_dcur ) / ( 2 + ctx->inccov ) );
     printf( "MERGED %d\n", ctx->rp_merged );
-    printf( "BASES_TOTAL %lld\n", ctx->rp_bases );
-    printf( "BASES_REPEAT %lld\n", ctx->rp_repeat_bases );
+    printf( "BASES_TOTAL %" PRIu64 "\n", ctx->rp_bases );
+    printf( "BASES_REPEAT %" PRIu64 "\n", ctx->rp_repeat_bases );
     printf( "BASES_REPEAT_PERCENT %d%%\n", (int)( ctx->rp_repeat_bases * 100.0 / ctx->rp_bases ) );
 #endif
 }
 
 static int handler_repeats( void* _ctx, Overlap* ovl, int novl )
 {
-    RepeatContext* ctx = (RepeatContext*)_ctx;
-    int* rp_events = ctx->rp_events;
+    RepeatContext* ctx       = (RepeatContext*)_ctx;
+    int* rp_events           = ctx->rp_events;
     uint64_t rp_repeat_bases = 0;
-    uint64_t rp_merged = 0;
-    int rp_merge_dist = ctx->rp_merge_dist;
+    uint64_t rp_merged       = 0;
+    int rp_merge_dist        = ctx->rp_merge_dist;
+
+    // if (ovl->aread > 1000) return 0;
 
     int alen = DB_READ_LEN( ctx->db, ovl->aread );
     ctx->rp_bases += alen;
 
     if ( 2 * novl > ctx->rp_emax )
     {
-        ctx->rp_emax   = 1.2 * ctx->rp_emax + 2 * novl;
+        ctx->rp_emax   = 2.2 * novl + 1000;
         ctx->rp_events = rp_events = (int*)realloc( rp_events, sizeof( int ) * ctx->rp_emax );
     }
 
@@ -305,12 +354,12 @@ static int handler_repeats( void* _ctx, Overlap* ovl, int novl )
             continue;
         }
 
-        if ( ovl[i].path.aepos - ovl[i].path.abpos < ctx->min_aln_len )
+        if ( ovl[ i ].path.aepos - ovl[ i ].path.abpos < ctx->min_aln_len )
         {
             continue;
         }
 
-        if ( alen < ctx->min_rlen || DB_READ_LEN(ctx->db, ovl[i].bread) < ctx->min_rlen )
+        if ( alen < ctx->min_rlen || DB_READ_LEN( ctx->db, ovl[ i ].bread ) < ctx->min_rlen )
         {
             continue;
         }
@@ -358,15 +407,26 @@ static int handler_repeats( void* _ctx, Overlap* ovl, int novl )
                 printf( "repeat <- %d @ %d\n", a, -( rp_events[ i ] ) );
 #endif
 
-                rp_anno[ a ] += ( inccov + 1 ) * sizeof( track_data );
+                int rlen = ( -1 ) * rp_events[ i ] - rp_data[ rp_dcur - 1 ];
 
-                rp_data[ rp_dcur++ ] = -( rp_events[ i ] );
-
-                rp_repeat_bases += rp_data[ rp_dcur - 1 ] - rp_data[ rp_dcur - 2 ];
-
-                if ( inccov )
+                if ( ( ctx->min_repeat_len == 0 || rlen > ctx->min_repeat_len ) &&
+                     ( ctx->max_repeat_len == 0 || rlen < ctx->max_repeat_len ) )
                 {
-                    rp_data[ rp_dcur++ ] = span_max;
+                    // rp_anno[ a ] += ( inccov + 1 ) * sizeof( track_data );
+                    rp_anno[ a ] += ( inccov + 2 ) * sizeof( track_data );
+
+                    rp_data[ rp_dcur++ ] = -( rp_events[ i ] );
+
+                    rp_repeat_bases += rlen;
+
+                    if ( inccov )
+                    {
+                        rp_data[ rp_dcur++ ] = span_max;
+                    }
+                }
+                else
+                {
+                    rp_dcur -= 1;
                 }
 
                 in_repeat = 0;
@@ -382,7 +442,7 @@ static int handler_repeats( void* _ctx, Overlap* ovl, int novl )
 
                 if ( rp_dcur + 3 >= ctx->rp_dmax )
                 {
-                    ctx->rp_dmax = 1.2 * ctx->rp_dmax + 20;
+                    ctx->rp_dmax = 1.2 * rp_dcur + 20;
                     ctx->rp_data = rp_data = (int*)realloc( rp_data, sizeof( int ) * ctx->rp_dmax );
                 }
 
@@ -395,15 +455,15 @@ static int handler_repeats( void* _ctx, Overlap* ovl, int novl )
 
                     span_max = rp_data[ rp_dcur - 1 ];
                     rp_dcur -= ( inccov + 1 );
-                    rp_anno[ a ] -= 2 * sizeof( track_data );
+                    // rp_anno[ a ] -= 2 * sizeof( track_data );
 
                     rp_merged++;
                 }
                 else
                 {
                     span_max = 0;
-                    rp_anno[ a ] += 1 * sizeof( track_data );
-                    rp_data[ rp_dcur++ ] =rp_events[ i ];
+                    // rp_anno[ a ] += 1 * sizeof( track_data );
+                    rp_data[ rp_dcur++ ] = rp_events[ i ];
                 }
 
                 in_repeat = 1;
@@ -416,7 +476,7 @@ static int handler_repeats( void* _ctx, Overlap* ovl, int novl )
     {
         for ( i = ctx->rp_dcur; i < rp_dcur; i += ( 2 + inccov ) )
         {
-            if ( i != ctx - rp_dcur )
+            if ( i != ctx->rp_dcur )
             {
                 printf( " " );
             }
@@ -435,29 +495,36 @@ static int handler_repeats( void* _ctx, Overlap* ovl, int novl )
     }
 #endif
 
-    for ( i = ctx->rp_dcur ; i < rp_dcur ; i += ( 2 + inccov) )
+    // TODO: CHECHK --- predates repeat homogenization and is now obsolete
+    /*
+    for ( i = ctx->rp_dcur; i < rp_dcur; i += ( 2 + inccov ) )
     {
-        int rb = rp_data[i];
-        int re = rp_data[i+1];
+        int rb = rp_data[ i ];
+        int re = rp_data[ i + 1 ];
 
         if ( rb > 0 && rb < EDGE_TAGGING_DIST && re < alen - EDGE_TAGGING_DIST )
         {
             int support = 0;
 
-            for ( j = 0; j < novl; j++)
+            for ( j = 0; j < novl; j++ )
             {
                 Overlap* o = ovl + j;
 
-                if ( o->path.aepos > re - EDGE_TAGGING_FUZZ && o->path.aepos < re + EDGE_TAGGING_FUZZ && o->path.abpos == 0 )
+                if ( o->path.aepos > re - EDGE_TAGGING_FUZZ &&
+                     o->path.aepos < re + EDGE_TAGGING_FUZZ &&
+                     o->path.abpos == 0 )
                 {
                     support += 1;
-                }
-            }
 
-            if ( support > 2 )
-            {
-                // printf("%7d repeat %5d..%5d extended to %5d..%5d\n", a, rp_data[i], rp_data[i+1], 0, rp_data[i+1]);
-                rp_data[i] = 0;
+                    if ( support > 2 )
+                    {
+#ifdef DEBUG
+                        printf("%7d repeat %5d..%5d extended to %5d..%5d\n", a, rp_data[i], rp_data[i+1], 0, rp_data[i+1]);
+#endif
+                        rp_data[ i ] = 0;
+                        break;
+                    }
+                }
             }
         }
 
@@ -465,24 +532,29 @@ static int handler_repeats( void* _ctx, Overlap* ovl, int novl )
         {
             int support = 0;
 
-            for ( j = 0; j < novl; j++)
+            for ( j = 0; j < novl && support <= 2; j++ )
             {
                 Overlap* o = ovl + j;
 
-                if ( o->path.abpos > rb - EDGE_TAGGING_FUZZ && o->path.abpos < rb + EDGE_TAGGING_FUZZ && o->path.aepos == alen )
+                if ( o->path.abpos > rb - EDGE_TAGGING_FUZZ &&
+                     o->path.abpos < rb + EDGE_TAGGING_FUZZ &&
+                     o->path.aepos == alen )
                 {
                     support += 1;
+
+                    if ( support > 2 )
+                    {
+#ifdef DEBUG
+                        printf("%7d repeat %5d..%5d extended to %5d..%5d\n", a, rp_data[i], rp_data[i+1], rp_data[i], alen);
+#endif
+                        rp_data[ i + 1 ] = alen;
+                        break;
+                    }
                 }
             }
-
-            if ( support > 2 )
-            {
-                // printf("%7d repeat %5d..%5d extended to %5d..%5d\n", a, rp_data[i], rp_data[i+1], rp_data[i], alen);
-                rp_data[i + 1] = alen;
-            }
         }
-
     }
+    */
 
     ctx->rp_dcur = rp_dcur;
     ctx->rp_repeat_bases += rp_repeat_bases;
@@ -493,7 +565,7 @@ static int handler_repeats( void* _ctx, Overlap* ovl, int novl )
 
 static void usage()
 {
-    printf( "usage: [-h f] [-l f] [-t track] [-b n] [-c n] [-m n] [-n n] [-o n] database input.las\n\n" );
+    printf( "usage: [-hl f] [-t track] [-bcmnorR n] database input.las\n\n" );
 
     printf( "Detects repeat elements based on coverage anomalies in reads and creates an annotation track with them.\n\n" );
 
@@ -502,14 +574,17 @@ static void usage()
 
     printf( "         -m n  merge repeats less then n bases apart (%d)\n", DEFAULT_RP_MERGE_DIST );
 
-    printf( "         -o n  only use overlaps longer than n\n");
-    printf( "         -L n  only use reads longer then n\n");
+    printf( "         -o n  only use overlaps longer than n\n" );
+    printf( "         -L n  only use reads longer then n\n" );
 
     printf( "         -c n  expected coverage of the dataset. -1 auto-detect. (%d)\n", DEFAULT_COV );
     printf( "         -n n  number of a reads used for coverage estimation (%d)\n", DEFAULT_COV_MAX_READS );
 
     printf( "         -t track  name of the repeat annotation track (%s)\n", TRACK_REPEATS );
     printf( "         -b n  block number\n" );
+
+    printf( "         -r n  minimum repeat length (%d)\n", DEF_ARG_R );
+    printf( "         -R n  maximum repeat length (%d)\n", DEF_ARG_RR );
 }
 
 int main( int argc, char* argv[] )
@@ -534,21 +609,31 @@ int main( int argc, char* argv[] )
     rctx.inccov         = DEF_ARG_IC;
     rctx.min_aln_len    = DEF_ARG_O;
     rctx.min_rlen       = DEF_ARG_LL;
+    rctx.min_repeat_len = DEF_ARG_R;
+    rctx.max_repeat_len = DEF_ARG_RR;
 
     int c;
 
     opterr = 0;
 
-    while ( ( c = getopt( argc, argv, "Ch:l:L:m:c:n:t:b:o:" ) ) != -1 )
+    while ( ( c = getopt( argc, argv, "Ch:l:L:m:c:n:t:b:o:r:R:" ) ) != -1 )
     {
         switch ( c )
         {
+            case 'r':
+                rctx.min_repeat_len = atoi( optarg );
+                break;
+
+            case 'R':
+                rctx.max_repeat_len = atoi( optarg );
+                break;
+
             case 'L':
-                rctx.min_rlen = atoi(optarg);
+                rctx.min_rlen = atoi( optarg );
                 break;
 
             case 'o':
-                rctx.min_aln_len = atoi(optarg);
+                rctx.min_aln_len = atoi( optarg );
                 break;
 
             case 'C':
@@ -621,8 +706,8 @@ int main( int argc, char* argv[] )
     pctx = pass_init( fileOvlIn, NULL );
 
     pctx->split_b      = 0;
-    pctx->load_trace   = 1;
-    pctx->unpack_trace = 1;
+    pctx->load_trace   = 0;
+    pctx->unpack_trace = 0;
     pctx->data         = &rctx;
 
     Open_DB( pcPathReadsIn, &db );
