@@ -765,12 +765,12 @@ static void readFastaFile( CreateContext* ctx, char* name )
 
                 if ( rlen + linelen > (size_t)ctx->rmax )
                 {
-                    ctx->rmax = ( (int)( 1.2 * ctx->rmax ) ) + 1000 + linelen;
-                    ctx->read = (char*)realloc( ctx->read, ctx->rmax + 1 );
+                    ctx->rmax = 1.2 * (rlen + linelen) + 1000;
+                    ctx->read = realloc( ctx->read, ctx->rmax + 1 );
                     if ( ctx->read == NULL )
                     {
                         fprintf( stderr, "File %s.fasta, Line %d:", core, nline );
-                        fprintf( stderr, "Out of memory (Allocating line buffer)\n" );
+                        fprintf( stderr, "Out of memory (Allocating line buffer of %d bytes)\n", ctx->rmax );
                         errorExit( ctx );
                     }
                 }
