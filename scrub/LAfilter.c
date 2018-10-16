@@ -4,8 +4,6 @@
  *
  *  Author :  MARVEL Team
  *
- *  Date   :  May 2015
- *
  *******************************************************************************************/
 
 #include <assert.h>
@@ -16,6 +14,7 @@
 #include <sys/param.h>
 #include <unistd.h>
 
+#include "lib.ext/fgetln.h"
 #include "lib/colors.h"
 #include "lib/oflags.h"
 #include "lib/pass.h"
@@ -23,36 +22,44 @@
 #include "lib/tracks.h"
 #include "lib/trim.h"
 #include "lib/utils.h"
-#include "lib.ext/fgetln.h"
-
 
 #include "dalign/align.h"
 #include "db/DB.h"
+
+// command line defaults
 
 #define DEF_ARG_S -1
 #define DEF_ARG_T TRACK_TRIM
 #define DEF_ARG_TT 0
 #define DEF_ARG_R TRACK_REPEATS
 
+#define DEF_ARG_NN_LEN 2000
+#define DEF_ARG_NN_RATE 80
+#define DEF_ARG_NN_FUZZ 0
+
+// constants
+
 #define BIN_SIZE 100
 #define MIN_LR 500
 
-#define READ_NONE       0x0
-#define READ_DISCARD  ( 0x1 << 0 )
-#define READ_STRICT   ( 0x1 << 1 )
+// read flags, used for rules processing
+
+#define READ_NONE 0x0
+#define READ_DISCARD ( 0x1 << 0 )
+#define READ_STRICT ( 0x1 << 1 )
+
+// debug toggles
 
 #define VERBOSE
 #undef VERBOSE_STITCH
+#undef DEBUG_REPEAT_EXTENSION
+
+// macros
 
 #ifdef VERBOSE_STITCH
 #define OVL_STRAND( ovl ) ( ( ( ovl )->flags & OVL_COMP ) ? 'c' : 'n' )
 #endif
 
-#undef DEBUG_REPEAT_EXTENSION
-
-#define REMOVE_STITCH_OVL ( 1 << 0 )
-#define REMOVE_MOD_OVL ( 1 << 1 )
-#define REMOVE_TP ( 1 << 2 )
 
 typedef struct
 {
@@ -77,9 +84,20 @@ typedef struct
     int rm_cov;        // repeat modules, coverage
     int rm_aggressive; // -M
     int do_trim;
-    int downsample;
+    int contained;     // -c
 
-    int removeFlags; // 1 << 0 ... stitched overlaps, 1 << 1 ... module overlaps, 1 << 2 .. trace points
+    int hrd;      // -N
+    int hrd_len;  // -N x,-,-
+    int hrd_rate; // -N -,x,-
+    int hrd_fuzz; // -N -,-,x
+
+    // hrd
+
+    Overlap*** hrd_groups;
+    int* hrd_ngroups;
+    int* hrd_maxgroups;
+    int hrd_allocated;
+    uint16_t* hrd_mapgroup;
 
     // repeat modules - merged repeats
     int rm_merge;
@@ -103,8 +121,6 @@ typedef struct
     int* le_rbins;
     int le_maxbins;
 
-    FILE* fileSpanningReads;
-
     HITS_DB* db;
     HITS_TRACK* trackRepeat;
     HITS_TRACK* trackTrim;
@@ -121,25 +137,6 @@ typedef struct
 
 } FilterContext;
 
-extern char* optarg;
-extern int optind, opterr, optopt;
-
-static int cmp_int(const void* a, const void* b)
-{
-    return (*(int*)a) - (*(int*)b);
-}
-
-static int cmp_2int(const void* a, const void* b)
-{
-    int cmp = cmp_int(a, b);
-
-    if ( cmp )
-    {
-        return cmp;
-    }
-
-    return cmp_int( ((int*)a) + 1, ((int*)b) + 1);
-}
 
 typedef struct
 {
@@ -156,28 +153,69 @@ typedef struct
     int strict_reads_n;
 } FilterRules;
 
+
+extern char* optarg;
+extern int optind, opterr, optopt;
+
+static int cmp_int( const void* a, const void* b )
+{
+    return ( *(int*)a ) - ( *(int*)b );
+}
+
+static int cmp_2int( const void* a, const void* b )
+{
+    int cmp = cmp_int( a, b );
+
+    if ( cmp )
+    {
+        return cmp;
+    }
+
+    return cmp_int( ( (int*)a ) + 1, ( (int*)b ) + 1 );
+}
+
+static int cmp_ovl_q_desc( const void* a, const void* b )
+{
+    Overlap* o1 = *(Overlap**)a;
+    Overlap* o2 = *(Overlap**)b;
+
+    float q1 = 1.0 * o1->path.diffs / ( o1->path.aepos - o1->path.abpos );
+    float q2 = 1.0 * o2->path.diffs / ( o2->path.aepos - o2->path.abpos );
+
+    if ( q1 < q2 )
+    {
+        return 1;
+    }
+    else if ( q2 > q1 )
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
 static void fread_rules( FILE* fin, FilterRules* rules )
 {
     char* line;
     size_t len;
-    int* singles = NULL;
-    int singles_cur = 0;
-    int singles_max = 0;
-    int* multi_inc = NULL;
+    int* singles      = NULL;
+    int singles_cur   = 0;
+    int singles_max   = 0;
+    int* multi_inc    = NULL;
     int multi_inc_cur = 0;
     int multi_inc_max = 0;
-    int* multi_ex = NULL;
-    int multi_ex_cur = 0;
-    int multi_ex_max = 0;
-    int* strict = NULL;
-    int strict_cur = 0;
-    int strict_max = 0;
+    int* multi_ex     = NULL;
+    int multi_ex_cur  = 0;
+    int multi_ex_max  = 0;
+    int* strict       = NULL;
+    int strict_cur    = 0;
+    int strict_max    = 0;
 
-    while ( (line = fgetln(fin, &len)) != NULL )
+    while ( ( line = fgetln( fin, &len ) ) != NULL )
     {
         char* end = line + len;
 
-        if (len <= 1 || line[0] == '#')
+        if ( len <= 1 || line[ 0 ] == '#' )
         {
             continue;
         }
@@ -186,13 +224,13 @@ static void fread_rules( FILE* fin, FilterRules* rules )
 
         if ( mode != '-' && mode != '+' && mode != 's' )
         {
-            printf("malformed line: %*s\n", (int)(len - 1), line);
+            printf( "malformed line: %*s\n", (int)( len - 1 ), line );
             continue;
         }
 
         int single = 1;
         char* sep;
-        for ( sep = line + 1 ; sep != end ; sep++ )
+        for ( sep = line + 1; sep != end; sep++ )
         {
             if ( *sep == '-' )
             {
@@ -203,26 +241,26 @@ static void fread_rules( FILE* fin, FilterRules* rules )
 
         if ( single )
         {
-            if (mode == '-')
+            if ( mode == '-' )
             {
                 if ( singles_max == singles_cur )
                 {
                     singles_max = singles_max * 1.2 + 100;
-                    singles = realloc(singles, sizeof(int) * singles_max);
+                    singles     = realloc( singles, sizeof( int ) * singles_max );
                 }
 
-                singles[ singles_cur ] = strtoimax(line + 1, NULL, 10);
+                singles[ singles_cur ] = strtoimax( line + 1, NULL, 10 );
                 singles_cur += 1;
             }
-            else if (mode == 's')
+            else if ( mode == 's' )
             {
                 if ( strict_max == strict_cur )
                 {
                     strict_max = strict_max * 1.2 + 100;
-                    strict = realloc(strict, sizeof(int) * strict_max);
+                    strict     = realloc( strict, sizeof( int ) * strict_max );
                 }
 
-                strict[ strict_cur ] = strtoimax(line + 1, NULL, 10);
+                strict[ strict_cur ] = strtoimax( line + 1, NULL, 10 );
                 strict_cur += 1;
             }
         }
@@ -230,16 +268,16 @@ static void fread_rules( FILE* fin, FilterRules* rules )
         {
             *sep = '\0';
 
-            if (mode == '-')
+            if ( mode == '-' )
             {
                 if ( multi_ex_cur + 4 >= multi_ex_max )
                 {
                     multi_ex_max = multi_ex_max * 1.2 + 100;
-                    multi_ex = realloc(multi_ex, sizeof(int) * multi_ex_max);
+                    multi_ex     = realloc( multi_ex, sizeof( int ) * multi_ex_max );
                 }
 
-                multi_ex[ multi_ex_cur ]     = strtoimax(line + 1, NULL, 10);
-                multi_ex[ multi_ex_cur + 1 ] = strtoimax(sep + 1, NULL, 10);
+                multi_ex[ multi_ex_cur ]     = strtoimax( line + 1, NULL, 10 );
+                multi_ex[ multi_ex_cur + 1 ] = strtoimax( sep + 1, NULL, 10 );
                 multi_ex[ multi_ex_cur + 2 ] = multi_ex[ multi_ex_cur + 1 ];
                 multi_ex[ multi_ex_cur + 3 ] = multi_ex[ multi_ex_cur ];
 
@@ -250,11 +288,11 @@ static void fread_rules( FILE* fin, FilterRules* rules )
                 if ( multi_inc_cur + 4 >= multi_inc_max )
                 {
                     multi_inc_max = multi_inc_max * 1.2 + 100;
-                    multi_inc = realloc(multi_inc, sizeof(int) * multi_inc_max);
+                    multi_inc     = realloc( multi_inc, sizeof( int ) * multi_inc_max );
                 }
 
-                multi_inc[ multi_inc_cur ]     = strtoimax(line + 1, NULL, 10);
-                multi_inc[ multi_inc_cur + 1 ] = strtoimax(sep + 1, NULL, 10);
+                multi_inc[ multi_inc_cur ]     = strtoimax( line + 1, NULL, 10 );
+                multi_inc[ multi_inc_cur + 1 ] = strtoimax( sep + 1, NULL, 10 );
                 multi_inc[ multi_inc_cur + 2 ] = multi_inc[ multi_inc_cur + 1 ];
                 multi_inc[ multi_inc_cur + 3 ] = multi_inc[ multi_inc_cur ];
 
@@ -263,33 +301,37 @@ static void fread_rules( FILE* fin, FilterRules* rules )
         }
     }
 
-    qsort(singles, singles_cur, sizeof(int), cmp_int);
-    qsort(strict, strict_cur, sizeof(int), cmp_int);
-    qsort(multi_inc, multi_inc_cur / 2, sizeof(int) * 2, cmp_2int);
-    qsort(multi_ex, multi_ex_cur / 2, sizeof(int) * 2, cmp_2int);
+    qsort( singles, singles_cur, sizeof( int ), cmp_int );
+    qsort( strict, strict_cur, sizeof( int ), cmp_int );
+    qsort( multi_inc, multi_inc_cur / 2, sizeof( int ) * 2, cmp_2int );
+    qsort( multi_ex, multi_ex_cur / 2, sizeof( int ) * 2, cmp_2int );
 
-    rules->exclude_reads = singles;
+    rules->exclude_reads   = singles;
     rules->exclude_reads_n = singles_cur;
 
-    rules->strict_reads = strict;
+    rules->strict_reads   = strict;
     rules->strict_reads_n = strict_cur;
 
-    rules->exclude_edges = multi_ex;
+    rules->exclude_edges   = multi_ex;
     rules->exclude_edges_n = multi_ex_cur;
 
-    rules->include_edges = multi_inc;
+    rules->include_edges   = multi_inc;
     rules->include_edges_n = multi_inc_cur;
 
     int i;
-    printf("exclude reads: ");
-    for ( i = 0; i < rules->exclude_reads_n;i++) printf("%d ", rules->exclude_reads[i]);
-    printf("\nstrict reads: ");
-    for ( i = 0; i < rules->strict_reads_n;i++) printf("%d ", rules->strict_reads[i]);
-    printf("\ninclude edges: ");
-    for ( i = 0; i < rules->include_edges_n;i += 2) printf("%d-%d ", rules->include_edges[i], rules->include_edges[i+1]);
-    printf("\nexclude edges: ");
-    for ( i = 0; i < rules->exclude_edges_n;i += 2) printf("%d-%d ", rules->exclude_edges[i], rules->exclude_edges[i+1]);
-    printf("\n");
+    printf( "exclude reads: " );
+    for ( i = 0; i < rules->exclude_reads_n; i++ )
+        printf( "%d ", rules->exclude_reads[ i ] );
+    printf( "\nstrict reads: " );
+    for ( i = 0; i < rules->strict_reads_n; i++ )
+        printf( "%d ", rules->strict_reads[ i ] );
+    printf( "\ninclude edges: " );
+    for ( i = 0; i < rules->include_edges_n; i += 2 )
+        printf( "%d-%d ", rules->include_edges[ i ], rules->include_edges[ i + 1 ] );
+    printf( "\nexclude edges: " );
+    for ( i = 0; i < rules->exclude_edges_n; i += 2 )
+        printf( "%d-%d ", rules->exclude_edges[ i ], rules->exclude_edges[ i + 1 ] );
+    printf( "\n" );
 }
 
 static int loader_handler( void* _ctx, Overlap* ovl, int novl )
@@ -352,29 +394,6 @@ static int loader_handler( void* _ctx, Overlap* ovl, int novl )
     }
 
     return 1;
-}
-
-static void removeOvls( Overlap* ovls, int novls, int rmFlag )
-{
-    int i;
-    for ( i = 0; i < novls; i++ )
-    {
-        if ( rmFlag & REMOVE_TP )
-        {
-            ovls[ i ].path.tlen  = 0;
-            ovls[ i ].path.trace = NULL;
-        }
-
-        if ( ( rmFlag & REMOVE_MOD_OVL ) && ( ovls[ i ].flags & OVL_MODULE ) )
-        {
-            ovls[ i ].flags |= OVL_DISCARD;
-        }
-
-        if ( ( rmFlag & REMOVE_STITCH_OVL ) && ( ovls[ i ].path.tlen == 0 ) )
-        {
-            ovls[ i ].flags |= OVL_DISCARD;
-        }
-    }
 }
 
 static int stitch( Overlap* ovls, int n, int fuzz, int aggressive )
@@ -1126,10 +1145,11 @@ static int find_repeat_modules( FilterContext* ctx, Overlap* ovls, int novl )
 
 static int filter( FilterContext* ctx, Overlap* ovl )
 {
-    int nLen  = ovl->path.aepos - ovl->path.abpos;
-    int nLenB = ovl->path.bepos - ovl->path.bbpos;
-    int ret   = 0;
+    int nLen         = ovl->path.aepos - ovl->path.abpos;
+    int nLenB        = ovl->path.bepos - ovl->path.bbpos;
+    int ret          = 0;
     HITS_READ* reads = ctx->db->reads;
+    int bread        = ovl->bread;
 
     if ( nLenB < nLen )
     {
@@ -1140,14 +1160,14 @@ static int filter( FilterContext* ctx, Overlap* ovl )
     int trim_alen, trim_blen;
 
     int ovlALen = DB_READ_LEN( ctx->db, ovl->aread );
-    int ovlBLen = DB_READ_LEN( ctx->db, ovl->bread );
+    int ovlBLen = DB_READ_LEN( ctx->db, bread );
 
     if ( ctx->trackTrim )
     {
         get_trim( ctx->db, ctx->trackTrim, ovl->aread, &trim_ab, &trim_ae );
         trim_alen = trim_ae - trim_ab;
 
-        get_trim( ctx->db, ctx->trackTrim, ovl->bread, &trim_bb, &trim_be );
+        get_trim( ctx->db, ctx->trackTrim, bread, &trim_bb, &trim_be );
         trim_blen = trim_be - trim_bb;
 
         if ( ovl->flags & OVL_COMP )
@@ -1179,7 +1199,7 @@ static int filter( FilterContext* ctx, Overlap* ovl )
     {
         if ( ctx->nVerbose )
         {
-            printf( "overlap %d -> %d: drop due to length %d\n", ovl->aread, ovl->bread, nLen );
+            printf( "overlap %d -> %d: drop due to length %d\n", ovl->aread, bread, nLen );
         }
 
         ctx->nFilteredLength++;
@@ -1210,7 +1230,7 @@ static int filter( FilterContext* ctx, Overlap* ovl )
         {
             if ( ctx->nVerbose )
             {
-                printf( "overlap %d -> %d: drop due to diffs %d length %d\n", ovl->aread, ovl->bread, ovl->path.diffs, nLen );
+                printf( "overlap %d -> %d: drop due to diffs %d length %d\n", ovl->aread, bread, ovl->path.diffs, nLen );
             }
 
             ctx->nFilteredDiffs++;
@@ -1226,7 +1246,7 @@ static int filter( FilterContext* ctx, Overlap* ovl )
         track_anno* repeats_anno;
         track_data* repeats_data;
 
-        if ( ctx->trackRepeatStrict && ( (reads[ovl->aread].flags & READ_STRICT) || (reads[ovl->bread].flags & READ_STRICT) ) )
+        if ( ctx->trackRepeatStrict && ( ( reads[ ovl->aread ].flags & READ_STRICT ) || ( reads[ bread ].flags & READ_STRICT ) ) )
         {
             repeats_anno = ctx->trackRepeatStrict->anno;
             repeats_data = ctx->trackRepeatStrict->data;
@@ -1257,15 +1277,15 @@ static int filter( FilterContext* ctx, Overlap* ovl )
         {
             if ( ctx->nVerbose )
             {
-                printf( "overlap %d -> %d: drop due to repeat in a\n", ovl->aread, ovl->bread );
+                printf( "overlap %d -> %d: drop due to repeat in a\n", ovl->aread, bread );
             }
 
             ctx->nFilteredRepeat++;
             ret |= OVL_DISCARD | OVL_REPEAT;
         }
 
-        b      = repeats_anno[ ovl->bread ] / sizeof( track_data );
-        e      = repeats_anno[ ovl->bread + 1 ] / sizeof( track_data );
+        b      = repeats_anno[ bread ] / sizeof( track_data );
+        e      = repeats_anno[ bread + 1 ] / sizeof( track_data );
         ovllen = ovl->path.bepos - ovl->path.bbpos;
 
         int bbpos, bepos;
@@ -1298,7 +1318,7 @@ static int filter( FilterContext* ctx, Overlap* ovl )
         {
             if ( ctx->nVerbose )
             {
-                printf( "overlap %d -> %d: drop due to repeat in b\n", ovl->aread, ovl->bread );
+                printf( "overlap %d -> %d: drop due to repeat in b\n", ovl->aread, bread );
             }
 
             ctx->nFilteredRepeat++;
@@ -1308,7 +1328,7 @@ static int filter( FilterContext* ctx, Overlap* ovl )
     }
 
     // check tracepoints
-    if ( !( ovl->flags & OVL_DISCARD ) && ( ctx->removeFlags & REMOVE_TP ) )
+    if ( !( ovl->flags & OVL_DISCARD ) )
     {
         ovl_trace* trace = (ovl_trace*)ovl->path.trace;
 
@@ -1333,43 +1353,6 @@ static int filter( FilterContext* ctx, Overlap* ovl )
     }
 
     return ret;
-}
-
-static void write_spanning_reads( FilterContext* ctx, int aread )
-{
-    int b, e, rb, re;
-    int trim_ab, trim_ae;
-
-    track_anno* repeats_anno = ctx->trackRepeat->anno;
-    track_data* repeats_data = ctx->trackRepeat->data;
-
-    if ( ctx->trackTrim )
-    {
-        get_trim( ctx->db, ctx->trackTrim, aread, &trim_ab, &trim_ae );
-    }
-    else
-    {
-        trim_ab = 0;
-        trim_ae = DB_READ_LEN( ctx->db, aread );
-    }
-
-    b = repeats_anno[ aread ] / sizeof( track_data );
-    e = repeats_anno[ aread + 1 ] / sizeof( track_data );
-
-    int minbases = MAX( ctx->nMinNonRepeatBases, 300 );
-
-    while ( b < e )
-    {
-        rb = repeats_data[ b ];
-        re = repeats_data[ b + 1 ];
-
-        if ( rb - minbases > trim_ab && re + minbases < trim_ae )
-        {
-            fprintf( ctx->fileSpanningReads, "%d %d\n", aread, re - rb );
-        }
-
-        b += 2;
-    }
 }
 
 static void filter_pre( PassContext* pctx, FilterContext* fctx )
@@ -1473,24 +1456,21 @@ static void filter_post( FilterContext* ctx )
     free( ctx->rm_data );
 }
 
+
 static int filter_handler( void* _ctx, Overlap* ovl, int novl )
 {
     FilterContext* ctx = (FilterContext*)_ctx;
     int j;
+    int aread  = ovl->aread;
+    int alen = DB_READ_LEN(ctx->db, aread);
+    HITS_DB* db = ctx->db;
 
-    if ( ctx->downsample )
+    /*
+    if ( ovl->aread > 100 )
     {
-        int max_rid = (int)(ctx->downsample * DB_NREADS(ctx->db) / 100.0);
-
-        for ( j = 0; j < novl ; j++ )
-        {
-            Overlap* o = ovl + j;
-            if (o->aread > max_rid || o->bread > max_rid)
-            {
-                o->flags |= OVL_DISCARD;
-            }
-        }
+        return 0;
     }
+    */
 
     if ( ctx->trim )
     {
@@ -1518,6 +1498,149 @@ static int filter_handler( void* _ctx, Overlap* ovl, int novl )
         }
     }
 
+    if ( ctx->contained )
+    {
+        int contained = 0;
+        for ( j = 0; j < novl; j++)
+        {
+            Overlap* o = ovl + j;
+
+            if ( o->path.abpos == 0 && o->path.aepos == alen )
+            {
+                contained = 1;
+                break;
+            }
+            else if ( o->path.bbpos == 0 && o->path.bepos == DB_READ_LEN(db, o->bread) )
+            {
+                o->flags |= OVL_DISCARD;
+            }
+        }
+
+        if (contained)
+        {
+            for ( j = 0; j < novl; j++)
+            {
+                Overlap* o = ovl + j;
+                o->flags |= OVL_DISCARD;
+            }
+
+            return 1;
+        }
+    }
+
+    if ( ctx->hrd )
+    {
+        track_anno* repeats_anno = ctx->trackRepeat->anno;
+        track_data* repeats_data = ctx->trackRepeat->data;
+
+        int b = repeats_anno[ ovl->aread ] / sizeof( track_data );
+        int e = repeats_anno[ ovl->aread + 1 ] / sizeof( track_data );
+
+        Overlap*** groups = ctx->hrd_groups;
+        int* ngroups = ctx->hrd_ngroups;
+        int* maxgroups = ctx->hrd_maxgroups;
+        uint16_t* mapgroup = ctx->hrd_mapgroup;
+        int allocated = ctx->hrd_allocated;
+
+        if ( allocated < ( e - b ) / 2 + 1 )
+        {
+            int prev = allocated;
+            allocated = ctx->hrd_allocated = ( e - b ) / 2 + 1 + 100;
+            groups = ctx->hrd_groups = realloc(groups, allocated * sizeof(Overlap**) );
+            ngroups = ctx->hrd_ngroups = realloc(ngroups, allocated * sizeof(int) );
+            maxgroups = ctx->hrd_maxgroups = realloc(maxgroups, allocated * sizeof(int) );
+
+            bzero( groups + prev, (allocated - prev) * sizeof(Overlap**) );
+            bzero( ngroups + prev, (allocated - prev) * sizeof(int) );
+            bzero( maxgroups + prev, (allocated - prev) * sizeof(int) );
+        }
+
+        bzero(mapgroup, DB_READ_LEN(ctx->db, aread) * sizeof(uint16_t) );
+
+        int curgroup = 1;
+
+        while ( b < e )
+        {
+            int rb = repeats_data[ b ];
+            int re = repeats_data[ b + 1 ] + 1;
+
+            while ( rb < re )
+            {
+                mapgroup[ rb ] = curgroup;
+                rb += 1;
+            }
+
+            ngroups[curgroup] = 0;
+
+            curgroup += 1;
+            b += 2;
+        }
+
+        uint16_t ngroup = mapgroup[ ctx->hrd_fuzz ];
+
+        if ( ngroup != 0 && mapgroup[ DB_READ_LEN( ctx->db, aread ) - 1 - ctx->hrd_fuzz ] == ngroup )
+        {
+            for ( j = 0; j < novl; j++ )
+            {
+                Overlap* o = ovl + j;
+                o->flags |= OVL_DISCARD | OVL_REPEAT;
+            }
+        }
+        else
+        {
+            for ( j = 0; j < novl; j++ )
+            {
+                Overlap* o = ovl + j;
+                ngroup     = mapgroup[ o->path.abpos ];
+
+                if ( ngroup == 0 || mapgroup[ o->path.aepos ] != ngroup )
+                {
+                    continue;
+                }
+
+                if ( o->path.aepos - o->path.abpos < ctx->hrd_len )
+                {
+                    o->flags |= OVL_DISCARD | OVL_REPEAT;
+                    continue;
+                }
+
+                if ( ngroups[ ngroup ] + 1 >= maxgroups[ ngroup ] )
+                {
+                    maxgroups[ ngroup ] = 1.2 * maxgroups[ ngroup ] + 1000;
+                    groups[ ngroup ]    = realloc( groups[ ngroup ], maxgroups[ ngroup ] * sizeof( Overlap** ) );
+                }
+
+                groups[ ngroup ][ ngroups[ ngroup ] ] = o;
+                ngroups[ ngroup ] += 1;
+            }
+
+            for ( j = 1; j < curgroup; j++ )
+            {
+                if ( ngroups[ j ] < 1000 )
+                {
+                    continue;
+                }
+
+                qsort( groups[ j ], ngroups[ j ], sizeof( Overlap* ), cmp_ovl_q_desc );
+
+                // printf("%d group %d -> %d\n", aread, j, ngroups[j]);
+
+                int k;
+                int discard = ngroups[ j ] * (ctx->hrd_rate / 100.0);
+                for ( k = 0; k < discard; k++ )
+                {
+                    Overlap* o = groups[ j ][ k ];
+                    o->flags |= OVL_DISCARD | OVL_REPEAT;
+
+                    // int q = 100.0 * o->path.diffs / (o->path.aepos - o->path.abpos);
+                    // printf("%d..%d %d %d\n", groups[j][k]->path.abpos, groups[j][k]->path.aepos, o->path.diffs, q);
+                }
+            }
+
+        }
+
+    }
+
     // set filter flags
 
     for ( j = 0; j < novl; j++ )
@@ -1532,12 +1655,7 @@ static int filter_handler( void* _ctx, Overlap* ovl, int novl )
         find_repeat_modules( ctx, ovl, novl );
     }
 
-    // evaluate remove flags
-    if ( ctx->removeFlags != 0 )
-        removeOvls( ovl, novl, ctx->removeFlags );
-
     // filter by read flags
-    int aread        = ovl->aread;
     HITS_READ* reads = ctx->db->reads;
 
     if ( reads[ aread ].flags & READ_DISCARD )
@@ -1560,40 +1678,39 @@ static int filter_handler( void* _ctx, Overlap* ovl, int novl )
         }
     }
 
-    if ( ctx->fileSpanningReads )
-    {
-        write_spanning_reads( ctx, ovl->aread );
-    }
-
     return 1;
 }
 
-static void usage(FILE* fout, const char* app)
+static void usage( FILE* fout, const char* app )
 {
-    fprintf( fout, "usage: %s [-vpLqT] [-dnolsSumMf n] [-rRt track] [-xP file] database input.las output.las\n\n", app );
+    fprintf( fout, "usage: %s [-cLpTv] [-dlmMnosSu n] [-rRt track] [-x file] [-N n,n,n] database input.las output.las\n\n", app );
 
     fprintf( fout, "Filters the input las file by various critera\n\n" );
 
     fprintf( fout, "options: -v  verbose output\n" );
+    fprintf( fout, "         -c  drop contained reads\n");
     fprintf( fout, "         -d n  max divergence allowed [0,100]\n" );
-    fprintf( fout, "         -n n  minimum number of non-repeat-annotated bases in an alignment\n" );
-    fprintf( fout, "         -o n  minimum overlap length\n" );
     fprintf( fout, "         -l n  minimum read length\n" );
-    fprintf( fout, "         -p purge discarded overlaps\n" );
-    fprintf( fout, "         -s n  stitch split alignments with a distance between them below n\n" );
-    fprintf( fout, "         -S n  stitch irrespective of discrepencies in the distance between in A and B read\n");
+    fprintf( fout, "         -L  two-pass processing with read caching\n\n" );
+    fprintf( fout, "         -n n  minimum number of non-repeat-annotated bases in an alignment\n" );
+    fprintf( fout, "         -o n  minimum alignment length\n" );
+    fprintf( fout, "         -p purge discarded alignments\n" );
     fprintf( fout, "         -r track  name of the track containing the repeat annotation (%s)\n", DEF_ARG_R );
+    fprintf( fout, "         -s n  conservatively stitch split alignments with distance < n\n" );
+    fprintf( fout, "         -S n  stitch irrespective of discrepencies in the distance between in A and B read\n" );
     fprintf( fout, "         -t track  name of the track containing the trim annotation (%s)\n", DEF_ARG_T );
     fprintf( fout, "         -T  apply the trim annotation and update the alignments\n" );
     fprintf( fout, "         -u  maximum number of unaligned (leftover) bases in the alignment\n" );
-    fprintf( fout, "         -L  two-pass processing with read caching\n\n");
+
+
     fprintf( fout, "experimental options:\n" );
-    fprintf( fout, "         -f n  percentage of overlaps to keep (downsampling)\n" );
+    fprintf( fout, "         -N n,n,n  heuristic repeat-induced alignment droppping. TODO: explain\n" );
+
     fprintf( fout, "         -m n  resolve repeat modules, pass coverage as argument.\n" );
     fprintf( fout, "         -M n  -m + more aggressive module detection\n" );
     fprintf( fout, "         -x file  exclude read ids found in file\n" );
-    fprintf( fout, "         -P file  write read ids of repeat spanners to file\n" );
-    fprintf( fout, "         -R track  strict repeat track name\n\n");
+    fprintf( fout, "         -R track  strict repeat track name\n\n" );
+
     fprintf( fout, "Up to three m's can be used (-mmm n) with each additional m increasing the aggressiveness of the repeat resolution.\n" );
 }
 
@@ -1641,32 +1758,33 @@ int main( int argc, char* argv[] )
 
     // args
 
-    char* pathSpanningReads = NULL;
-    char* pathRules  = NULL;
-    char* pcTrackRepeats    = DEF_ARG_R;
+    char* pathRules            = NULL;
+    char* pcTrackRepeats       = DEF_ARG_R;
     char* pcTrackRepeatsStrict = NULL;
-    char* arg_trimTrack     = DEF_ARG_T;
-    int arg_purge           = 0;
+    char* arg_trimTrack        = DEF_ARG_T;
+    int arg_purge              = 0;
 
-    fctx.trackRepeatStrict  = NULL;
-    fctx.fileSpanningReads  = NULL;
-    fctx.fMaxDiffs          = -1;
-    fctx.nMaxUnalignedBases = -1;
-    fctx.nMinAlnLength      = -1;
-    fctx.nMinNonRepeatBases = -1;
-    fctx.nMinReadLength     = -1;
-    fctx.nVerbose           = 0;
-    fctx.stitch             = DEF_ARG_S;
-    fctx.rm_cov             = -1;
-    fctx.rm_aggressive      = 0;
-    fctx.useRLoader         = 0;
-    fctx.do_trim            = DEF_ARG_TT;
-    fctx.rm_mode            = 0;
-    fctx.downsample         = 0;
-
+    fctx.trackRepeatStrict   = NULL;
+    fctx.fMaxDiffs           = -1;
+    fctx.nMaxUnalignedBases  = -1;
+    fctx.nMinAlnLength       = -1;
+    fctx.nMinNonRepeatBases  = -1;
+    fctx.nMinReadLength      = -1;
+    fctx.nVerbose            = 0;
+    fctx.stitch              = DEF_ARG_S;
+    fctx.rm_cov              = -1;
+    fctx.rm_aggressive       = 0;
+    fctx.useRLoader          = 0;
+    fctx.do_trim             = DEF_ARG_TT;
+    fctx.rm_mode             = 0;
     fctx.stitch_aggressively = 0;
-    fctx.removeFlags         = 0;
-    fctx.rm_merge            = 50;
+    fctx.contained = 0;
+    fctx.hrd                = 0; // heuristic repeat dropping
+    fctx.hrd_len            = DEF_ARG_NN_LEN;
+    fctx.hrd_rate           = DEF_ARG_NN_RATE;
+    fctx.hrd_fuzz           = DEF_ARG_NN_FUZZ;
+
+    fctx.rm_merge = 50;
 
     int c;
 
@@ -1677,12 +1795,71 @@ int main( int argc, char* argv[] )
     }
 
     opterr = 0;
-    while ( ( c = getopt( argc, argv, "TvLpd:n:o:l:R:s:S:u:m:M:r:t:P:x:X:f:" ) ) != -1 )
+    while ( ( c = getopt( argc, argv, "cLpTvd:l:m:M:n:N:o:r:R:s:S:t:u:x:" ) ) != -1 )
     {
         switch ( c )
         {
-            case 'f':
-                fctx.downsample = atoi(optarg);
+            case 'c':
+                fctx.contained = 1;
+                break;
+
+            case 'N':
+                fctx.hrd = 1;
+
+                char* dup = strdup(optarg);
+                char* token;
+                int count = 0;
+                while ( ( token = strsep(&dup, ",") ) )
+                {
+                    size_t toklen = strlen(token);
+
+                    switch (count)
+                    {
+                        case 0:
+                            if (toklen == 1 && token[0] == '-')
+                            {
+                                fctx.hrd_len = DEF_ARG_NN_LEN;
+                            }
+                            else
+                            {
+                                fctx.hrd_len = atoi(token);
+                            }
+                            break;
+
+                        case 1:
+                            if (toklen == 1 && token[0] == '-')
+                            {
+                                fctx.hrd_rate = DEF_ARG_NN_RATE;
+                            }
+                            else
+                            {
+                                fctx.hrd_rate = atoi(token);
+                            }
+                            break;
+
+                        case 2:
+                            if (toklen == 1 && token[0] == '-')
+                            {
+                                fctx.hrd_fuzz = DEF_ARG_NN_FUZZ;
+                            }
+                            else
+                            {
+                                fctx.hrd_fuzz = atoi(token);
+                            }
+                            break;
+                    }
+
+                    count += 1;
+                }
+
+                free(dup);
+
+                if ( count != 3 )
+                {
+                    usage(stdout, app);
+                    exit(1);
+                }
+
                 break;
 
             case 'T':
@@ -1693,10 +1870,6 @@ int main( int argc, char* argv[] )
                 pathRules = optarg;
                 break;
 
-            case 'P':
-                pathSpanningReads = optarg;
-                break;
-
             case 'L':
                 fctx.useRLoader = 1;
                 break;
@@ -1704,29 +1877,16 @@ int main( int argc, char* argv[] )
             case 'M':
                 fctx.rm_aggressive = 1;
 
-            // fall through
+                // fall through
 
             case 'm':
                 fctx.rm_cov = atoi( optarg );
                 break;
 
-            case 'X':
-            {
-                int flag = atoi( optarg );
-                if ( flag < 0 || flag > 2 )
-                {
-                    fprintf( stderr, "[ERROR]: Unsupported -R [%d] option.\n", flag );
-                    usage(stdout, app);
-                    exit( 1 );
-                }
-                fctx.removeFlags |= ( 1 << flag );
-            }
-            break;
-
             case 'S':
                 fctx.stitch_aggressively = 1;
 
-            // fall through
+                // fall through
 
             case 's':
                 fctx.stitch = atoi( optarg );
@@ -1775,14 +1935,14 @@ int main( int argc, char* argv[] )
 
             default:
                 fprintf( stderr, "unknown option %c\n", c );
-                usage(stdout, app);
+                usage( stdout, app );
                 exit( 1 );
         }
     }
 
     if ( argc - optind != 3 )
     {
-        usage(stdout, app);
+        usage( stdout, app );
         exit( 1 );
     }
 
@@ -1814,37 +1974,17 @@ int main( int argc, char* argv[] )
         db.reads[ i ].flags = READ_NONE;
     }
 
-    if ( fctx.downsample )
-    {
-        if (fctx.downsample > 99 || fctx.downsample < 0)
-        {
-            fprintf( stderr, "invalid downsampling factor %d. must be in [1, 99]\n", fctx.downsample);
-            exit( 1 );
-        }
-    }
-
-    if ( pathSpanningReads )
-    {
-        fctx.fileSpanningReads = fopen( pathSpanningReads, "w" );
-
-        if ( fctx.fileSpanningReads == NULL )
-        {
-            fprintf( stderr, "could not open %s\n", pathSpanningReads );
-            exit( 1 );
-        }
-    }
-
-    if (pcTrackRepeatsStrict)
+    if ( pcTrackRepeatsStrict )
     {
         fctx.trackRepeatStrict = track_load( &db, pcTrackRepeatsStrict );
-        if (!fctx.trackRepeatStrict)
+        if ( !fctx.trackRepeatStrict )
         {
-            fprintf(stderr, "could not load track %s\n", pcTrackRepeatsStrict);
-            exit(1);
+            fprintf( stderr, "could not load track %s\n", pcTrackRepeatsStrict );
+            exit( 1 );
         }
     }
 
-    if ( fctx.nMinNonRepeatBases != -1 || fctx.fileSpanningReads )
+    if ( fctx.nMinNonRepeatBases != -1 || fctx.hrd )
     {
         fctx.trackRepeat = track_load( &db, pcTrackRepeats );
 
@@ -1881,17 +2021,26 @@ int main( int argc, char* argv[] )
 
         for ( i = 0; i < rules.exclude_reads_n; i++ )
         {
-            db.reads[ rules.exclude_reads[i] ].flags |= READ_DISCARD;
+            db.reads[ rules.exclude_reads[ i ] ].flags |= READ_DISCARD;
         }
 
         printf( "strict repeats for %d reads\n", rules.strict_reads_n );
 
         for ( i = 0; i < rules.strict_reads_n; i++ )
         {
-            db.reads[ rules.strict_reads[i] ].flags |= READ_STRICT;
+            db.reads[ rules.strict_reads[ i ] ].flags |= READ_STRICT;
         }
 
         fclose( fileIn );
+    }
+
+    if ( fctx.hrd )
+    {
+#ifdef VERBOSE
+        printf("HRD drop < %dbp - downsample by %d%% - fuzzing %d\n", fctx.hrd_len, fctx.hrd_rate, fctx.hrd_fuzz);
+#endif
+
+        fctx.hrd_mapgroup = calloc( DB_READ_MAXLEN( fctx.db ), sizeof( uint16_t ) );
     }
 
     // passes
@@ -1921,9 +2070,7 @@ int main( int argc, char* argv[] )
     pctx->purge_discarded = arg_purge;
 
     filter_pre( pctx, &fctx );
-
     pass( pctx, filter_handler );
-
     filter_post( &fctx );
 
     pass_free( pctx );
@@ -1937,9 +2084,19 @@ int main( int argc, char* argv[] )
 
     Close_DB( &db );
 
-    if ( fctx.fileSpanningReads )
+    if ( fctx.hrd )
     {
-        fclose( fctx.fileSpanningReads );
+        int i = 1;
+        while ( fctx.hrd_groups[i] )
+        {
+            free(fctx.hrd_groups[i]);
+            i += 1;
+        }
+
+        free(fctx.hrd_groups);
+        free(fctx.hrd_ngroups);
+        free(fctx.hrd_maxgroups);
+        free(fctx.hrd_mapgroup);
     }
 
     fclose( fileOvlOut );
