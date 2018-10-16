@@ -15,9 +15,9 @@ PassContext* pass_init(FILE* fileOvlIn, FILE* fileOvlOut)
     ctx->tmax = 0;
 
     // get file size
-    fseek(ctx->fileOvlIn, 0L, SEEK_END);
-    ctx->sizeOvlIn = ftell(ctx->fileOvlIn);
-    fseek(ctx->fileOvlIn, 0L, SEEK_SET);
+    fseeko(ctx->fileOvlIn, 0L, SEEK_END);
+    ctx->sizeOvlIn = ftello(ctx->fileOvlIn);
+    fseeko(ctx->fileOvlIn, 0L, SEEK_SET);
 
     ctx->progress_tick = ctx->sizeOvlIn / 10;
 
@@ -92,11 +92,11 @@ void pass(PassContext* ctx, pass_handler handler)
 
     if (ctx->off_start)
     {
-        fseek(ctx->fileOvlIn, ctx->off_start, SEEK_SET);
+        fseeko(ctx->fileOvlIn, ctx->off_start, SEEK_SET);
     }
     else
     {
-        fseek(ctx->fileOvlIn, sizeof(ovl_header_novl) + sizeof(ovl_header_twidth), SEEK_SET);
+        fseeko(ctx->fileOvlIn, sizeof(ovl_header_novl) + sizeof(ovl_header_twidth), SEEK_SET);
     }
 
     if (Read_Overlap(ctx->fileOvlIn, pOvls))
@@ -119,7 +119,7 @@ void pass(PassContext* ctx, pass_handler handler)
     {
         if (ctx->progress)
         {
-            long pos = ftell(ctx->fileOvlIn);
+            off_t pos = ftello(ctx->fileOvlIn);
 
             if (pos >= ctx->progress_nexttick)
             {
@@ -153,7 +153,7 @@ void pass(PassContext* ctx, pass_handler handler)
         }
         else
         {
-            fseek(ctx->fileOvlIn, ctx->tbytes * pOvls[0].path.tlen, SEEK_CUR);
+            fseeko(ctx->fileOvlIn, ctx->tbytes * pOvls[0].path.tlen, SEEK_CUR);
         }
 
         n = 1;
@@ -196,7 +196,7 @@ void pass(PassContext* ctx, pass_handler handler)
             }
             else
             {
-                fseek(ctx->fileOvlIn, ctx->tbytes * pOvls[n].path.tlen, SEEK_CUR);
+                fseeko(ctx->fileOvlIn, ctx->tbytes * pOvls[n].path.tlen, SEEK_CUR);
             }
 
             n += 1;

@@ -34,9 +34,9 @@ typedef struct
 
     ovl_header_novl novl_out_discarded;     // written out with OVL_DISCARD flag
 
-    long sizeOvlIn;
-    long progress_tick;
-    long progress_nexttick;
+    off_t sizeOvlIn;
+    off_t progress_tick;
+    off_t progress_nexttick;
 
     off_t off_start;
     off_t off_end;
