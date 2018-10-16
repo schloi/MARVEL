@@ -203,19 +203,25 @@ static void calculate_trim(AnnotateContext* actx)
 {
     int dcur = 0;
     int dmax = 1000;
+    int nreads     = actx->db->nreads;
+
     track_data* data = (track_data*)malloc( sizeof(track_data) * dmax );
 
-    track_anno* anno = (track_anno*)malloc( sizeof(track_anno) * (DB_NREADS(actx->db) + 1) );
-    bzero(anno, sizeof(track_anno) * (DB_NREADS(actx->db) + 1));
+    track_anno* anno = (track_anno*)malloc( sizeof(track_anno) * (nreads + 1) );
+    bzero(anno, sizeof(track_anno) * (nreads + 1));
 
     track_data* dataq = actx->q_data;
     track_anno* annoq = actx->q_anno;
 
     int a;
-    for (a = 0; a < actx->db->nreads; a++)
+    for (a = 0; a < nreads; a++)
     {
-        int alen = DB_READ_LEN(actx->db, a);
+        if (annoq[a] >= annoq[a+1])
+        {
+            continue;
+        }
 
+        int alen = DB_READ_LEN(actx->db, a);
         int tb = 0;
         int te = 0;
 
@@ -246,7 +252,7 @@ static void calculate_trim(AnnotateContext* actx)
     track_anno coff;
 
     int j;
-    for (j = 0; j <= DB_NREADS(actx->db); j++)
+    for (j = 0; j <= nreads; j++)
     {
         coff = anno[j];
         anno[j] = off;
@@ -258,7 +264,6 @@ static void calculate_trim(AnnotateContext* actx)
     free(data);
     free(anno);
 }
-
 
 static void pre_annotate(PassContext* pctx, AnnotateContext* ctx)
 {
@@ -287,8 +292,9 @@ static void post_annotate(AnnotateContext* ctx)
     track_anno qoff, coff;
 
     qoff = 0;
+    int nreads = DB_NREADS( ctx->db );
 
-    for (j = 0; j <= DB_NREADS(ctx->db); j++)
+    for (j = 0; j <= nreads; j++)
     {
         coff = ctx->q_anno[j];
         ctx->q_anno[j] = qoff;
@@ -314,11 +320,13 @@ static int handler_annotate(void* _ctx, Overlap* ovls, int novl)
     unsigned int segmin = ctx->segmin;
     unsigned int segmax = ctx->segmax;
 
-    int a = ovls->aread;
-    int alen = DB_READ_LEN(ctx->db, a);
-    int ntiles = (alen + ctx->twidth - 1) / ctx->twidth;
+    int a           = ovls->aread;
+    int alen        = DB_READ_LEN( ctx->db, a );
+    int ntiles      = ( alen + ctx->twidth - 1 ) / ctx->twidth;
+    uint32* q_histo = ctx->q_histo;
+    int twidth      = ctx->twidth;
 
-    bzero(ctx->q_histo, ctx->q_histo_len * sizeof(uint32));
+    bzero(q_histo, ctx->q_histo_len * sizeof(uint32));
 
     int i;
     for (i = 0; i < novl; i++)
@@ -330,32 +338,35 @@ static int handler_annotate(void* _ctx, Overlap* ovls, int novl)
             continue;
         }
 
-        int comp = (ovl->flags & OVL_COMP) ? 1 : 0;
+        int abpos = ovl->path.abpos;
+        int aepos = ovl->path.aepos;
+        int tlen  = ovl->path.tlen;
+        int comp  = ( ovl->flags & OVL_COMP ) ? 1 : 0;
 
-        int tile = ovl->path.abpos / ctx->twidth;
+        int tile = abpos / twidth;
         ovl_trace* trace = ovl->path.trace;
 
-        if ( (ovl->path.abpos % ctx->twidth) == 0 )
+        if ( (abpos % twidth) == 0 )
         {
             int q = trace[0];
-            ctx->q_histo[ ctx->twidth * 2 * tile + 2 * q + comp] += 1;
+            q_histo[ twidth * 2 * tile + 2 * q + comp] += 1;
         }
 
         tile++;
 
         int t;
-        for (t = 2; t < ovls[i].path.tlen - 2; t+=2)
+        for (t = 2; t < tlen - 2; t += 2)
         {
             int q = trace[t];
-            ctx->q_histo[ ctx->twidth * 2 * tile + 2 * q + comp] += 1;
+            q_histo[ twidth * 2 * tile + 2 * q + comp] += 1;
 
             tile += 1;
         }
 
-        if ( (ovl->path.aepos % ctx->twidth) == 0 || ovl->path.aepos == alen )
+        if ( (aepos % twidth) == 0 || aepos == alen )
         {
             int q = trace[t];
-            ctx->q_histo[ ctx->twidth * 2 * tile + 2 * q + comp] += 1;
+            q_histo[ twidth * 2 * tile + 2 * q + comp] += 1;
         }
     }
 
@@ -369,13 +380,13 @@ static int handler_annotate(void* _ctx, Overlap* ovls, int novl)
 
     for (i = 0; i < ntiles; i++)
     {
-        uint32* tile_qhisto = ctx->q_histo + 2 * ctx->twidth * i;
+        uint32* tile_qhisto = q_histo + 2 * twidth * i;
         uint32 sum = 0;
         uint32 count = 0;
 
         int q;
 
-        for ( q = 0 ; q < ctx->twidth && count != segmax ; q++ )
+        for ( q = 0 ; q < twidth && count != segmax ; q++ )
         {
             uint32 has = MIN(tile_qhisto[2 * q] + tile_qhisto[2 * q + 1], segmax - count);
             count += has;
@@ -440,10 +451,11 @@ static void post_update_anno(AnnotateContext* actx)
 {
     int j;
     track_anno qoff, coff;
+    int nreads = DB_NREADS( actx->db );
 
     qoff = 0;
 
-    for (j = 0; j <= DB_NREADS(actx->db); j++)
+    for (j = 0; j <= nreads; j++)
     {
         coff = actx->trim_anno[j];
         actx->trim_anno[j] = qoff;
