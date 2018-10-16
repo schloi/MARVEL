@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -397,9 +398,7 @@ void merge(char* fout, char** fin, int numInFiles, int verbose)
 		output = fopen(fout, "w");
 		if (output == NULL)
 		{
-			fprintf(stderr,
-					"[ERROR] - LAmerge: Cannot open file \"%s\" for writing\n",
-					fout);
+			fprintf(stderr, "[ERROR] - LAmerge: Cannot open file \"%s\" for writing\n", fout);
 			exit(1);
 		}
 
