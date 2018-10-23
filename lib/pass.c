@@ -6,6 +6,12 @@
 #include "pass.h"
 #include "oflags.h"
 
+static inline size_t ovl_header_length()
+{
+    return sizeof(ovl_header_novl) + sizeof(ovl_header_twidth);
+}
+
+
 PassContext* pass_init(FILE* fileOvlIn, FILE* fileOvlOut)
 {
     PassContext* ctx = malloc(sizeof(PassContext));
@@ -19,9 +25,21 @@ PassContext* pass_init(FILE* fileOvlIn, FILE* fileOvlOut)
     ctx->sizeOvlIn = ftello(ctx->fileOvlIn);
     fseeko(ctx->fileOvlIn, 0L, SEEK_SET);
 
+    if ( ctx->sizeOvlIn == 0 )
+    {
+        free(ctx);
+        return NULL;
+    }
+
     ctx->progress_tick = ctx->sizeOvlIn / 10;
 
     ovl_header_read(fileOvlIn, &(ctx->novl), &(ctx->twidth));
+
+    if ( ctx->novl == 0 && ctx->sizeOvlIn > (off_t)ovl_header_length() )
+    {
+        free(ctx);
+        return NULL;
+    }
 
     ctx->tbytes = TBYTES( ctx->twidth );
 
