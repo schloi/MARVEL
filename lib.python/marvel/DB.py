@@ -140,12 +140,22 @@ class DB(object):
     STRUCT_HITS_DB    = "@iffffiqiiiPiPPP"
     STRUCT_HITS_READ  = "@iqqi4x" # pad to 32 byte
 
-    ureads = 0
-    freq   = (0.0, 0.0, 0.0, 0.0)
-    maxlen = 0
-    totlen = 0
-
     def __init__(self, path):
+        if not os.path.exists(path):
+            raise FileNotFoundError("could not find {}".format(path))
+
+        self.dbblocks = 0
+        self.ureads = 0
+        self.freq   = (0.0, 0.0, 0.0, 0.0)
+        self.maxlen = 0
+        self.totlen = 0
+
+        for line in open(path):
+            line = line.strip()
+            if line.startswith("blocks"):
+                self.dbblocks = int( line[ line.find("=")+1 : ].strip() )
+                break
+
         (self.dbPath, self.dbName) = os.path.split(path)
 
         if self.dbName.endswith(".db"):
@@ -192,6 +202,9 @@ class DB(object):
 
     def name(self):
         return self.dbName
+
+    def blocks(self):
+        return self.dbblocks
 
     def track(self, tName):
         for track in self.tracks:
