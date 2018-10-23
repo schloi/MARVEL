@@ -29,6 +29,24 @@ void printUsage( char* prog, FILE* out )
     fprintf( out, "  -f file  file that contains a list of las files to be merged. (One file per line)\n" );
 }
 
+int ends_with(const char *str, const char *suffix)
+{
+    if (!str || !suffix)
+    {
+        return 0;
+    }
+
+    size_t lenstr = strlen(str);
+    size_t lensuffix = strlen(suffix);
+
+    if (lensuffix > lenstr)
+    {
+        return 0;
+    }
+
+    return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
+}
+
 int SORT_OVL(const void *x, const void *y)
   {
     Overlap* l = (Overlap *) x;
@@ -581,8 +599,10 @@ void getFilesFromDir(MERGE_OPT *mopt, char *dirName)
                   }
               }
 
-            if(ent->d_name[0] == '.')
+            if( ent->d_name[0] == '.' || !ends_with(ent->d_name, ".las") )
+            {
               continue;
+            }
 
             sprintf(fullPath, "%s/%s", dirName, ent->d_name);
 
