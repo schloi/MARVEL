@@ -294,7 +294,7 @@ static int check_process(void* _ctx, Overlap* ovl, int novl)
 int checkOverlapFile(MERGE_OPT *mopt, char *filename, int silent)
   {
     if (!silent || mopt->VERBOSE > 2)
-      printf("Check file: %s", filename);
+      printf("Check file: %s\n", filename);
 
     // general sanity checks
 

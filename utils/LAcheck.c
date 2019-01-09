@@ -290,23 +290,22 @@ int main( int argc, char* argv[] )
         fprintf( stderr, "could not open '%s'\n", pcPathOverlapsIn );
         exit( 1 );
     }
-
-    if ( Open_DB( pcPathReadsIn, &db ) )
-    {
-        fprintf( stderr, "could not open database '%s'\n", pcPathReadsIn );
-        exit( 1 );
-    }
-
     pctx = pass_init( fileOvlIn, NULL );
 
     if ( pctx == NULL )
     {
-        fprintf( stderr, "corrupt las file\n" );
+        fprintf( stderr, "corrupt las file '%s'\n", pcPathOverlapsIn );
         return ERR_CORRUPT;
     }
 
     if ( !header_only )
     {
+        if ( Open_DB( pcPathReadsIn, &db ) )
+        {
+            fprintf( stderr, "could not open database '%s'\n", pcPathReadsIn );
+            exit( 1 );
+        }
+
         pctx->split_b      = 0;
         pctx->load_trace   = cctx.check_ptp;
         pctx->unpack_trace = cctx.check_ptp;
@@ -317,11 +316,11 @@ int main( int argc, char* argv[] )
         pass( pctx, check_process );
 
         check_post( pctx, &cctx );
+
+        Close_DB( &db );
     }
 
     pass_free( pctx );
-
-    Close_DB( &db );
 
     fclose( fileOvlIn );
 

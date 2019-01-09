@@ -24,6 +24,7 @@
 #include "lib/tracks.h"
 #include "lib/pass.h"
 #include "lib/utils.h"
+#include "lib/khash.h"
 
 #include "db/DB.h"
 #include "dalign/align.h"
@@ -349,7 +350,11 @@ static int handler_annotate(void* _ctx, Overlap* ovls, int novl)
         if ( (abpos % twidth) == 0 )
         {
             int q = trace[0];
-            q_histo[ twidth * 2 * tile + 2 * q + comp] += 1;
+
+            if ( q >= 0 && q < twidth * 2 )
+            {
+                q_histo[ twidth * 2 * tile + 2 * q + comp] += 1;
+            }
         }
 
         tile++;
@@ -358,7 +363,11 @@ static int handler_annotate(void* _ctx, Overlap* ovls, int novl)
         for (t = 2; t < tlen - 2; t += 2)
         {
             int q = trace[t];
-            q_histo[ twidth * 2 * tile + 2 * q + comp] += 1;
+
+            if ( q >= 0 && q < twidth * 2 )
+            {
+                q_histo[ twidth * 2 * tile + 2 * q + comp] += 1;
+            }
 
             tile += 1;
         }
@@ -366,7 +375,11 @@ static int handler_annotate(void* _ctx, Overlap* ovls, int novl)
         if ( (aepos % twidth) == 0 || aepos == alen )
         {
             int q = trace[t];
-            q_histo[ twidth * 2 * tile + 2 * q + comp] += 1;
+
+            if ( q >= 0 && q < twidth * 2 )
+            {
+                q_histo[ twidth * 2 * tile + 2 * q + comp] += 1;
+            }
         }
     }
 
@@ -552,7 +565,7 @@ static int handler_update_anno(void* _ctx, Overlap* ovls, int novl)
 
 static void usage()
 {
-    fprintf( stderr, "usage: [-u] [-b n] [-d n] [-s n] [-S n] [-t track] [-T track] [-q track] [-Q track] database input.las\n\n" );
+    fprintf( stderr, "usage: [-u] [-bdsS n] [-tTqQ track] database input.las\n\n" );
 
     fprintf( stderr, "Creates an annotation track containing the reads' qualities and computes trim information.\n\n" );
 
