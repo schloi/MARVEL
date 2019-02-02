@@ -141,6 +141,9 @@ class DB(object):
     STRUCT_HITS_READ  = "@iqqi4x" # pad to 32 byte
 
     def __init__(self, path):
+        if not path.endswith(".db"):
+            path += ".db"
+
         if not os.path.exists(path):
             raise FileNotFoundError("could not find {}".format(path))
 
