@@ -118,7 +118,7 @@ static int check_process( void* _ctx, Overlap* ovl, int novl )
 
     for ( i = 0; i < novl; i++ )
     {
-        Overlap* o = ovl + novl;
+        Overlap* o = ovl + i;
 
         ctx->novl++;
 
@@ -245,7 +245,7 @@ int main( int argc, char* argv[] )
     int c;
     opterr = 0;
 
-    while ( ( c = getopt( argc, argv, "hihsp" ) ) != -1 )
+    while ( ( c = getopt( argc, argv, "dhips" ) ) != -1 )
     {
         switch ( c )
         {
@@ -290,6 +290,7 @@ int main( int argc, char* argv[] )
         fprintf( stderr, "could not open '%s'\n", pcPathOverlapsIn );
         exit( 1 );
     }
+
     pctx = pass_init( fileOvlIn, NULL );
 
     if ( pctx == NULL )
