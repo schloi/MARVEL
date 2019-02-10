@@ -5,7 +5,7 @@
 
 #include "read_loader.h"
 
-#define BLOCK_BUFFER (10*1024*1024)
+#define BLOCK_BUFFER (100*1024*1024)
 
 
 Read_Loader* rl_init(HITS_DB* db, size_t max_mem)
@@ -85,10 +85,15 @@ void rl_load(Read_Loader* rl, int* rids, int nrids)
     }
     else
     {
-        db->bases = bases = fopen(Catenate(db->path, "", "", ".bps"), "r");
-    }
+        char* path = Catenate(db->path, "", "", ".bps");
+        db->bases = bases = fopen(path, "r");
 
-    rewind(bases);
+        if ( bases == NULL )
+        {
+            fprintf(stderr, "failed to open %s\n", path);
+            exit(1);
+        }
+    }
 
     qsort(rids, nrids, sizeof(int), cmp_rids);
     nrids = unique(rids, nrids);
@@ -100,21 +105,27 @@ void rl_load(Read_Loader* rl, int* rids, int nrids)
         totallen += reads[i].rlen;
     }
 
-    // printf("%llu bytes needed for %d reads\n", totallen, nrids);
+    // printf("%''llu bytes needed for %d reads\n", totallen, nrids);
 
     if (totallen > rl->maxreads)
     {
-        rl->maxreads = totallen + 10*1000;
+        rl->maxreads = totallen * 1.2 + 1000;
         rl->reads = (char*)realloc(rl->reads, rl->maxreads);
+
+        if (  rl->reads == NULL )
+        {
+            fprintf(stderr, "failed to realloc\n");
+            exit(1);
+        }
     }
 
-    int nbuf = BLOCK_BUFFER;
+    size_t nbuf = BLOCK_BUFFER;
     char* buffer = malloc(nbuf);
 
-    // uint64 rb = 0;
+    uint64 rb = 0;
     uint64 re = 0;
-    off_t offb = 0;
-    off_t offe = 0;
+    size_t offb = 0;
+    size_t offe = 0;
     int currid = 0;
     uint64 curreads = 0;
 
@@ -132,13 +143,13 @@ void rl_load(Read_Loader* rl, int* rids, int nrids)
             offe = reads[re].boff;
         }
 
-        //printf("reading from %'llu..%'llu %'llu..%'llu\n", rb, re, offb, offe);
+        // printf("reading from read %'llu..%'llu byte %'zu..%'zu\n", rb, re, offb, offe);
 
         fseeko(bases, offb, SEEK_SET);
 
         if (fread(buffer, offe - offb, 1, bases) != 1)
         {
-            fprintf(stderr, "failed to read bases file\n");
+            fprintf(stderr, "failed to read %ld\n", offe - offb);
             exit(1);
         }
 
@@ -162,9 +173,11 @@ void rl_load(Read_Loader* rl, int* rids, int nrids)
             currid++;
         }
 
-        // rb = re;
+        rb = re;
         offb = offe;
     }
+
+    free(buffer);
 }
 
 void rl_load_read(Read_Loader* rl, int rid, char* read, int ascii)
