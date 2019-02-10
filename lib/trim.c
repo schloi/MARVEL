@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <sys/param.h>
 #include <assert.h>
+#include <string.h>
 
 #include "trim.h"
 #include "lib/oflags.h"
@@ -32,7 +33,6 @@ static void align(TRIM* trim, Overlap* ovl, int ab, int ae, int bb, int be)
     	Load_Read(trim->db, ovl->aread, align->aseq, 0);
     	Load_Read(trim->db, ovl->bread, align->bseq, 0);
     }
-
 
     align->alen = DB_READ_LEN(trim->db, ovl->aread);
     align->blen = DB_READ_LEN(trim->db, ovl->bread);
@@ -490,4 +490,7 @@ void trim_close(TRIM* trim)
     Free_Work_Data(trim->align_work);
     free(trim->align.aseq - 1);
     free(trim->align.bseq - 1);
+
+    bzero(trim, sizeof(TRIM));
+    free(trim);
 }
