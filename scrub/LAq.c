@@ -2,10 +2,6 @@
  *
  *  calculate the quality and trim track
  *
- *  Date   : October 2015
- *
- *  Author : MARVEL Team
- *
  *******************************************************************************************/
 
 
@@ -599,7 +595,6 @@ int main(int argc, char* argv[])
     // process arguments
 
     int arg_u = DEF_ARG_U;
-    char* qlog = NULL;
 
     opterr = 0;
 
@@ -614,7 +609,7 @@ int main(int argc, char* argv[])
     actx.track_q_out = DEF_ARG_Q;
 
     int c;
-    while ((c = getopt(argc, argv, "s:S:o:ub:d:L:t:T:q:Q:")) != -1)
+    while ((c = getopt(argc, argv, "s:S:o:ub:d:t:T:q:Q:")) != -1)
     {
         switch (c)
         {
@@ -624,10 +619,6 @@ int main(int argc, char* argv[])
 
             case 'S':
                       actx.segmax = atoi(optarg);
-                      break;
-
-            case 'L':
-                      qlog = optarg;
                       break;
 
             case 'd':
@@ -743,22 +734,6 @@ int main(int argc, char* argv[])
         pre_annotate(pctx, &actx);
         pass(pctx, handler_annotate);
         post_annotate(&actx);
-    }
-
-    if (qlog != NULL)
-    {
-        FILE* fileq = fopen(qlog, "w");
-
-        if (fileq)
-        {
-            fprintf(fileq, "%d\n", actx.trim_q);
-            fclose(fileq);
-        }
-        else
-        {
-            fprintf(stderr, "error: failed to open %s\n", qlog);
-        }
-
     }
 
     // cleanup
