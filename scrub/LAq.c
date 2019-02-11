@@ -511,6 +511,11 @@ static int handler_update_anno(void* _ctx, Overlap* ovls, int novl)
     track_anno ob = ((track_anno*)actx->trim_track->anno)[a] / sizeof(track_data);
     track_anno oe = ((track_anno*)actx->trim_track->anno)[a + 1] / sizeof(track_data);
 
+    if ( ob == oe )
+    {
+        return 1;
+    }
+
     assert( ob + 2 == oe );
 
     int tb, te, tb_new, te_new;
