@@ -130,7 +130,7 @@ int main(int argc, char* argv[])
 
             if (ob < oe && offset[j] != 0)
             {
-                fprintf(stderr, "ERROR: not merging in proper order\n");
+                fprintf(stderr, "ERROR: merging inconsistency. read %" PRIu64 " in block %d already encountered.\n", j, i);
                 exit(1);
             }
 
