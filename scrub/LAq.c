@@ -4,47 +4,44 @@
  *
  *******************************************************************************************/
 
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
 #include <assert.h>
 #include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/param.h>
 #include <unistd.h>
 
-#include "lib/oflags.h"
 #include "lib/colors.h"
+#include "lib/oflags.h"
+#include "lib/pass.h"
 #include "lib/stats.h"
 #include "lib/tracks.h"
-#include "lib/pass.h"
 #include "lib/utils.h"
-#include "lib/khash.h"
 
-#include "db/DB.h"
 #include "dalign/align.h"
+#include "db/DB.h"
 
 // toggles
 
 #define VERBOSE
 #undef DEBUG_Q
 
-#define TRIM_WINDOW        5
+#define TRIM_WINDOW 5
 
 // command line defaults
 
-#define DEF_ARG_B          0
-#define DEF_ARG_U          0
-#define DEF_ARG_O       1000
-#define DEF_ARG_D         25
+#define DEF_ARG_B 0
+#define DEF_ARG_U 0
+#define DEF_ARG_O 1000
+#define DEF_ARG_D 25
 
-#define DEF_ARG_S          1
-#define DEF_ARG_SS        20
+#define DEF_ARG_S 1
+#define DEF_ARG_SS 20
 
-#define DEF_ARG_T   	TRACK_TRIM
-#define DEF_ARG_Q   	TRACK_Q
-
+#define DEF_ARG_T TRACK_TRIM
+#define DEF_ARG_Q TRACK_Q
 
 // structs
 
@@ -52,12 +49,12 @@ typedef struct
 {
     HITS_DB* db;
 
-    int tblock;             // db block
-    int min_trimmed_len;    // min length of read after trimming
+    int tblock;          // db block
+    int min_trimmed_len; // min length of read after trimming
 
-    int twidth;             // trace point spacing
+    int twidth; // trace point spacing
 
-    unsigned int segmin;    // min number of segments for q estimate
+    unsigned int segmin; // min number of segments for q estimate
     unsigned int segmax;
 
     uint32* q_histo;
@@ -68,15 +65,15 @@ typedef struct
     int q_dprev, q_dcur, q_dmax;
 
     // re-annotate only
-    HITS_TRACK* q_track;        // q track
-    HITS_TRACK* trim_track;     // trim track
-    int trim_q;                 // trimming quality cutoff
+    HITS_TRACK* q_track;    // q track
+    HITS_TRACK* trim_track; // trim track
+    int trim_q;             // trimming quality cutoff
 
-    char *track_trim_in;
-    char *track_trim_out;
+    char* track_trim_in;
+    char* track_trim_out;
 
-    char *track_q_in;
-    char *track_q_out;
+    char* track_q_in;
+    char* track_q_out;
 
     track_anno* trim_anno;
     track_data* trim_data;
@@ -88,19 +85,19 @@ typedef struct
 extern char* optarg;
 extern int optind, opterr, optopt;
 
-static int trim_q_offsets(AnnotateContext* actx, int rid, int rlen, track_data* dataq, track_anno* annoq, int* trim_b, int* trim_e)
+static int trim_q_offsets( AnnotateContext* actx, int rid, int rlen, track_data* dataq, track_anno* annoq, int* trim_b, int* trim_e )
 {
     int min_trimmed_len = actx->min_trimmed_len;
-    int twidth = actx->twidth;
-    int left = (*trim_b) ? (*trim_b) / twidth : 0;
-    int right = (*trim_e) ? (*trim_e) / twidth : ( rlen + twidth - 1 ) / twidth;
+    int twidth          = actx->twidth;
+    int left            = ( *trim_b ) ? ( *trim_b ) / twidth : 0;
+    int right           = ( *trim_e ) ? ( *trim_e ) / twidth : ( rlen + twidth - 1 ) / twidth;
 
-    track_anno ob = annoq[rid] / sizeof(track_data);
-    track_anno oe = annoq[rid + 1] / sizeof(track_data);
+    track_anno ob = annoq[ rid ] / sizeof( track_data );
+    track_anno oe = annoq[ rid + 1 ] / sizeof( track_data );
 
     int trim_q = actx->trim_q;
 
-    if (ob >= oe)
+    if ( ob >= oe )
     {
         *trim_b = *trim_e = 0;
         return 0;
@@ -109,19 +106,19 @@ static int trim_q_offsets(AnnotateContext* actx, int rid, int rlen, track_data* 
 #ifdef DEBUG_Q
     {
         track_anno k;
-        printf("Q");
-        for (k = ob; k < oe; k++)
+        printf( "Q" );
+        for ( k = ob; k < oe; k++ )
         {
-            if (dataq[k] == 0 || dataq[k] > trim_q)
+            if ( dataq[ k ] == 0 || dataq[ k ] > trim_q )
             {
-                printf(ANSI_COLOR_RED " %2d" ANSI_COLOR_RESET, dataq[k]);
+                printf( ANSI_COLOR_RED " %2d" ANSI_COLOR_RESET, dataq[ k ] );
             }
             else
             {
-                printf(" %2d", dataq[k]);
+                printf( " %2d", dataq[ k ] );
             }
         }
-        printf("\n");
+        printf( "\n" );
     }
 #endif
 
@@ -131,24 +128,24 @@ static int trim_q_offsets(AnnotateContext* actx, int rid, int rlen, track_data* 
     track_anno wnd_left;
     int sum = 0;
 
-    for (wnd_left = ob ; wnd_left - ob <= TRIM_WINDOW && ob < oe ; wnd_left++)
+    for ( wnd_left = ob; wnd_left - ob <= TRIM_WINDOW && ob < oe; wnd_left++ )
     {
-        track_data q = dataq[wnd_left];
+        track_data q = dataq[ wnd_left ];
 
-        if (q >= trim_q || q == 0)
+        if ( q >= trim_q || q == 0 )
         {
             // printf("reset left\n");
 
-            ob = wnd_left + 1;
+            ob  = wnd_left + 1;
             sum = 0;
             continue;
         }
 
-        if (wnd_left - ob == TRIM_WINDOW && sum / TRIM_WINDOW >= trim_q)
+        if ( wnd_left - ob == TRIM_WINDOW && sum / TRIM_WINDOW >= trim_q )
         {
             // printf("move left %d\n", sum / TRIM_WINDOW);
 
-            sum -= dataq[ob];
+            sum -= dataq[ ob ];
             ob++;
         }
 
@@ -158,34 +155,34 @@ static int trim_q_offsets(AnnotateContext* actx, int rid, int rlen, track_data* 
     track_anno wnd_right;
     sum = 0;
 
-    for (wnd_right = oe ; oe - wnd_right <= TRIM_WINDOW && ob < oe ; wnd_right--)
+    for ( wnd_right = oe; oe - wnd_right <= TRIM_WINDOW && ob < oe; wnd_right-- )
     {
-        track_data q = dataq[wnd_right - 1];
+        track_data q = dataq[ wnd_right - 1 ];
 
-        if (q >= trim_q || q == 0)
+        if ( q >= trim_q || q == 0 )
         {
             // printf("reset right q %d oe %llu wnd_right %llu\n", q, oe, wnd_right);
 
-            oe = wnd_right - 1;
+            oe  = wnd_right - 1;
             sum = 0;
             continue;
         }
 
-        if (oe - wnd_right == TRIM_WINDOW && sum / TRIM_WINDOW >= trim_q)
+        if ( oe - wnd_right == TRIM_WINDOW && sum / TRIM_WINDOW >= trim_q )
         {
             // printf("move right %d\n", sum / TRIM_WINDOW);
 
-            sum -= dataq[oe];
+            sum -= dataq[ oe ];
             oe--;
         }
 
         sum += q;
     }
 
-    int tb = MIN( rlen, ((int) (ob - annoq[rid] / sizeof(track_data))) * twidth );
-    int te = MIN( rlen, ((int) (oe - annoq[rid] / sizeof(track_data))) * twidth );
+    int tb = MIN( rlen, ( (int)( ob - annoq[ rid ] / sizeof( track_data ) ) ) * twidth );
+    int te = MIN( rlen, ( (int)( oe - annoq[ rid ] / sizeof( track_data ) ) ) * twidth );
 
-    if (te - tb < min_trimmed_len)
+    if ( te - tb < min_trimmed_len )
     {
         tb = te = 0;
     }
@@ -196,121 +193,121 @@ static int trim_q_offsets(AnnotateContext* actx, int rid, int rlen, track_data* 
     return 1;
 }
 
-static void calculate_trim(AnnotateContext* actx)
+static void calculate_trim( AnnotateContext* actx )
 {
-    int dcur = 0;
-    int dmax = 1000;
-    int nreads     = actx->db->nreads;
+    int dcur   = 0;
+    int dmax   = 1000;
+    int nreads = actx->db->nreads;
 
-    track_data* data = (track_data*)malloc( sizeof(track_data) * dmax );
+    track_data* data = (track_data*)malloc( sizeof( track_data ) * dmax );
 
-    track_anno* anno = (track_anno*)malloc( sizeof(track_anno) * (nreads + 1) );
-    bzero(anno, sizeof(track_anno) * (nreads + 1));
+    track_anno* anno = (track_anno*)malloc( sizeof( track_anno ) * ( nreads + 1 ) );
+    bzero( anno, sizeof( track_anno ) * ( nreads + 1 ) );
 
     track_data* dataq = actx->q_data;
     track_anno* annoq = actx->q_anno;
 
     int a;
-    for (a = 0; a < nreads; a++)
+    for ( a = 0; a < nreads; a++ )
     {
-        if (annoq[a] >= annoq[a+1])
+        if ( annoq[ a ] >= annoq[ a + 1 ] )
         {
             continue;
         }
 
-        int alen = DB_READ_LEN(actx->db, a);
-        int tb = 0;
-        int te = 0;
+        int alen = DB_READ_LEN( actx->db, a );
+        int tb   = 0;
+        int te   = 0;
 
-        if (trim_q_offsets(actx, a, alen, dataq, annoq, &tb, &te) )
+        if ( trim_q_offsets( actx, a, alen, dataq, annoq, &tb, &te ) )
         {
             // assert(dbg_tb == data[dcur-2] && dbg_te == data[dcur-1]);
 
-            if (dcur + 2 >= dmax)
+            if ( dcur + 2 >= dmax )
             {
                 dmax = dmax * 1.2 + 1000;
-                data = (track_data*)realloc(data, sizeof(track_data) * dmax);
+                data = (track_data*)realloc( data, sizeof( track_data ) * dmax );
             }
 
-            data[dcur++] = tb;
-            data[dcur++] = te;
+            data[ dcur++ ] = tb;
+            data[ dcur++ ] = te;
 
-            anno[ a ] += 2 * sizeof(track_data);
+            anno[ a ] += 2 * sizeof( track_data );
 
 #ifdef DEBUG_Q
-            printf("trimming %6d (%5d) to %5d..%5d\n",
-                        a, alen,
-                        tb, te);
+            printf( "trimming %6d (%5d) to %5d..%5d\n",
+                    a, alen,
+                    tb, te );
 #endif
-       }
+        }
     }
 
     track_anno off = 0;
     track_anno coff;
 
     int j;
-    for (j = 0; j <= nreads; j++)
+    for ( j = 0; j <= nreads; j++ )
     {
-        coff = anno[j];
-        anno[j] = off;
+        coff      = anno[ j ];
+        anno[ j ] = off;
         off += coff;
     }
 
-    track_write(actx->db, actx->track_trim_out, actx->tblock, anno, data, dcur);
+    track_write( actx->db, actx->track_trim_out, actx->tblock, anno, data, dcur );
 
-    free(data);
-    free(anno);
+    free( data );
+    free( anno );
 }
 
-static void pre_annotate(PassContext* pctx, AnnotateContext* ctx)
+static void pre_annotate( PassContext* pctx, AnnotateContext* ctx )
 {
 #ifdef VERBOSE
-    printf(ANSI_COLOR_GREEN "PASS quality estimate and trimming" ANSI_COLOR_RESET "\n");
+    printf( ANSI_COLOR_GREEN "PASS quality estimate and trimming" ANSI_COLOR_RESET "\n" );
 #endif
 
     ctx->twidth = pctx->twidth;
 
-    ctx->q_anno = (track_anno*)malloc(sizeof(track_anno)*(DB_NREADS(ctx->db)+1));
-    bzero(ctx->q_anno, sizeof(track_anno)*(DB_NREADS(ctx->db)+1));
+    ctx->q_anno = (track_anno*)malloc( sizeof( track_anno ) * ( DB_NREADS( ctx->db ) + 1 ) );
+    bzero( ctx->q_anno, sizeof( track_anno ) * ( DB_NREADS( ctx->db ) + 1 ) );
 
-    ctx->q_dmax = DB_NREADS(ctx->db);
+    ctx->q_dmax = DB_NREADS( ctx->db );
     ctx->q_dcur = ctx->q_dprev = 0;
-    ctx->q_data = (track_data*)malloc(sizeof(track_data)*ctx->q_dmax);
+    ctx->q_data                = (track_data*)malloc( sizeof( track_data ) * ctx->q_dmax );
 
-    int maxtiles = (DB_READ_MAXLEN(ctx->db) + ctx->twidth - 1) / ctx->twidth;
+    int maxtiles = ( DB_READ_MAXLEN( ctx->db ) + ctx->twidth - 1 ) / ctx->twidth;
 
     ctx->q_histo_len = ctx->twidth * 2 * maxtiles;
-    ctx->q_histo = malloc( sizeof(uint32) * ctx->q_histo_len );
+    ctx->q_histo     = malloc( sizeof( uint32 ) * ctx->q_histo_len );
 }
 
-static void post_annotate(AnnotateContext* ctx)
+static void post_annotate( AnnotateContext* ctx )
 {
     int j;
     track_anno qoff, coff;
 
-    qoff = 0;
+    qoff       = 0;
     int nreads = DB_NREADS( ctx->db );
 
-    for (j = 0; j <= nreads; j++)
+    for ( j = 0; j <= nreads; j++ )
     {
-        coff = ctx->q_anno[j];
-        ctx->q_anno[j] = qoff;
+        coff             = ctx->q_anno[ j ];
+        ctx->q_anno[ j ] = qoff;
         qoff += coff;
     }
 
-    assert( qoff / sizeof(track_data) == (uint64_t)ctx->q_dcur );
+    assert( qoff / sizeof( track_data ) == (uint64_t)ctx->q_dcur );
 
-    calculate_trim(ctx);
+    calculate_trim( ctx );
 
-    track_write(ctx->db, ctx->track_q_out, ctx->tblock, ctx->q_anno, ctx->q_data, ctx->q_dcur);
+    track_write( ctx->db, ctx->track_q_out, ctx->tblock, ctx->q_anno, ctx->q_data, ctx->q_dcur );
 
-    free(ctx->q_anno);
-    free(ctx->q_data);
+    free( ctx->q_anno );
+    free( ctx->q_data );
 
-    free(ctx->q_histo);
+    free( ctx->q_histo );
 }
 
-static int handler_annotate(void* _ctx, Overlap* ovls, int novl)
+static int handler_annotate( void* _ctx, Overlap* ovls, int novl )
 {
     AnnotateContext* ctx = (AnnotateContext*)_ctx;
 
@@ -323,10 +320,10 @@ static int handler_annotate(void* _ctx, Overlap* ovls, int novl)
     uint32* q_histo = ctx->q_histo;
     int twidth      = ctx->twidth;
 
-    bzero(q_histo, ctx->q_histo_len * sizeof(uint32));
+    bzero( q_histo, ctx->q_histo_len * sizeof( uint32 ) );
 
     int i;
-    for (i = 0; i < novl; i++)
+    for ( i = 0; i < novl; i++ )
     {
         Overlap* ovl = ovls + i;
 
@@ -340,123 +337,123 @@ static int handler_annotate(void* _ctx, Overlap* ovls, int novl)
         int tlen  = ovl->path.tlen;
         int comp  = ( ovl->flags & OVL_COMP ) ? 1 : 0;
 
-        int tile = abpos / twidth;
+        int tile         = abpos / twidth;
         ovl_trace* trace = ovl->path.trace;
 
-        if ( (abpos % twidth) == 0 )
+        if ( ( abpos % twidth ) == 0 )
         {
-            int q = trace[0];
+            int q = trace[ 0 ];
 
             if ( q >= 0 && q < twidth * 2 )
             {
-                q_histo[ twidth * 2 * tile + 2 * q + comp] += 1;
+                q_histo[ twidth * 2 * tile + 2 * q + comp ] += 1;
             }
         }
 
         tile++;
 
         int t;
-        for (t = 2; t < tlen - 2; t += 2)
+        for ( t = 2; t < tlen - 2; t += 2 )
         {
-            int q = trace[t];
+            int q = trace[ t ];
 
             if ( q >= 0 && q < twidth * 2 )
             {
-                q_histo[ twidth * 2 * tile + 2 * q + comp] += 1;
+                q_histo[ twidth * 2 * tile + 2 * q + comp ] += 1;
             }
 
             tile += 1;
         }
 
-        if ( (aepos % twidth) == 0 || aepos == alen )
+        if ( ( aepos % twidth ) == 0 || aepos == alen )
         {
-            int q = trace[t];
+            int q = trace[ t ];
 
             if ( q >= 0 && q < twidth * 2 )
             {
-                q_histo[ twidth * 2 * tile + 2 * q + comp] += 1;
+                q_histo[ twidth * 2 * tile + 2 * q + comp ] += 1;
             }
         }
     }
 
     // estimate mean q
 
-    if (ctx->q_dcur + ntiles >= ctx->q_dmax)
+    if ( ctx->q_dcur + ntiles >= ctx->q_dmax )
     {
         ctx->q_dmax = ctx->q_dmax * 1.2 + ntiles;
-        ctx->q_data = realloc(ctx->q_data, sizeof(track_data) * ctx->q_dmax);
+        ctx->q_data = realloc( ctx->q_data, sizeof( track_data ) * ctx->q_dmax );
     }
 
-    for (i = 0; i < ntiles; i++)
+    for ( i = 0; i < ntiles; i++ )
     {
         uint32* tile_qhisto = q_histo + 2 * twidth * i;
-        uint32 sum = 0;
-        uint32 count = 0;
+        uint32 sum          = 0;
+        uint32 count        = 0;
 
         int q;
 
-        for ( q = 0 ; q < twidth && count != segmax ; q++ )
+        for ( q = 0; q < twidth && count != segmax; q++ )
         {
-            uint32 has = MIN(tile_qhisto[2 * q] + tile_qhisto[2 * q + 1], segmax - count);
+            uint32 has = MIN( tile_qhisto[ 2 * q ] + tile_qhisto[ 2 * q + 1 ], segmax - count );
             count += has;
             sum += has * q;
         }
 
-        if (count < segmin)
+        if ( count < segmin )
         {
             q = 0;
         }
         else
         {
-            if (sum == 0)
+            if ( sum == 0 )
             {
                 sum = count;
             }
 
-            q = (int)( ((float)sum)/count + 0.5 );
+            q = (int)( ( (float)sum ) / count + 0.5 );
         }
 
         ctx->q_data[ ctx->q_dcur++ ] = q;
-        ctx->q_anno[ a ] += 1 * sizeof(track_data);
+        ctx->q_anno[ a ] += 1 * sizeof( track_data );
     }
 
     return 1;
 }
 
-static void pre_update_anno(PassContext* pctx, AnnotateContext* actx)
+static void pre_update_anno( PassContext* pctx, AnnotateContext* actx )
 {
 #ifdef VERBOSE
-    printf(ANSI_COLOR_GREEN "PASS update quality estimate and trimming" ANSI_COLOR_RESET "\n");
+    printf( ANSI_COLOR_GREEN "PASS update quality estimate and trimming" ANSI_COLOR_RESET "\n" );
 #endif
 
-    actx->q_track = track_load(actx->db, actx->track_q_in);
+    actx->q_track = track_load( actx->db, actx->track_q_in );
 
-    if (!actx->q_track)
+    if ( !actx->q_track )
     {
-        fprintf(stderr, "could not open %s track\n", actx->track_q_in);
-        exit(1);
+        fprintf( stderr, "could not open %s track\n", actx->track_q_in );
+        exit( 1 );
     }
 
-    actx->trim_track = track_load(actx->db, actx->track_trim_in);
+    actx->trim_track = track_load( actx->db, actx->track_trim_in );
 
-    if (!actx->trim_track)
+    if ( !actx->trim_track )
     {
-        fprintf(stderr, "could not open %s track\n", actx->track_trim_in);
-        exit(1);
+        fprintf( stderr, "could not open %s track\n", actx->track_trim_in );
+        exit( 1 );
     }
 
-    int nreads = DB_NREADS(actx->db);
+    int nreads = DB_NREADS( actx->db );
 
     actx->twidth = pctx->twidth;
 
-    actx->trim_anno = (track_anno*)malloc(sizeof(track_anno) * (nreads + 1));
-    actx->trim_data = (track_data*)malloc( ((track_anno*)actx->trim_track->anno)[ nreads ] );
-    actx->tcur = 0;
+    actx->trim_anno = (track_anno*)malloc( sizeof( track_anno ) * ( nreads + 1 ) );
+    actx->trim_data = (track_data*)malloc( ( (track_anno*)actx->trim_track->anno )[ nreads ] );
+    actx->tcur      = 0;
 
-    bzero(actx->trim_anno, sizeof(track_anno) * (nreads + 1));
+    bzero( actx->trim_anno, sizeof( track_anno ) * ( nreads + 1 ) );
 }
 
-static void post_update_anno(AnnotateContext* actx)
+static void post_update_anno( AnnotateContext* actx )
 {
     int j;
     track_anno qoff, coff;
@@ -464,26 +461,27 @@ static void post_update_anno(AnnotateContext* actx)
 
     qoff = 0;
 
-    for (j = 0; j <= nreads; j++)
+    for ( j = 0; j <= nreads; j++ )
     {
-        coff = actx->trim_anno[j];
-        actx->trim_anno[j] = qoff;
+        coff                 = actx->trim_anno[ j ];
+        actx->trim_anno[ j ] = qoff;
         qoff += coff;
     }
 
-    track_write(actx->db, actx->track_trim_out, actx->tblock, actx->trim_anno, actx->trim_data, actx->tcur);
+    track_write( actx->db, actx->track_trim_out, actx->tblock, actx->trim_anno, actx->trim_data, actx->tcur );
 
-    free(actx->trim_anno);
-    free(actx->trim_data);
+    free( actx->trim_anno );
+    free( actx->trim_data );
 }
 
-static int handler_update_anno(void* _ctx, Overlap* ovls, int novl)
+static int handler_update_anno( void* _ctx, Overlap* ovls, int novl )
 {
     AnnotateContext* actx = _ctx;
     track_anno* trim_anno = actx->trim_anno;
     track_data* trim_data = actx->trim_data;
 
     int a = ovls->aread;
+    printf("a = %d\n", a);
 
     track_anno* annoq = actx->q_track->anno;
     track_data* dataq = actx->q_track->data;
@@ -492,24 +490,24 @@ static int handler_update_anno(void* _ctx, Overlap* ovls, int novl)
     int ae_max = 0;
 
     int i;
-    for (i = 0; i < novl; i++)
+    for ( i = 0; i < novl; i++ )
     {
-        if (ovls[i].flags & OVL_DISCARD)
+        if ( ovls[ i ].flags & OVL_DISCARD )
         {
             continue;
         }
 
-        if (ovls[i].aread == ovls[i].bread)
+        if ( ovls[ i ].aread == ovls[ i ].bread )
         {
             continue;
         }
 
-        ab_min = MIN(ab_min, ovls[i].path.abpos);
-        ae_max = MAX(ae_max, ovls[i].path.aepos);
+        ab_min = MIN( ab_min, ovls[ i ].path.abpos );
+        ae_max = MAX( ae_max, ovls[ i ].path.aepos );
     }
 
-    track_anno ob = ((track_anno*)actx->trim_track->anno)[a] / sizeof(track_data);
-    track_anno oe = ((track_anno*)actx->trim_track->anno)[a + 1] / sizeof(track_data);
+    track_anno ob = ( (track_anno*)actx->trim_track->anno )[ a ] / sizeof( track_data );
+    track_anno oe = ( (track_anno*)actx->trim_track->anno )[ a + 1 ] / sizeof( track_data );
 
     if ( ob == oe )
     {
@@ -520,20 +518,20 @@ static int handler_update_anno(void* _ctx, Overlap* ovls, int novl)
 
     int tb, te, tb_new, te_new;
 
-    tb_new = tb = ((track_data*)actx->trim_track->data)[ob];
-    te_new = te = ((track_data*)actx->trim_track->data)[ob + 1];
+    tb_new = tb = ( (track_data*)actx->trim_track->data )[ ob ];
+    te_new = te = ( (track_data*)actx->trim_track->data )[ ob + 1 ];
 
     // tighten trim
 
-    if (tb < ab_min || te > ae_max)
+    if ( tb < ab_min || te > ae_max )
     {
-        int alen = DB_READ_LEN(actx->db, ovls->aread);
+        int alen = DB_READ_LEN( actx->db, ovls->aread );
 
 #ifdef DEBUG_Q
-        printf("READ %6d (%5d) ... CURRENT %5d..%5d ... NEW %5d..%5d\n", a, alen, tb, te, ab_min, ae_max);
+        printf( "READ %6d (%5d) ... CURRENT %5d..%5d ... NEW %5d..%5d\n", a, alen, tb, te, ab_min, ae_max );
 #endif
 
-        if (ab_min == INT_MAX)
+        if ( ab_min == INT_MAX )
         {
             tb_new = te_new = 0;
         }
@@ -542,7 +540,7 @@ static int handler_update_anno(void* _ctx, Overlap* ovls, int novl)
             tb_new = ab_min + actx->twidth - 1;
             te_new = ae_max; //  - actx->twidth + 1;
 
-            trim_q_offsets(actx, a, alen, dataq, annoq, &tb_new, &te_new);
+            trim_q_offsets( actx, a, alen, dataq, annoq, &tb_new, &te_new );
 
             /*
             if (ae_max == alen)
@@ -553,13 +551,17 @@ static int handler_update_anno(void* _ctx, Overlap* ovls, int novl)
         }
 
 #ifdef DEBUG_Q
-        printf(" ... UPDATED %5d..%5d\n\n", tb_new, te_new);
+        printf( " ... UPDATED %5d..%5d\n\n", tb_new, te_new );
 #endif
     }
 
+    printf("%llu %llu %d\n", trim_anno[2948], actx->tcur, a);
+
+    if ( trim_anno[2948] ) return 0;
+
     trim_data[ actx->tcur++ ] = tb_new;
     trim_data[ actx->tcur++ ] = te_new;
-    trim_anno[ a ] += 2 * sizeof(track_data);
+    trim_anno[ a ] += 2 * sizeof( track_data );
 
     return 1;
 }
@@ -587,14 +589,14 @@ static void usage()
     fprintf( stderr, "         -Q track  output quality track (default %s)\n", DEF_ARG_Q );
 }
 
-int main(int argc, char* argv[])
+int main( int argc, char* argv[] )
 {
     HITS_DB db;
     PassContext* pctx;
     AnnotateContext actx;
     FILE* fileOvlIn;
 
-    bzero(&actx, sizeof(AnnotateContext));
+    bzero( &actx, sizeof( AnnotateContext ) );
     actx.db = &db;
 
     // process arguments
@@ -603,151 +605,151 @@ int main(int argc, char* argv[])
 
     opterr = 0;
 
-    actx.tblock = DEF_ARG_B;
+    actx.tblock          = DEF_ARG_B;
     actx.min_trimmed_len = DEF_ARG_O;
-    actx.trim_q = DEF_ARG_D;
-    actx.segmin = DEF_ARG_S;
-    actx.segmax = DEF_ARG_SS;
-    actx.track_trim_in = NULL;
-    actx.track_trim_out = DEF_ARG_T;
-    actx.track_q_in = DEF_ARG_Q;
-    actx.track_q_out = DEF_ARG_Q;
+    actx.trim_q          = DEF_ARG_D;
+    actx.segmin          = DEF_ARG_S;
+    actx.segmax          = DEF_ARG_SS;
+    actx.track_trim_in   = NULL;
+    actx.track_trim_out  = DEF_ARG_T;
+    actx.track_q_in      = DEF_ARG_Q;
+    actx.track_q_out     = DEF_ARG_Q;
 
     int c;
-    while ((c = getopt(argc, argv, "s:S:o:ub:d:t:T:q:Q:")) != -1)
+    while ( ( c = getopt( argc, argv, "s:S:o:ub:d:t:T:q:Q:" ) ) != -1 )
     {
-        switch (c)
+        switch ( c )
         {
             case 's':
-                      actx.segmin = atoi(optarg);
-                      break;
+                actx.segmin = atoi( optarg );
+                break;
 
             case 'S':
-                      actx.segmax = atoi(optarg);
-                      break;
+                actx.segmax = atoi( optarg );
+                break;
 
             case 'd':
-                      actx.trim_q = atoi(optarg);
-                      break;
+                actx.trim_q = atoi( optarg );
+                break;
 
             case 'o':
-                      actx.min_trimmed_len = atoi(optarg);
-                      break;
+                actx.min_trimmed_len = atoi( optarg );
+                break;
 
             case 'u':
-                      arg_u = 1;
-                      break;
+                arg_u = 1;
+                break;
 
             case 'b':
-                      actx.tblock = atoi(optarg);
-                      break;
+                actx.tblock = atoi( optarg );
+                break;
 
             case 't':
-                      actx.track_trim_in = optarg;
-                      break;
+                actx.track_trim_in = optarg;
+                break;
 
             case 'T':
-                      actx.track_trim_out = optarg;
-                      break;
+                actx.track_trim_out = optarg;
+                break;
 
             case 'q':
-                      actx.track_q_in = optarg;
-                      break;
+                actx.track_q_in = optarg;
+                break;
 
             case 'Q':
-                      actx.track_q_out = optarg;
-                      break;
+                actx.track_q_out = optarg;
+                break;
 
             default:
-                      usage();
-                      exit(1);
+                usage();
+                exit( 1 );
         }
     }
 
-    if (argc - optind != 2)
+    if ( argc - optind != 2 )
     {
         usage();
-        exit(1);
+        exit( 1 );
     }
 
-    if (actx.trim_q == 0)
+    if ( actx.trim_q == 0 )
     {
-        fprintf(stderr, "error: -q not specified\n");
-        exit(1);
+        fprintf( stderr, "error: -q not specified\n" );
+        exit( 1 );
     }
 
-    if (actx.segmin < 1)
+    if ( actx.segmin < 1 )
     {
-        fprintf(stderr, "error: invalid -s\n");
-        exit(1);
+        fprintf( stderr, "error: invalid -s\n" );
+        exit( 1 );
     }
 
-    if (actx.segmin > actx.segmax)
+    if ( actx.segmin > actx.segmax )
     {
-        fprintf(stderr, "error: invalid -s -S combination\n");
-        exit(1);
+        fprintf( stderr, "error: invalid -s -S combination\n" );
+        exit( 1 );
     }
 
-    if (actx.track_q_in == NULL && arg_u == 1)
+    if ( actx.track_q_in == NULL && arg_u == 1 )
     {
         fprintf( stderr, "error: -u specified without -q\n" );
         exit( 1 );
     }
 
-    if (actx.track_trim_in == NULL && arg_u == 1)
+    if ( actx.track_trim_in == NULL && arg_u == 1 )
     {
         fprintf( stderr, "error: -u specified without -t\n" );
         exit( 1 );
     }
 
-    char* pcPathReadsIn = argv[optind++];
-    char* pcPathOverlaps = argv[optind++];
+    char* pcPathReadsIn  = argv[ optind++ ];
+    char* pcPathOverlaps = argv[ optind++ ];
 
-    if ( (fileOvlIn = fopen(pcPathOverlaps, "r")) == NULL )
+    if ( ( fileOvlIn = fopen( pcPathOverlaps, "r" ) ) == NULL )
     {
-        fprintf(stderr, "could not open '%s'\n", pcPathOverlaps);
-        exit(1);
+        fprintf( stderr, "could not open '%s'\n", pcPathOverlaps );
+        exit( 1 );
     }
 
     // init
 
-    if (Open_DB(pcPathReadsIn, &db))
+    if ( Open_DB( pcPathReadsIn, &db ) )
     {
-        fprintf(stderr, "failed to open %s\n", pcPathReadsIn);
-        exit(1);
+        fprintf( stderr, "failed to open %s\n", pcPathReadsIn );
+        exit( 1 );
     }
 
-    pctx = pass_init(fileOvlIn, NULL);
+    pctx = pass_init( fileOvlIn, NULL );
 
     pctx->split_b = 0;
-    pctx->data = &actx;
+    pctx->data    = &actx;
 
-    pctx->load_trace = 1;
+    pctx->load_trace   = 1;
     pctx->unpack_trace = 1;
 
     // passes
 
     // update existing trim track
-    if (arg_u)
+    if ( arg_u )
     {
-        pre_update_anno(pctx, &actx);
-        pass(pctx, handler_update_anno);
-        post_update_anno(&actx);
+        pre_update_anno( pctx, &actx );
+        pass( pctx, handler_update_anno );
+        post_update_anno( &actx );
     }
     else
     {
-        pre_annotate(pctx, &actx);
-        pass(pctx, handler_annotate);
-        post_annotate(&actx);
+        pre_annotate( pctx, &actx );
+        pass( pctx, handler_annotate );
+        post_annotate( &actx );
     }
 
     // cleanup
 
-    pass_free(pctx);
+    pass_free( pctx );
 
-    fclose(fileOvlIn);
+    fclose( fileOvlIn );
 
-    Close_DB(&db);
+    Close_DB( &db );
 
     return 0;
 }

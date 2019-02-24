@@ -2,10 +2,6 @@
  *
  * performs basic sanity checks on the overlaps
  *
- * Author: MARVEL Team
- *
- * Date  : December 2014
- *
  *******************************************************************************************/
 
 #include <ctype.h>
