@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <sys/param.h>
+#include <sys/stat.h>
 
 #include "lib/colors.h"
 #include "lib/oflags.h"
@@ -51,6 +52,19 @@ typedef enum { EDGE_SORT_OVL, EDGE_SORT_OVH } OgEdgeSort;
 // switches
 
 #undef DEBUG_INSPECT
+
+
+#define ARRAY_ADD1(arr, max, n, v)                  \
+{                                                   \
+    if ( n + 1 >= max )                             \
+    {                                               \
+        max = max * 1.2 + 1000;                     \
+        arr = realloc(arr,  sizeof(*arr) * max );   \
+    }                                               \
+    arr[n] = v;                                     \
+    n++;                                            \
+}
+
 
 // used to store overlaps, basically a copy of everything we need from an Overlap struct
 
@@ -111,6 +125,15 @@ typedef struct
 
     int* curleft;
     int* curright;
+
+    // keeps track of used read when writing graph(s)
+
+    uint64_t* readsused;
+    uint64_t maxreadsused;
+
+    int* comp2reads;
+    int ncomp2reads;
+    int maxcomp2reads;
 
 } OgBuildContext;
 
@@ -406,8 +429,7 @@ static void print_graph_gml(OgBuildContext* octx, FILE* f, const char* title, ch
     fprintf(f, "]\n");
 }
 
-
-static void print_graph_graphml(OgBuildContext* octx, FILE* f, const char* title, char** comments, int ncomments, int component)
+static void print_graph_graphml(OgBuildContext* octx, FILE* f, const char* title, char** comments, int ncomments, int* component)
 {
     fprintf(f, "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n");
 
@@ -443,16 +465,24 @@ static void print_graph_graphml(OgBuildContext* octx, FILE* f, const char* title
     OgEdge* left = octx->left;
     OgEdge* right = octx->right;
 
+    uint64_t* readsused = octx->readsused;
+    uint64_t maxreadsused = octx->maxreadsused;
+    uint64_t nreadsused = 0;
+
     unsigned char* status = octx->status;
     int aread;
-    for ( aread = 0; aread < octx->db->nreads; aread++ )
+    int i = 0;
+    while ( ( aread = component[i++] ) != - 1 )
+    // for ( aread = 0; aread < octx->db->nreads; aread++ )
     {
-        if ( !(status[aread] & STATUS_PROPER) )
+        /*
+        if ( component != -1 && octx->comp[aread] != component )
         {
             continue;
         }
+        */
 
-        if ( component != -1 && octx->comp[aread] != component )
+        if ( !(status[aread] & STATUS_PROPER) )
         {
             continue;
         }
@@ -468,6 +498,8 @@ static void print_graph_graphml(OgBuildContext* octx, FILE* f, const char* title
             if ( (status[e->b] & STATUS_PROPER) )
             {
                 status[ e->b ] |= STATUS_USED;
+                ARRAY_ADD1(readsused, maxreadsused, nreadsused, e->b);
+
                 print_graph_graphml_edge(f, e, 'l');
                 used = 1;
             }
@@ -485,6 +517,8 @@ static void print_graph_graphml(OgBuildContext* octx, FILE* f, const char* title
             if ( (status[e->b] & STATUS_PROPER) )
             {
                 status[ e->b ] |= STATUS_USED;
+                ARRAY_ADD1(readsused, maxreadsused, nreadsused, e->b);
+
                 print_graph_graphml_edge(f, e, 'r');
                 used = 1;
             }
@@ -494,12 +528,17 @@ static void print_graph_graphml(OgBuildContext* octx, FILE* f, const char* title
 
         if (used)
         {
+            ARRAY_ADD1(readsused, maxreadsused, nreadsused, aread);
+
             status[aread] |= STATUS_USED;
         }
     }
 
-    for ( aread = 0; aread < octx->db->nreads; aread++ )
+    for ( i = 0 ; i < nreadsused; i++)
+    // for ( aread = 0; aread < octx->db->nreads; aread++ )
     {
+        aread = readsused[i];
+
         if ( !(status[aread] & STATUS_USED) )
         {
             continue;
@@ -517,6 +556,43 @@ static void print_graph_graphml(OgBuildContext* octx, FILE* f, const char* title
 
     fprintf(f, "  </graph>\n");
     fprintf(f, "</graphml>\n");
+
+    octx->readsused = readsused;
+    octx->maxreadsused = maxreadsused;
+
+}
+
+static int mkhierarchy(const char* _path)
+{
+    char* path = strdup(_path);
+    struct stat st = {0};
+    char* comp = path;
+
+    while (1)
+    {
+        char* sep = strchr(comp + 1, '/');
+        if ( sep == NULL )
+        {
+            break;
+        }
+
+        *sep = '\0';
+
+        if (stat(path, &st) == -1)
+        {
+            if ( mkdir(path, 0700) != 0 )
+            {
+                return 0;
+            }
+        }
+
+        *sep = '/';
+        comp = sep + 1;
+    }
+
+    free(path);
+
+    return 1;
 }
 
 // assign reads to components
@@ -547,6 +623,15 @@ static void assign_component(OgBuildContext* octx)
     uint64* nleft = octx->nleft;
     uint64* nright = octx->nright;
 
+    if ( octx->ncomp2reads )
+    {
+        printf("warning: overwriting component assignment\n");
+    }
+
+    int* comp2reads = octx->comp2reads;
+    int ncomp2reads = 0;
+    int maxcomp2reads = octx->maxcomp2reads;
+
     // for all reads
 
     int j;
@@ -568,9 +653,12 @@ static void assign_component(OgBuildContext* octx)
         curstack = 1;
         comp[j] = curcomp;
 
+        int prev_ncomp2reads = ncomp2reads;
+        ARRAY_ADD1(comp2reads, maxcomp2reads, ncomp2reads, j);
+
         int empty = 1;
 
-        // keep going until stack exhausted
+        // keep going until the stack is exhausted
 
         while (curstack)
         {
@@ -592,6 +680,8 @@ static void assign_component(OgBuildContext* octx)
                     if ( comp[ edge->b ] == -1 && (status[edge->b] & STATUS_PROPER) )
                     {
                         comp[ edge->b ] = curcomp;
+
+                        ARRAY_ADD1(comp2reads, maxcomp2reads, ncomp2reads, edge->b);
 
                         stack_new[curstack_new] = edge->b;
                         curstack_new++;
@@ -620,6 +710,8 @@ static void assign_component(OgBuildContext* octx)
                     {
                         comp[ edge->b ] = curcomp;
 
+                        ARRAY_ADD1(comp2reads, maxcomp2reads, ncomp2reads, edge->b);
+
                         stack_new[curstack_new] = edge->b;
                         curstack_new++;
 
@@ -635,7 +727,7 @@ static void assign_component(OgBuildContext* octx)
                 }
             }
 
-            // were we able to go somewhere (widowed nodes)
+            // were we able to go somewhere or is this a widowed node ?
 
             if (curstack_new > 0)
             {
@@ -657,14 +749,20 @@ static void assign_component(OgBuildContext* octx)
         if (empty)
         {
             comp[j] = -1;
+            ncomp2reads = prev_ncomp2reads;
         }
         else
         {
+            ARRAY_ADD1(comp2reads, maxcomp2reads, ncomp2reads, -1);
             curcomp++;
         }
     }
 
     printf("  %d components\n", curcomp);
+
+    octx->comp2reads = comp2reads;
+    octx->maxcomp2reads = maxcomp2reads;
+    octx->ncomp2reads = ncomp2reads;
 
     octx->ncomp = curcomp;
 
@@ -1138,14 +1236,37 @@ static int reduce_edges(OgBuildContext* octx)
 }
 */
 
+static char* write_graph_target_path(const char* path, int ncomp, const char* ext)
+{
+    static char pathcomp[PATH_MAX];
+
+    char* sep = strrchr(path, '/');
+
+    if ( sep )
+    {
+        sprintf(pathcomp, "%.*s/%s_%05d/%s_%07d.%s",
+                (int)(sep - path), path,
+                sep + 1, ncomp / 10000,
+                sep + 1, ncomp, ext);
+    }
+    else
+    {
+        sprintf(pathcomp, "%s_%07d.%s", path, ncomp, ext);
+    }
+
+    return pathcomp;
+}
+
 static void write_graph(OgBuildContext* octx, const char* path)
 {
+    int* comp2reads = octx->comp2reads;
+    int ncomp2reads = octx->ncomp2reads;
+
     if (octx->split)
     {
-        char* pathcomp = malloc( strlen(path) + 30 );
-
-        int i;
-        for (i = 0; i < octx->ncomp; i++)
+        int ncomp = 1;
+        int i = 0;
+        while ( i < ncomp2reads )
         {
             char* ext;
             if (octx->gformat == FORMAT_GML)
@@ -1161,7 +1282,8 @@ static void write_graph(OgBuildContext* octx, const char* path)
                 ext = "graphml";
             }
 
-            sprintf(pathcomp, "%s_%05d.%s", path, i, ext);
+            char* pathcomp = write_graph_target_path(path, ncomp, ext);
+            mkhierarchy(pathcomp);
 
             FILE* f = fopen(pathcomp, "w");
 
@@ -1169,15 +1291,15 @@ static void write_graph(OgBuildContext* octx, const char* path)
             {
                 if (octx->gformat == FORMAT_GML)
                 {
-                    print_graph_gml(octx, f, "og", NULL, 0, i);
+                    // print_graph_gml(octx, f, "og", NULL, 0, i);
                 }
                 else if (octx->gformat == FORMAT_TGF)
                 {
-                    print_graph_tgf(octx, f, i);
+                    // print_graph_tgf(octx, f, i);
                 }
                 else
                 {
-                    print_graph_graphml(octx, f, "og", NULL, 0, i);
+                    print_graph_graphml(octx, f, "og", NULL, 0, comp2reads + i);
                 }
 
                 fclose(f);
@@ -1186,13 +1308,32 @@ static void write_graph(OgBuildContext* octx, const char* path)
             {
                 fprintf(stderr, "failed to create %s\n", pathcomp);
             }
-        }
 
-        free(pathcomp);
+            while ( i < ncomp2reads && comp2reads[i] != -1 )
+            {
+                i += 1;
+            }
+
+            i += 1;
+            ncomp += 1;
+        }
     }
     else
     {
         FILE* f = fopen(path, "w");
+
+        int maxcomp2reads = octx->maxcomp2reads;
+        ncomp2reads = 0;
+
+        int i;
+        for ( i = 0; i < octx->db->nreads; i++ )
+        {
+            ARRAY_ADD1(comp2reads, maxcomp2reads, ncomp2reads, i);
+        }
+        ARRAY_ADD1(comp2reads, maxcomp2reads, ncomp2reads, -1);
+
+        octx->comp2reads = comp2reads;
+        octx->maxcomp2reads = maxcomp2reads;
 
         if (f)
         {
@@ -1206,7 +1347,7 @@ static void write_graph(OgBuildContext* octx, const char* path)
             }
             else
             {
-                print_graph_graphml(octx, f, "og", NULL, 0, -1);
+                print_graph_graphml(octx, f, "og", NULL, 0, comp2reads);
             }
 
             fclose(f);
@@ -1257,6 +1398,10 @@ static void post_build(OgBuildContext* octx)
     free(octx->status);
 
     free(octx->comp);
+
+    free(octx->comp2reads);
+    free(octx->readsused);
+
 }
 
 static void drop_parallel_edges(Overlap* ovls, int novl)
