@@ -1,7 +1,6 @@
-LAZtest
-Makefile
-TKshow
+FAsort
 H5dextract
+LAZtest
 LAcartoons
 LAcheck
 LAcount
@@ -13,9 +12,11 @@ LAmerge
 LAneighbors
 LAshow
 LAstats
+Makefile
 TKcombine
-maskReads
-repeatalizer
+TKshow
+TKtrim
 gff2track
 kmers
-TKtrim
+maskReads
+repeatalizer
