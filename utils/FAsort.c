@@ -63,7 +63,7 @@ int main( int argc, char* argv[] )
 
     int c;
     opterr = 0;
-    while ( ( c = getopt( argc, argv, "rm:M:" ) ) != -1 )
+    while ( ( c = getopt( argc, argv, "srm:M:" ) ) != -1 )
     {
         switch ( c )
         {
@@ -114,10 +114,11 @@ int main( int argc, char* argv[] )
     }
 
     FILE** files        = malloc( sizeof( FILE* ) * ( argc - optind ) );
+    uint32_t nfiles     = 0;
+
     FA_ENTRY* entries   = NULL;
     uint64_t maxentries = 0;
     uint64_t nentries   = 0;
-    uint32_t nfiles     = 0;
 
     while ( optind < argc )
     {
@@ -132,7 +133,7 @@ int main( int argc, char* argv[] )
         }
 
         ssize_t len;
-        char* line;
+        char* line = NULL;
         size_t maxline = 0;
 
         while ( ( len = getline( &line, &maxline, fin ) ) > 0 )
