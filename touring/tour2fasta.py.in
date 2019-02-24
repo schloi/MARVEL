@@ -308,6 +308,7 @@ def main():
     parser.add_argument("graph_path_pairs", metavar = "graph path", nargs="+", help = "toured graph and path pairs")
     parser.add_argument("-c", "--corrected", metavar = "corrected.db", default = None, help = "database containing the corrected reads")
     parser.add_argument("-s", "--split", default = False, action="store_true")
+    parser.add_argument("-o", "--output", default = None, help = "single output file instead of pair specific one")
     parser.add_argument("-p", "--prefix", metavar = "file.prefix", default = "path", help = "fasta sequence name prefix")
     parser.add_argument("-t", "--trimTrack",
                         dest = "trimTrack", type = str,
@@ -336,12 +337,14 @@ def main():
             print("file {} not found".format(fname))
             continue
 
+    if args.output:
+        fout = open(args.output, "w")
+    else:
+        fout = None
+
     for i in range(0, len(args.graph_path_pairs), 2):
         fgraph = args.graph_path_pairs[i]
         fpaths = args.graph_path_pairs[i + 1]
-
-        basename = fgraph.rpartition(".")[0]
-        of = basename + ".fasta"
 
         print("loading graph {}".format(fgraph))
 
@@ -350,8 +353,6 @@ def main():
         except Exception as e:
             print("error: failed to load graph: " + str(e))
             sys.exit(1)
-
-        fileSeq = open(of, "w")
 
         paths = []
 
@@ -457,9 +458,19 @@ def main():
         #
         ###
 
+        if fout:
+            fileSeq = fout
+        else:
+            basename = fgraph.rpartition(".")[0]
+            fileSeq = open(basename + ".fasta", "w")
+
         process_graph(g, db, dbc, fileSeq, paths, track_trim_name, seqname_prefix)
 
-        fileSeq.close()
+        if not fout:
+            fileSeq.close()
+
+    if fout:
+        fout.close()
 
 if __name__ == "__main__":
     if not marvel.config.has_recent_python():
