@@ -23,7 +23,7 @@ class Track(object):
     @classmethod
     def uncompress_chunks(cls, fin):
         hsize = struct.calcsize(Track.STRUCT_CHUNK_HEADER)
-        data = bytes()
+        data = bytearray()
 
         while True:
             chunk = fin.read(hsize)
@@ -34,7 +34,7 @@ class Track(object):
             (clen, ) = struct.unpack(Track.STRUCT_CHUNK_HEADER, chunk)
 
             chunk = fin.read(clen)
-            data += zlib.decompress( chunk )
+            data.extend( zlib.decompress( chunk ) )
 
         return data
 
