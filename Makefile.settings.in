@@ -26,6 +26,12 @@ VPATH = $(PATH_DB) $(PATH_DALIGN) $(PATH_LIB) $(PATH_LIBE) $(PATH_MSA)
 
 CFLAGS += -Wunused-macros -Wall -Wextra -I../
 CLIBS = -lm -lz
+
+# UNAME_S := $(shell uname -s)
+# ifeq ($(UNAME_S),Linux)
+# 	CLIBS += -lunwind
+# endif
+
 # CFLAGS += -D_GNU_SOURCE
 
 debug ?= 0
