@@ -2,7 +2,8 @@
 include ../Makefile.settings
 
 ALL = LAcartoons LAshow LAcheck LAcount LAmerge \
-      LAindex LAstats  TKshow TKcombine gff2track
+      LAindex LAstats  TKshow TKcombine gff2track \
+	  FAsort
 
 with_gtk = @with_gtk@
 with_hdf5 = @with_hdf5@
@@ -32,6 +33,9 @@ gff2track: gff2track.c $(PATH_LIB)/lasidx.h $(PATH_LIB)/lasidx.c $(PATH_LIB)/tra
 
 LAneighbors: LAneighbors.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c
 	$(CC) $(CFLAGS) -o LAneighbors LAneighbors.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(CLIBS)
+
+FAsort: FAsort.c
+	$(CC) $(CFLAGS) -o FAsort FAsort.c $(CLIBS)
 
 LAcount: LAcount.c $(PATH_LIB)/pass.c $(PATH_LIB)/pass.h $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h
 	$(CC) $(CFLAGS) -o LAcount LAcount.c $(PATH_LIB)/pass.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(CLIBS)
