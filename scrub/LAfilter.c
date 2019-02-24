@@ -1697,11 +1697,10 @@ static void usage( FILE* fout, const char* app )
     fprintf( fout, "         -p purge discarded alignments\n" );
     fprintf( fout, "         -r track  name of the track containing the repeat annotation (%s)\n", DEF_ARG_R );
     fprintf( fout, "         -s n  conservatively stitch split alignments with distance < n\n" );
-    fprintf( fout, "         -S n  stitch irrespective of discrepencies in the distance between in A and B read\n" );
+    fprintf( fout, "         -S n  stitch irrespective of discrepencies in the distance between A and B read\n" );
     fprintf( fout, "         -t track  name of the track containing the trim annotation (%s)\n", DEF_ARG_T );
     fprintf( fout, "         -T  apply the trim annotation and update the alignments\n" );
     fprintf( fout, "         -u  maximum number of unaligned (leftover) bases in the alignment\n" );
-
 
     fprintf( fout, "experimental options:\n" );
     fprintf( fout, "         -N n,n,n  heuristic repeat-induced alignment droppping. TODO: explain\n" );
