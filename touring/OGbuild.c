@@ -3,10 +3,6 @@
  *  Builds the overlap graph
  *  (C implementation of build_og.py)
  *
- *  Date    : January 2016
- *
- *  Author  : MARVEL Team
- *
  *******************************************************************************************/
 
 #include <stdlib.h>
@@ -36,7 +32,7 @@
 
 // graph format
 
-typedef enum { FORMAT_GML, FORMAT_GRAPHML, FORMAT_TGF } GraphFormat;
+typedef enum { FORMAT_GRAPHML } GraphFormat;
 
 // contained edges sorting
 
@@ -45,7 +41,6 @@ typedef enum { EDGE_SORT_OVL, EDGE_SORT_OVH } OgEdgeSort;
 // defaults
 
 #define DEF_ARG_C        0
-#define DEF_ARG_F        "graphml"
 #define DEF_ARG_P        "ovl"
 #define DEF_ARG_T        TRACK_TRIM
 
@@ -156,279 +151,6 @@ static void print_graph_graphml_edge(FILE* f, OgEdge* e, char side)
     fprintf(f, "    </edge>\n");
 }
 
-static void print_graph_gml_edge(FILE* f, OgEdge* e, char side)
-{
-    int div = 100.0 * 2 * e->diffs / ( (e->ae - e->ab) + (e->be - e->bb) );
-
-    fprintf(f, "  edge [\n");
-    fprintf(f, "    source %d\n", e->a);
-    fprintf(f, "    target %d\n", e->b);
-    fprintf(f, "    length %d\n", e->ovh);
-    fprintf(f, "    flags %d\n", e->flags);
-    fprintf(f, "    divergence %d\n", div);
-    fprintf(f, "    end \"%c\"\n", side);
-    fprintf(f, "  ]\n");
-}
-
-//
-// TGF export
-//
-//      we are using the label as storage for various additional values
-//      the standard format
-//
-//      id_i label_i
-//      #
-//      id_j id_k label_edge_i
-//
-//      turns into
-//
-//      id_i optional_i left_edges_i right_edges_i
-//      #
-//      id_j id_k overhang_i flags_i divergence_i side_i
-//
-
-static void print_graph_tgf_edge(FILE* f, OgEdge* e, char side)
-{
-    int div = 100.0 * 2 * e->diffs / ( (e->ae - e->ab) + (e->be - e->bb) );
-
-    fprintf(f, "%d %d %d %d %d %c\n", e->a, e->b, e->ovh, e->flags, div, side);
-}
-
-static void print_graph_tgf(OgBuildContext* octx, FILE* f, int component)
-{
-    uint64* nleft = octx->nleft;
-    uint64* nright = octx->nright;
-    OgEdge* left = octx->left;
-    OgEdge* right = octx->right;
-    unsigned char* status = octx->status;
-
-    int* niedges = malloc(sizeof(int) * octx->db->nreads);
-    int* noedges = malloc(sizeof(int) * octx->db->nreads);
-    bzero(niedges, sizeof(int) * octx->db->nreads);
-    bzero(noedges, sizeof(int) * octx->db->nreads);
-
-    int aread;
-    for ( aread = 0; aread < octx->db->nreads; aread++ )
-    {
-        if ( !(status[aread] & STATUS_PROPER) )
-        {
-            continue;
-        }
-
-        if ( component != -1 && octx->comp[aread] != component )
-        {
-            continue;
-        }
-
-        int used = 0;
-        uint64 b = nleft[aread];
-        uint64 e = nleft[aread + 1];
-
-        while (b < e)
-        {
-            OgEdge* e = left + b;
-            int bread = e->b;
-
-            if ( (status[bread] & STATUS_PROPER) )
-            {
-                status[bread] |= STATUS_USED;
-                used = 1;
-
-                noedges[aread]++;
-                niedges[bread]++;
-            }
-
-            b++;
-        }
-
-        b = nright[aread];
-        e = nright[aread + 1];
-
-        while (b < e)
-        {
-            OgEdge* e = right + b;
-            int bread = e->b;
-
-            if ( (status[bread] & STATUS_PROPER) )
-            {
-                status[bread] |= STATUS_USED;
-                used = 1;
-
-                noedges[aread]++;
-                niedges[bread]++;
-            }
-
-            b++;
-        }
-
-        if (used)
-        {
-            status[aread] |= STATUS_USED;
-        }
-    }
-
-    for ( aread = 0; aread < octx->db->nreads; aread++ )
-    {
-        if ( !(status[aread] & STATUS_USED) )
-        {
-            continue;
-        }
-
-        int optional = (status[aread] & STATUS_OPTIONAL) ? 1 : 0;
-
-        fprintf(f, "%d %d %d %d\n", aread, optional, niedges[aread], noedges[aread]);
-
-        status[aread] ^= STATUS_USED;
-    }
-
-    fprintf(f, "#\n");
-
-    for ( aread = 0; aread < octx->db->nreads; aread++ )
-    {
-        if ( !(status[aread] & STATUS_PROPER) )
-        {
-            continue;
-        }
-
-        if ( component != -1 && octx->comp[aread] != component )
-        {
-            continue;
-        }
-
-        uint64 b = nleft[aread];
-        uint64 e = nleft[aread + 1];
-
-        while (b < e)
-        {
-            OgEdge* e = left + b;
-
-            if ( (status[e->b] & STATUS_PROPER) )
-            {
-                print_graph_tgf_edge(f, e, 'l');
-            }
-
-            b++;
-        }
-
-        b = nright[aread];
-        e = nright[aread + 1];
-
-        while (b < e)
-        {
-            OgEdge* e = right + b;
-
-            if ( (status[e->b] & STATUS_PROPER) )
-            {
-                print_graph_tgf_edge(f, e, 'r');
-            }
-
-            b++;
-        }
-    }
-
-    free(niedges);
-    free(noedges);
-}
-
-
-static void print_graph_gml(OgBuildContext* octx, FILE* f, const char* title, char** comments, int ncomments, int component)
-{
-    fprintf(f, "graph [\n");
-
-    int i;
-    for ( i = 0; i < ncomments; i++ )
-    {
-        fprintf(f, "  comment \"%s\"\n", comments[i]);
-    }
-
-    if (title)
-    {
-        fprintf(f, "  label \"%s\"\n", title);
-    }
-
-    fprintf(f, "  directed 1\n");
-
-    uint64* nleft = octx->nleft;
-    uint64* nright = octx->nright;
-    OgEdge* left = octx->left;
-    OgEdge* right = octx->right;
-
-    unsigned char* status = octx->status;
-    int aread;
-    for ( aread = 0; aread < octx->db->nreads; aread++ )
-    {
-        if ( !(status[aread] & STATUS_PROPER) )
-        {
-            continue;
-        }
-
-        if ( component != -1 && octx->comp[aread] != component )
-        {
-            continue;
-        }
-
-        int used = 0;
-        uint64 b = nleft[aread];
-        uint64 e = nleft[aread + 1];
-
-        while (b < e)
-        {
-            OgEdge* e = left + b;
-
-            if ( (status[e->b] & STATUS_PROPER) )
-            {
-                status[ e->b ] |= STATUS_USED;
-                print_graph_gml_edge(f, e, 'l');
-                used = 1;
-            }
-
-            b++;
-        }
-
-        b = nright[aread];
-        e = nright[aread + 1];
-
-        while (b < e)
-        {
-            OgEdge* e = right + b;
-
-            if ( (status[e->b] & STATUS_PROPER) )
-            {
-                status[ e->b ] |= STATUS_USED;
-                print_graph_gml_edge(f, e, 'r');
-                used = 1;
-            }
-
-            b++;
-        }
-
-        if (used)
-        {
-            status[aread] |= STATUS_USED;
-        }
-    }
-
-    for ( aread = 0; aread < octx->db->nreads; aread++ )
-    {
-        if ( !(status[aread] & STATUS_USED) )
-        {
-            continue;
-        }
-
-        int optional = (status[aread] & STATUS_OPTIONAL) ? 1 : 0;
-
-        fprintf(f, "  node [\n");
-        fprintf(f, "    id %d\n", aread);
-        fprintf(f, "    read %d\n", aread);
-        fprintf(f, "    optional %d\n", optional);
-        fprintf(f, "  ]\n");
-
-        status[aread] ^= STATUS_USED;
-    }
-
-    fprintf(f, "]\n");
-}
-
 static void print_graph_graphml(OgBuildContext* octx, FILE* f, const char* title, char** comments, int ncomments, int* component)
 {
     fprintf(f, "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n");
@@ -471,7 +193,7 @@ static void print_graph_graphml(OgBuildContext* octx, FILE* f, const char* title
 
     unsigned char* status = octx->status;
     int aread;
-    int i = 0;
+    uint64_t i = 0;
     while ( ( aread = component[i++] ) != - 1 )
     // for ( aread = 0; aread < octx->db->nreads; aread++ )
     {
@@ -1268,19 +990,7 @@ static void write_graph(OgBuildContext* octx, const char* path)
         int i = 0;
         while ( i < ncomp2reads )
         {
-            char* ext;
-            if (octx->gformat == FORMAT_GML)
-            {
-                ext = "gml";
-            }
-            else if (octx->gformat == FORMAT_TGF)
-            {
-                ext = "tgf";
-            }
-            else
-            {
-                ext = "graphml";
-            }
+            char* ext = "graphml";
 
             char* pathcomp = write_graph_target_path(path, ncomp, ext);
             mkhierarchy(pathcomp);
@@ -1289,19 +999,7 @@ static void write_graph(OgBuildContext* octx, const char* path)
 
             if (f)
             {
-                if (octx->gformat == FORMAT_GML)
-                {
-                    // print_graph_gml(octx, f, "og", NULL, 0, i);
-                }
-                else if (octx->gformat == FORMAT_TGF)
-                {
-                    // print_graph_tgf(octx, f, i);
-                }
-                else
-                {
-                    print_graph_graphml(octx, f, "og", NULL, 0, comp2reads + i);
-                }
-
+                print_graph_graphml(octx, f, "og", NULL, 0, comp2reads + i);
                 fclose(f);
             }
             else
@@ -1337,19 +1035,7 @@ static void write_graph(OgBuildContext* octx, const char* path)
 
         if (f)
         {
-            if (octx->gformat == FORMAT_GML)
-            {
-                print_graph_gml(octx, f, "og", NULL, 0, -1);
-            }
-            else if (octx->gformat == FORMAT_TGF)
-            {
-                print_graph_tgf(octx, f, -1);
-            }
-            else
-            {
-                print_graph_graphml(octx, f, "og", NULL, 0, comp2reads);
-            }
-
+            print_graph_graphml(octx, f, "og", NULL, 0, comp2reads);
             fclose(f);
         }
         else
@@ -1916,7 +1602,7 @@ static void post_count(OgBuildContext* octx)
 
 static void usage()
 {
-    printf( "usage: [-s] [-c <int>] [-t <track>] [-f gml|graphml|tgf] [-p ovl|ovh] database input.las output.format\n\n" );
+    printf( "usage: [-s] [-c <int>] [-t <track>] [-p ovl|ovh] database input.las output.format\n\n" );
 
     printf( "Builds the overlap graph based on the alignments in the input las file.\n\n" );
 
@@ -1925,7 +1611,6 @@ static void usage()
     printf( "         -p mode   which edges should be added when running in -c mode (default %s)\n" , DEF_ARG_P);
     printf( "                   ovl longest overlap, ovh longer overhang\n" );
 
-    printf( "         -f frmt   output graph format. gml, graphml or tgf (default %s)\n", DEF_ARG_F );
     printf( "         -s        write on file for each component of the overlap graph.\n" );
     printf( "                   files are named output.<component.number>.format\n" );
     printf( "         -t track  which trim track to use (%s)\n", DEF_ARG_T );
@@ -1944,23 +1629,18 @@ int main(int argc, char* argv[])
     // process arguments
 
     char* edgeprio = DEF_ARG_P;
-    char* gformat = DEF_ARG_F;
     octx.contained = DEF_ARG_C;
     octx.trimName = DEF_ARG_T;
 
     opterr = 0;
 
     int c;
-    while ((c = getopt(argc, argv, "sc:f:p:t:")) != -1)
+    while ((c = getopt(argc, argv, "sc:p:t:")) != -1)
     {
         switch (c)
         {
             case 'p':
                       edgeprio = optarg;
-                      break;
-
-            case 'f':
-                      gformat = optarg;
                       break;
 
             case 's':
@@ -1990,25 +1670,7 @@ int main(int argc, char* argv[])
     char* pcPathReadsIn = argv[optind++];
     char* pcPathOverlaps = argv[optind++];
     octx.path_graph = argv[optind++];
-
-    if ( strcmp(gformat, "gml") == 0 )
-    {
-        octx.gformat = FORMAT_GML;
-    }
-    else if ( strcmp(gformat, "graphml") == 0 )
-    {
-        octx.gformat = FORMAT_GRAPHML;
-    }
-    else if ( strcmp(gformat, "tgf") == 0 )
-    {
-        octx.gformat = FORMAT_TGF;
-    }
-    else
-    {
-        fprintf(stderr, "error: unknown graph format %s\n", gformat);
-        usage();
-        exit(1);
-    }
+    octx.gformat = FORMAT_GRAPHML;
 
     if ( strcmp(edgeprio, "ovh") == 0 )
     {
