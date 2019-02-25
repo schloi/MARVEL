@@ -48,8 +48,6 @@ int main( int argc, char* argv[] )
 
     int verbose = 0;
     int delete  = 0;
-    int ntracks;
-    char** track_name;
 
     int c;
     opterr = 0;
@@ -76,16 +74,7 @@ int main( int argc, char* argv[] )
         }
     }
 
-	/*
-    if ( argc - optind == 3 )
-    {
-        if ( argv[ optind + 2 ][ 0 ] != '#' )
-        {
-            usage();
-            exit( 1 );
-        }
-    }
-    else */ if ( argc - optind < 3 )
+    if ( argc - optind < 3 )
     {
         usage();
         exit( 1 );
@@ -94,8 +83,8 @@ int main( int argc, char* argv[] )
     char* pathReadsIn     = argv[ optind++ ];
     char* nameTrackResult = argv[ optind++ ];
 
-    ntracks    = argc - optind;
-    track_name = malloc( sizeof( char* ) * ntracks );
+    int ntracks       = argc - optind;
+    char** track_name = malloc( sizeof( char* ) * ntracks );
 
     int i, j;
     i = 0;
@@ -124,12 +113,12 @@ int main( int argc, char* argv[] )
     track_anno* offset_out = (track_anno*)malloc( sizeof( track_anno ) * ( nreads + 1 ) );
     bzero( offset_out, sizeof( track_anno ) * ( nreads + 1 ) );
 
-    int dcur             = 0;
-    int dmax             = 100;
+    uint64_t dcur        = 0;
+    uint64_t dmax        = 100;
     track_data* data_out = (track_data*)malloc( sizeof( track_data ) * dmax );
 
-    int tcur               = 0;
-    int tmax               = 100;
+    uint64_t tcur          = 0;
+    uint64_t tmax          = 100;
     track_data* temp       = (track_data*)malloc( sizeof( track_data ) * tmax );
     track_anno* offset_tmp = (track_anno*)malloc( sizeof( track_anno ) * ( nreads + 1 ) );
     bzero( offset_tmp, sizeof( track_anno ) * ( nreads + 1 ) );
@@ -225,7 +214,7 @@ int main( int argc, char* argv[] )
                 {
                     qsort( temp + ( tcur - ispace - ospace ), ( ispace + ospace ) / 2, sizeof( track_data ) * 2, cmp_intervals );
 
-                    int k;
+                    uint64_t k;
                     for ( k = tcur - ispace - ospace + 2; k < tcur; k += 2 )
                     {
                         // contained -> replace with previous
@@ -283,7 +272,7 @@ int main( int argc, char* argv[] )
 
             for ( j = 0; j <= nreads; j++ )
             {
-                coff = offset_out[ j ];
+                coff            = offset_out[ j ];
                 offset_out[ j ] = off;
                 off += coff;
             }
