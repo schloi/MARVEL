@@ -1,11 +1,10 @@
 
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
+#include <stdint.h>
+#include <assert.h>
 
 // getopt
 
@@ -33,7 +32,7 @@ static void print_entry( FILE* ffasta, FA_ENTRY* fe )
     static char* buf      = NULL;
     static int64_t maxbuf = 0;
 
-    if ( maxbuf < fe->end - fe->start )
+    if ( maxbuf < fe->end - fe->start + 2 )
     {
         maxbuf = ( fe->end - fe->start ) * 1.2 + 1000;
         buf    = realloc( buf, maxbuf );
@@ -41,6 +40,7 @@ static void print_entry( FILE* ffasta, FA_ENTRY* fe )
 
     fseeko( ffasta, fe->start, SEEK_SET );
     fread( buf, fe->end - fe->start + 1, 1, ffasta );
+    buf[fe->end - fe->start + 1] = '\0';
 
     printf( "%s", buf );
 }
@@ -135,9 +135,12 @@ int main( int argc, char* argv[] )
         ssize_t len;
         char* line = NULL;
         size_t maxline = 0;
+        uint64_t nline = 0;
 
         while ( ( len = getline( &line, &maxline, fin ) ) > 0 )
         {
+            assert( line[ strlen(line) - 1 ] == '\n' );
+
             if ( line[ 0 ] == '>' )
             {
                 if ( nentries > 0 )
@@ -161,6 +164,8 @@ int main( int argc, char* argv[] )
             {
                 entries[ nentries - 1 ].len += strlen( line ) - 1;
             }
+
+            nline += 1;
         }
 
         if ( nentries > 0 )
