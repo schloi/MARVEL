@@ -57,15 +57,15 @@ uint64_t bp_parse(const char* num)
     switch (unit)
     {
         case 'g':
-            count *= 1000;
-            // fall through
-
-        case 'm':
-            count *= 1000;
-            // fall through
+            count *= 1000 * 1000 * 1000;
+            break;
 
         case 'k':
             count *= 1000;
+            break;
+
+        case 'm':
+            count *= 1000 * 1000;
             break;
 
         default:
