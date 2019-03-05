@@ -1,61 +1,3 @@
-/************************************************************************************\
-*                                                                                    *
- * Copyright (c) 2014, Dr. Eugene W. Myers (EWM). All rights reserved.                *
- *                                                                                    *
- * Redistribution and use in source and binary forms, with or without modification,   *
- * are permitted provided that the following conditions are met:                      *
- *                                                                                    *
- *  · Redistributions of source code must retain the above copyright notice, this     *
- *    list of conditions and the following disclaimer.                                *
- *                                                                                    *
- *  · Redistributions in binary form must reproduce the above copyright notice, this  *
- *    list of conditions and the following disclaimer in the documentation and/or     *
- *    other materials provided with the distribution.                                 *
- *                                                                                    *
- *  · The name of EWM may not be used to endorse or promote products derived from     *
- *    this software without specific prior written permission.                        *
- *                                                                                    *
- * THIS SOFTWARE IS PROVIDED BY EWM ”AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES,    *
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND       *
- * FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL EWM BE LIABLE   *
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES *
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS  *
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY      *
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING     *
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN  *
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                      *
- *                                                                                    *
- * For any issues regarding this software and its use, contact EWM at:                *
- *                                                                                    *
- *   Eugene W. Myers Jr.                                                              *
- *   Bautzner Str. 122e                                                               *
- *   01099 Dresden                                                                    *
- *   GERMANY                                                                          *
- *   Email: gene.myers@gmail.com                                                      *
- *                                                                                    *
- \************************************************************************************/
-
-/*******************************************************************************************
- *
- *  Add .fasta files to a DB:
- *     Adds the given fasta files in the given order to <path>.db.  If the db does not exist
- *     then it is created.  All .fasta files added to a given data base must have the same
- *     header format and follow Pacbio's convention.  A file cannot be added twice and this
- *     is enforced.  The command either builds or appends to the .<path>.idx and .<path>.bps
- *     files, where the index file (.idx) contains information about each read and their offsets
- *     in the base-pair file (.bps) that holds the sequences where each base is compessed
- *     into 2-bits.  The two files are hidden by virtue of their names beginning with a '.'.
- *     <path>.db is effectively a stub file with given name that contains an ASCII listing
- *     of the files added to the DB and possibly the block partitioning for the DB if DBsplit
- *     has been called upon it.
- *
- *  Author:  Gene Myers
- *  Date  :  May 2013
- *  Modify:  DB upgrade: now *add to* or create a DB depending on whether it exists, read
- *             multiple .fasta files (no longer a stdin pipe).
- *  Date  :  April 2014
- *
- ********************************************************************************************/
 
 #include <ctype.h>
 #include <dirent.h>
@@ -67,9 +9,9 @@
 #include <unistd.h>
 
 #include "DB.h"
+#include "FA2x.h"
 #include "fileUtils.h"
 #include "lib/tracks.h"
-#include "FA2x.h"
 #include "lib/utils.h"
 
 #ifdef HIDE_FILES
@@ -83,88 +25,99 @@
 extern char* optarg;
 extern int optind, opterr, optopt;
 
-static char number[ 128 ] =
-    {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-};
-
+static char number[128]=    {
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                                0, 0, 0, 1, 0, 0, 0, 2,     // 2
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 3, 0, 0, 0,     // 1
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                                0, 0, 0, 1, 0, 0, 0, 2,     // 2
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 3, 0, 0, 0,     // 1
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                            };
 
 static void parseOptions( int argc, char* argv[], CreateContext* ctx );
 static void usage( const char* progname );
 
-
-void initPacbioRead(pacbio_read* read, int createTracks)
+void initPacbioRead( pacbio_read* read, int createTracks )
 {
-    read->maxPrologLen = MAX_NAME;
+    read->maxPrologLen   = MAX_NAME;
     read->maxSequenceLen = MAX_NAME + 60000;
 
-    if ((read->prolog = (char*) malloc(read->maxPrologLen)) == NULL)
+    if ( ( read->prolog = (char*)malloc( read->maxPrologLen ) ) == NULL )
     {
-        fprintf(stderr, "Unable to allocate prolog buffer\n");
-        exit(1);
+        fprintf( stderr, "Unable to allocate prolog buffer\n" );
+        exit( 1 );
     }
 
-    if ((read->seq = malloc(read->maxSequenceLen)) == NULL)
+    if ( ( read->seq = malloc( read->maxSequenceLen ) ) == NULL )
     {
-        fprintf(stderr, "Unable to allocate sequence buffer\n");
-        exit(1);
+        fprintf( stderr, "Unable to allocate sequence buffer\n" );
+        exit( 1 );
     }
 
-    if (createTracks)
+    if ( createTracks )
     {
-		read->maxtracks = 10;
-		read->ntracks = 0;
+        read->maxtracks = 10;
+        read->ntracks   = 0;
 
-		read->maxName = 20;
-		int maxFields = 20;
+        read->maxName = 20;
+        int maxFields = 20;
 
-		read->trackName = (char**) malloc(read->maxtracks * sizeof(char*));
-		read->trackfields = (int**) malloc(read->maxtracks * sizeof(int*));
+        read->trackName   = (char**)malloc( read->maxtracks * sizeof( char* ) );
+        read->trackfields = (int**)malloc( read->maxtracks * sizeof( int* ) );
 
-		int i;
-		for (i = 0; i < read->maxtracks; i++)
-		{
-			if ((read->trackName[i] = (char*) malloc(read->maxName)) == NULL)
-			{
-				fprintf(stderr, "Unable to allocate track name buffer\n");
-				exit(1);
-			}
+        int i;
+        for ( i = 0; i < read->maxtracks; i++ )
+        {
+            if ( ( read->trackName[ i ] = (char*)malloc( read->maxName ) ) == NULL )
+            {
+                fprintf( stderr, "Unable to allocate track name buffer\n" );
+                exit( 1 );
+            }
 
-			if ((read->trackfields[i] = (int*) malloc((maxFields + 2) * sizeof(int))) == NULL)
-			{
-				fprintf(stderr, "Unable to allocate track fields buffer\n");
-				exit(1);
-			}
+            if ( ( read->trackfields[ i ] = (int*)malloc( ( maxFields + 2 ) * sizeof( int ) ) ) == NULL )
+            {
+                fprintf( stderr, "Unable to allocate track fields buffer\n" );
+                exit( 1 );
+            }
 
-			bzero(read->trackfields[i], (maxFields + 2) * sizeof(int));
-			read->trackfields[i][0] = maxFields;
-			read->trackfields[i][1] = 2;
-		}
+            bzero( read->trackfields[ i ], ( maxFields + 2 ) * sizeof( int ) );
+            read->trackfields[ i ][ 0 ] = maxFields;
+            read->trackfields[ i ][ 1 ] = 2;
+        }
     }
     else
     {
-		read->maxtracks = 0;
-		read->ntracks = 0;
-		read->maxName = 0;
+        read->maxtracks = 0;
+        read->ntracks   = 0;
+        read->maxName   = 0;
     }
 }
 
-void resetPacbioRead(pacbio_read* pr)
+void resetPacbioRead( pacbio_read* pr )
 {
     pr->ntracks = 0;
     int i;
 
-    for (i = 0; i < pr->maxtracks; i++)
+    for ( i = 0; i < pr->maxtracks; i++ )
     {
-        pr->trackfields[i][1] = 2;
+        pr->trackfields[ i ][ 1 ] = 2;
     }
 
     pr->well = -1;
-    pr->beg = -1;
-    pr->end = -1;
-    pr->len = 0;
+    pr->beg  = -1;
+    pr->end  = -1;
+    pr->len  = 0;
 }
-
 
 static void parse_header( CreateContext* ctx, char* header, pacbio_read* pr )
 {
@@ -220,18 +173,18 @@ static void parse_header( CreateContext* ctx, char* header, pacbio_read* pr )
 
             int i;
             int skip = 1;
-            for ( i = 0 ; i < ctx->t_create_n ; i++ )
+            for ( i = 0; i < ctx->t_create_n; i++ )
             {
-                printf("header %s <-> %.*s\n", ctx->t_create[i], (int)(c-name), name);
+                printf( "header %s <-> %.*s\n", ctx->t_create[ i ], (int)( c - name ), name );
 
-                if ( strlen(ctx->t_create[i]) == (size_t)(c - name) && strncmp(ctx->t_create[i], name, c - name) == 0 )
+                if ( strlen( ctx->t_create[ i ] ) == ( size_t )( c - name ) && strncmp( ctx->t_create[ i ], name, c - name ) == 0 )
                 {
                     skip = 0;
                     break;
                 }
             }
 
-            if (skip)
+            if ( skip )
             {
                 c++;
 
@@ -242,7 +195,7 @@ static void parse_header( CreateContext* ctx, char* header, pacbio_read* pr )
 
                 *c = '\0';
 
-                if (cont)
+                if ( cont )
                 {
                     c += 1;
                 }
@@ -284,7 +237,7 @@ static void parse_header( CreateContext* ctx, char* header, pacbio_read* pr )
             {
                 pr->maxName = len + 10;
                 int i;
-                for ( i                = 0; i < cur; i++ )
+                for ( i = 0; i < cur; i++ )
                 {
                     pr->trackName[ i ] = (char*)realloc( pr->trackName[ i ], pr->maxName );
                 }
@@ -670,8 +623,7 @@ static void readFastaFile( CreateContext* ctx, char* name )
 
     if ( strlen( core ) >= MAX_NAME )
     {
-        fprintf( stderr, "File name over %d chars: '%.200s'\n",
-                 MAX_NAME, core );
+        fprintf( stderr, "File name over %d chars: '%.200s'\n", MAX_NAME, core );
         errorExit( ctx );
     }
 
@@ -690,10 +642,29 @@ static void readFastaFile( CreateContext* ctx, char* name )
 
     rlen  = 0;
     nline = 1;
-    eof   = ( fgets( ctx->read, MAX_NAME, input ) == NULL );
+
+    size_t linelen;
+    char* line = fgetln(input, &linelen);
+
+    if ( line )
+    {
+
+        if ( strlen(line) > ctx->rmax )
+        {
+            ctx->rmax = strlen(line) * 1.2 + 1000;
+            ctx->read = realloc(ctx->read, ctx->rmax);
+        }
+
+        strcpy(ctx->read, line);
+    }
+
+    // eof   = ( fgets( ctx->read, MAX_NAME, input ) == NULL );
+
+    eof = feof(input);
+
     if ( eof || strlen( ctx->read ) < 1 )
     {
-        fprintf( stderr, "Skipping '%s', file is empty!\n", core );
+        fprintf( stderr, "%s is empty\n", core );
         fclose( input );
         free( core );
         return;
@@ -755,9 +726,9 @@ static void readFastaFile( CreateContext* ctx, char* name )
             {
                 char* line = NULL;
                 size_t linelen;
-                line = fgetln(input, &linelen);
+                line = fgetln( input, &linelen );
 
-                if (!line)
+                if ( !line )
                 {
                     eof = 1;
                     break;
@@ -765,31 +736,31 @@ static void readFastaFile( CreateContext* ctx, char* name )
 
                 if ( rlen + linelen > (size_t)ctx->rmax )
                 {
-                    ctx->rmax = 1.2 * (rlen + linelen) + 1000;
+                    ctx->rmax = 1.2 * ( rlen + linelen ) + 1000;
                     ctx->read = realloc( ctx->read, ctx->rmax + 1 );
                     if ( ctx->read == NULL )
                     {
                         fprintf( stderr, "File %s.fasta, Line %d:", core, nline );
-                        fprintf( stderr, "Out of memory (Allocating line buffer of %d bytes)\n", ctx->rmax );
+                        fprintf( stderr, "Out of memory (Allocating line buffer of %zu bytes)\n", ctx->rmax );
                         errorExit( ctx );
                     }
                 }
 
-                if ( line[0] == '>' )
+                if ( line[ 0 ] == '>' )
                 {
-                    memcpy(ctx->read + rlen, line, linelen + 1);
+                    memcpy( ctx->read + rlen, line, linelen + 1 );
                 }
-                else if ( line[linelen - 1] == '\n' )
+                else if ( line[ linelen - 1 ] == '\n' )
                 {
-                    line[linelen - 1] = '\0';
+                    line[ linelen - 1 ] = '\0';
                     linelen -= 1;
 
-                    memcpy(ctx->read + rlen, line, linelen);
+                    memcpy( ctx->read + rlen, line, linelen );
                 }
 
                 nline += 1;
 
-                if (line[0] == '>')
+                if ( line[ 0 ] == '>' )
                 {
                     break;
                 }
@@ -976,7 +947,7 @@ static void updateBlockDBOffsets( CreateContext* ctx )
     }
 }
 
-static void usage(const char* progname)
+static void usage( const char* progname )
 {
     fprintf( stderr, "usage: %s [-vabQ] [-c <track>] [-x <int>] <path:db> (-f file  | <path:string> <input:fasta> ...)\n", progname );
     fprintf( stderr, "options: -v ... verbose\n" );
@@ -989,10 +960,9 @@ static void usage(const char* progname)
 
 static void parseOptions( int argc, char* argv[], CreateContext* ctx )
 {
-
     // set default values
-    ctx->VERBOSE               = 0;
-    ctx->useFullHqReadsOnly    = 0;
+    ctx->VERBOSE            = 0;
+    ctx->useFullHqReadsOnly = 0;
     // ctx->createTracks          = 0;
     ctx->BEST                  = 0;
     ctx->appendReadsToNewBlock = 0;
@@ -1021,7 +991,7 @@ static void parseOptions( int argc, char* argv[], CreateContext* ctx )
                 if ( ctx->t_create_n + 1 >= ctx->t_create_max )
                 {
                     ctx->t_create_max += 10;
-                    ctx->t_create = realloc( ctx->t_create, sizeof(char*) * ctx->t_create_max );
+                    ctx->t_create = realloc( ctx->t_create, sizeof( char* ) * ctx->t_create_max );
                 }
 
                 ctx->t_create[ ctx->t_create_n ] = optarg;
@@ -1087,9 +1057,9 @@ int main( int argc, char* argv[] )
     int c;
     File_Iterator* ng;
 
-    ctx.totlen = 0;                      //  total # of bases in new .fasta files
-    ctx.maxlen = 0;                      //  longest read in new .fasta files
-    for ( c            = 0; c < 4; c++ ) //  count of acgt in new .fasta files
+    ctx.totlen = 0;           //  total # of bases in new .fasta files
+    ctx.maxlen = 0;           //  longest read in new .fasta files
+    for ( c = 0; c < 4; c++ ) //  count of acgt in new .fasta files
         ctx.count[ c ] = 0;
 
     //  For each new .fasta file do:
@@ -1118,7 +1088,7 @@ int main( int argc, char* argv[] )
     }
     else
     {
-        for ( c          = 0; c < 4; c++ )
+        for ( c = 0; c < 4; c++ )
             db.freq[ c ] = (float)( ( db.freq[ c ] * db.totlen + ( 1. * ctx.count[ c ] ) ) / ( db.totlen + ctx.totlen ) );
         db.totlen += ctx.totlen;
         if ( ctx.maxlen > db.maxlen )
@@ -1135,6 +1105,7 @@ int main( int argc, char* argv[] )
 
     if ( ctx.istub != NULL )
         fclose( ctx.istub );
+
     fclose( ctx.ostub );
     fclose( ctx.indx );
     fclose( ctx.bases );

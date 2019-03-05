@@ -1,4 +1,7 @@
 
+#pragma once
+
+#include "lib/tracks.h"
 
 typedef struct
 {
@@ -81,7 +84,7 @@ typedef struct
     int64 count[4];
 
     // used during file parsing
-    int rmax;
+    size_t rmax;
     char *read;
 
     pacbio_read* pr1;
