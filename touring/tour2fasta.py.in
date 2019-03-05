@@ -211,7 +211,13 @@ def write_path(fileOut, seqname_prefix, db, track_source, track_trim, vread, efl
     v = e_source(path[0])
 
     rid = vread[v]
-    (trim_b, trim_e) = track_trim.get(rid)
+    trim = track_trim.get(rid)
+
+    if trim == None or len(trim) != 2:
+        print("warning: no trim available for read {}".format(rid), file = sys.stderr)
+        return 0
+
+    (trim_b, trim_e) = trim
 
     seq = db.sequence(rid)[trim_b : trim_e]
     if bComp:
