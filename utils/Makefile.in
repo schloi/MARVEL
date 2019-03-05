@@ -1,9 +1,10 @@
 
 include ../Makefile.settings
 
-ALL = LAcartoons LAshow LAcheck LAcount LAmerge \
-      LAindex LAstats  TKshow TKcombine gff2track \
-	  FAsort
+ALL = FAsort \
+	  LAcartoons LAcheck LAcount LAindex LAmerge LAshow LAstats \
+	  TKcombine TKmerge TKshow \
+	  gff2track
 
 with_gtk = @with_gtk@
 with_hdf5 = @with_hdf5@
@@ -25,17 +26,14 @@ install: all
 clean:
 	rm -rf $(ALL) *.dSYM
 
-LAexplorer: LAexplorer.c $(PATH_LIB)/lasidx.h $(PATH_LIB)/lasidx.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/compression.c
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o LAexplorer LAexplorer.c $(PATH_LIB)/lasidx.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_LIB)/oflags.c $(PATH_DB)/DB.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(CLIBS) $(GTK_LIBS)
+FAsort: FAsort.c $(PATH_LIB)/utils.h $(PATH_LIB)/utils.c
+	$(CC) $(CFLAGS) -o FAsort FAsort.c $(PATH_LIB)/utils.c $(CLIBS)
 
 gff2track: gff2track.c $(PATH_LIB)/lasidx.h $(PATH_LIB)/lasidx.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/compression.c
 	$(CC) $(CFLAGS) -o gff2track gff2track.c $(PATH_LIB)/lasidx.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_LIB)/pass.c $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_LIB)/oflags.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)
 
-LAneighbors: LAneighbors.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c
-	$(CC) $(CFLAGS) -o LAneighbors LAneighbors.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(CLIBS)
-
-FAsort: FAsort.c
-	$(CC) $(CFLAGS) -o FAsort FAsort.c $(CLIBS)
+LAcartoons: LAcartoons.c $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/pass.h $(PATH_LIB)/pass.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/compression.c
+	$(CC) $(CFLAGS) -o LAcartoons LAcartoons.c $(PATH_LIB)/pass.c $(PATH_LIB)/oflags.c $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_DB)/QV.c $(PATH_LIB)/compression.c $(CLIBS)
 
 LAcount: LAcount.c $(PATH_LIB)/pass.c $(PATH_LIB)/pass.h $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h
 	$(CC) $(CFLAGS) -o LAcount LAcount.c $(PATH_LIB)/pass.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(CLIBS)
@@ -43,39 +41,32 @@ LAcount: LAcount.c $(PATH_LIB)/pass.c $(PATH_LIB)/pass.h $(PATH_DALIGN)/align.c 
 LAcheck: LAcheck.c $(PATH_LIB)/pass.c $(PATH_LIB)/pass.h $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/compression.c
 	$(CC) $(CFLAGS) -o LAcheck LAcheck.c $(PATH_LIB)/tracks.c $(PATH_LIB)/pass.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)
 
-LAshow: LAshow.c $(PATH_LIB)/utils.h $(PATH_LIB)/utils.c $(PATH_LIB)/pass.c $(PATH_LIB)/pass.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/compression.c
-	$(CC) $(CFLAGS) -o LAshow LAshow.c $(PATH_LIB)/oflags.c $(PATH_LIB)/utils.c $(PATH_LIB)/tracks.c $(PATH_LIB)/pass.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)
-
-LAcartoons: LAcartoons.c $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/pass.h $(PATH_LIB)/pass.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/compression.c
-	$(CC) $(CFLAGS) -o LAcartoons LAcartoons.c $(PATH_LIB)/pass.c $(PATH_LIB)/oflags.c $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_DB)/QV.c $(PATH_LIB)/compression.c $(CLIBS)
-
-LAmerge: LAmerge.c LAmergeUtils.c $(PATH_DALIGN)/align.h $(PATH_DALIGN)/align.c $(PATH_DB)/DB.h $(PATH_DB)/DB.c $(PATH_DB)/QV.c $(PATH_DB)/QV.h $(PATH_LIB)/pass.h $(PATH_LIB)/pass.c
-	$(CC) $(CFLAGS) -o LAmerge LAmerge.c LAmergeUtils.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_DB)/QV.c $(CLIBS)
-
-H5dextract: H5dextract.c H5dextractUtils.c $(PATH_LIB)/stats.h $(PATH_LIB)/stats.c
-	$(CC) $(CFLAGS) $(hdf5_flags) -o H5dextract H5dextract.c H5dextractUtils.c $(PATH_LIB)/stats.c -lhdf5 $(CLIBS)
-
-mapTrack: mapTrack.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h
-	$(CC) $(CFLAGS) -o mapTrack mapTrack.c $(PATH_LIB)/tracks.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(CLIBS)
-
-LAindex: LAindex.c $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/pass.c $(PATH_LIB)/pass.h $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_LIB)/lasidx.c $(PATH_LIB)/lasidx.h
-	$(CC) $(CFLAGS) -o LAindex LAindex.c $(PATH_LIB)/lasidx.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_DB)/QV.c $(PATH_DB)/DB.c $(CLIBS)
-
-LAstats: LAstats.c $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIBE)/types.h $(PATH_LIBE)/bitarr.h  $(PATH_LIBE)/bitarr.c $(PATH_LIB)/utils.c $(PATH_LIB)/tracks.c $(PATH_LIB)/tracks.h $(PATH_LIB)/pass.c $(PATH_LIB)/pass.h $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h
-	$(CC) $(CFLAGS) -o LAstats LAstats.c $(PATH_LIBE)/bitarr.c $(PATH_LIB)/pass.c $(PATH_LIB)/compression.c $(PATH_LIB)/utils.c $(PATH_DALIGN)/align.c $(PATH_DB)/QV.c $(PATH_DB)/DB.c $(PATH_LIB)/tracks.c $(CLIBS)
+LAexplorer: LAexplorer.c $(PATH_LIB)/lasidx.h $(PATH_LIB)/lasidx.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/compression.c
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o LAexplorer LAexplorer.c $(PATH_LIB)/lasidx.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_LIB)/oflags.c $(PATH_DB)/DB.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c $(CLIBS) $(GTK_LIBS)
 
 LAextract: LAextract.c $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIBE)/types.h $(PATH_LIB)/pass.c $(PATH_LIB)/pass.h $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h
 	$(CC) $(CFLAGS) -o LAextract LAextract.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_DB)/QV.c $(PATH_DB)/DB.c $(CLIBS)
 
-maskReads: maskReads.c $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIBE)/types.h $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c
-	$(CC) $(CFLAGS) -o maskReads maskReads.c $(PATH_DB)/QV.c $(PATH_DB)/DB.c $(PATH_LIB)/tracks.c $(CLIBS)
+LAindex: LAindex.c $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/pass.c $(PATH_LIB)/pass.h $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_LIB)/lasidx.c $(PATH_LIB)/lasidx.h
+	$(CC) $(CFLAGS) -o LAindex LAindex.c $(PATH_LIB)/lasidx.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_DB)/QV.c $(PATH_DB)/DB.c $(CLIBS)
+
+LAmerge: LAmerge.c LAmergeUtils.c $(PATH_DALIGN)/align.h $(PATH_DALIGN)/align.c $(PATH_DB)/DB.h $(PATH_DB)/DB.c $(PATH_DB)/QV.c $(PATH_DB)/QV.h $(PATH_LIB)/pass.h $(PATH_LIB)/pass.c
+	$(CC) $(CFLAGS) -o LAmerge LAmerge.c LAmergeUtils.c $(PATH_LIB)/pass.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_DB)/QV.c $(CLIBS)
+
+LAshow: LAshow.c $(PATH_LIB)/utils.h $(PATH_LIB)/utils.c $(PATH_LIB)/pass.c $(PATH_LIB)/pass.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/compression.c
+	$(CC) $(CFLAGS) -o LAshow LAshow.c $(PATH_LIB)/oflags.c $(PATH_LIB)/utils.c $(PATH_LIB)/tracks.c $(PATH_LIB)/pass.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)
+
+LAstats: LAstats.c $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIBE)/types.h $(PATH_LIBE)/bitarr.h  $(PATH_LIBE)/bitarr.c $(PATH_LIB)/utils.c $(PATH_LIB)/tracks.c $(PATH_LIB)/tracks.h $(PATH_LIB)/pass.c $(PATH_LIB)/pass.h $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h
+	$(CC) $(CFLAGS) -o LAstats LAstats.c $(PATH_LIBE)/bitarr.c $(PATH_LIB)/pass.c $(PATH_LIB)/compression.c $(PATH_LIB)/utils.c $(PATH_DALIGN)/align.c $(PATH_DB)/QV.c $(PATH_DB)/DB.c $(PATH_LIB)/tracks.c $(CLIBS)
+
+H5dextract: H5dextract.c H5dextractUtils.c $(PATH_LIB)/stats.h $(PATH_LIB)/stats.c
+	$(CC) $(CFLAGS) $(hdf5_flags) -o H5dextract H5dextract.c H5dextractUtils.c $(PATH_LIB)/stats.c -lhdf5 $(CLIBS)
 
 TKcombine: TKcombine.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/compression.c
 	$(CC) $(CFLAGS) -o TKcombine TKcombine.c $(PATH_LIB)/tracks.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)
 
-TKtrim: TKtrim.c $(PATH_LIB)/tracks.h $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_DB)/QV.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c
-	$(CC) $(CFLAGS) -o TKtrim TKtrim.c $(PATH_LIB)/tracks.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)
+TKmerge: TKmerge.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_DB)/QV.c $(PATH_LIB)/compression.c
+	$(CC) $(CFLAGS) -o TKmerge TKmerge.c $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_DB)/QV.c $(PATH_LIB)/compression.c $(CLIBS)
 
 TKshow: TKshow.c $(PATH_LIB)/tracks.h $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_DB)/QV.c $(PATH_LIB)/tracks.c $(PATH_LIB)/compression.c
 	$(CC) $(CFLAGS) -o TKshow TKshow.c $(PATH_LIB)/tracks.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)
-
