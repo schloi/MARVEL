@@ -4,33 +4,34 @@
  *
  *******************************************************************************************/
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
-#include <assert.h>
 #include <unistd.h>
 
-#include "lib/tracks.h"
-#include "lib/pass.h"
-#include "lib/oflags.h"
 #include "lib/colors.h"
-#include "lib/utils.h"
+#include "lib/oflags.h"
+#include "lib/pass.h"
+#include "lib/tracks.h"
 #include "lib/trim.h"
+#include "lib/utils.h"
 
-#include "db/DB.h"
 #include "dalign/align.h"
+#include "db/DB.h"
 
 // argument defaults
 
 #define DEF_ARG_P 0
 #define DEF_ARG_S 0
 #define DEF_ARG_SS 1
+#define DEF_ARG_M 2
 
 // thresholds
 
-#define BIN_SIZE    100
-#define MIN_LR      450
+#define BIN_SIZE 100
+#define MIN_LR 450
 
 // switches
 
@@ -58,6 +59,7 @@ typedef struct
     uint16_t stitch_min_reads;
     int use_read_loader;
     HITS_TRACK* trackTrim;
+    int min_spanning;
 
     // working storage for gap detection
 
@@ -76,7 +78,7 @@ typedef struct
 
     // read loader
 
-    Read_Loader *rl;
+    Read_Loader* rl;
 
 } GapContext;
 
@@ -85,29 +87,29 @@ typedef struct
 extern char* optarg;
 extern int optind, opterr, optopt;
 
-static int loader_handler(void* _ctx, Overlap* ovl, int novl)
+static int loader_handler( void* _ctx, Overlap* ovl, int novl )
 {
     GapContext* ctx = (GapContext*)_ctx;
     Read_Loader* rl = ctx->rl;
 
     int i;
-    for (i = 0; i < novl; i++)
+    for ( i = 0; i < novl; i++ )
     {
         Overlap* o = ovl + i;
-        int b = ovl[i].bread;
+        int b      = ovl[ i ].bread;
 
         int trim_b_left, trim_b_right;
-        get_trim(ctx->db, ctx->trackTrim, b, &trim_b_left, &trim_b_right);
+        get_trim( ctx->db, ctx->trackTrim, b, &trim_b_left, &trim_b_right );
 
-        if (ovl[i].flags & OVL_COMP)
+        if ( ovl[ i ].flags & OVL_COMP )
         {
-            int tmp = trim_b_left;
-            int blen = DB_READ_LEN(ctx->db, ovl[i].bread);
-            trim_b_left = blen - trim_b_right;
+            int tmp      = trim_b_left;
+            int blen     = DB_READ_LEN( ctx->db, ovl[ i ].bread );
+            trim_b_left  = blen - trim_b_right;
             trim_b_right = blen - tmp;
         }
 
-        if (trim_b_left >= trim_b_right)
+        if ( trim_b_left >= trim_b_right )
         {
             continue;
         }
@@ -115,33 +117,33 @@ static int loader_handler(void* _ctx, Overlap* ovl, int novl)
         if ( intersect( o->path.bbpos, o->path.bepos, trim_b_left, trim_b_right ) &&
              !( o->path.bbpos >= trim_b_left && o->path.bepos <= trim_b_right ) )
         {
-            rl_add(rl, ovl[i].aread);
-            rl_add(rl, ovl[i].bread);
+            rl_add( rl, ovl[ i ].aread );
+            rl_add( rl, ovl[ i ].bread );
         }
     }
 
     return 1;
 }
 
-static int drop_break(Overlap* pOvls, int nOvls, int p1, int p2)
+static int drop_break( Overlap* pOvls, int nOvls, int p1, int p2 )
 {
-    int max = 0;
+    int max  = 0;
     int left = 0;
     int i;
 
-    for ( i = 0 ; i < nOvls ; i++ )
+    for ( i = 0; i < nOvls; i++ )
     {
-        if (pOvls[i].flags & OVL_DISCARD)
+        if ( pOvls[ i ].flags & OVL_DISCARD )
         {
             continue;
         }
 
-        int len = pOvls[i].path.aepos - pOvls[i].path.abpos;
+        int len = pOvls[ i ].path.aepos - pOvls[ i ].path.abpos;
         if ( len > max )
         {
             max = len;
 
-            if (pOvls[i].path.abpos < p1)
+            if ( pOvls[ i ].path.abpos < p1 )
             {
                 left = 1;
             }
@@ -152,50 +154,51 @@ static int drop_break(Overlap* pOvls, int nOvls, int p1, int p2)
         }
     }
 
-    if (max == 0)
+    if ( max == 0 )
     {
         return 0;
     }
 
     int dropped = 0;
 
-    if (!left)
+    if ( !left )
     {
 #ifdef DEBUG_GAPS
-        printf("DROP L @ %5d..%5d\n", p1, p2);
+        printf( "DROP L @ %5d..%5d\n", p1, p2 );
 #endif
 
-        for (i = 0; i < nOvls; i++)
+        for ( i = 0; i < nOvls; i++ )
         {
-            if ( pOvls[i].path.abpos < p1 )
+            if ( pOvls[ i ].path.abpos < p1 )
             {
-                if ( !(pOvls[i].flags & OVL_DISCARD) )
+                if ( !( pOvls[ i ].flags & OVL_DISCARD ) )
                 {
                     dropped++;
                 }
 
-                pOvls[i].flags |= OVL_DISCARD | OVL_GAP;
+                pOvls[ i ].flags |= OVL_DISCARD | OVL_GAP;
             }
         }
     }
     else
     {
 #ifdef DEBUG_GAPS
-        printf("DROP R @ %5d..%5d\n", p1, p2);
+        printf( "DROP R @ %5d..%5d\n", p1, p2 );
 #endif
 
-        for (i = 0; i < nOvls; i++)
+        for ( i = 0; i < nOvls; i++ )
         {
-            if (pOvls[i].flags & OVL_DISCARD) continue;
+            if ( pOvls[ i ].flags & OVL_DISCARD )
+                continue;
 
-            if ( pOvls[i].path.aepos > p2 )
+            if ( pOvls[ i ].path.aepos > p2 )
             {
-                if ( !(pOvls[i].flags & OVL_DISCARD) )
+                if ( !( pOvls[ i ].flags & OVL_DISCARD ) )
                 {
                     dropped++;
                 }
 
-                pOvls[i].flags |= OVL_DISCARD | OVL_GAP;
+                pOvls[ i ].flags |= OVL_DISCARD | OVL_GAP;
             }
         }
     }
@@ -203,9 +206,9 @@ static int drop_break(Overlap* pOvls, int nOvls, int p1, int p2)
     return dropped;
 }
 
-static int stitchable(Overlap* pOvls, int n, int fuzz, int beg, int end)
+static int stitchable( Overlap* pOvls, int n, int fuzz, int beg, int end )
 {
-    if (n < 2)
+    if ( n < 2 )
     {
         return 0;
     }
@@ -218,66 +221,66 @@ static int stitchable(Overlap* pOvls, int n, int fuzz, int beg, int end)
     const int ignore_mask = OVL_TEMP | OVL_CONT | OVL_TRIM | OVL_STITCH;
 
     int i;
-    for (i = 0; i < n; i++)
+    for ( i = 0; i < n; i++ )
     {
-        if (pOvls[i].flags & ignore_mask)
+        if ( pOvls[ i ].flags & ignore_mask )
         {
             continue;
         }
 
-        b = pOvls[i].bread;
+        b = pOvls[ i ].bread;
 
-        ae1 = pOvls[i].path.aepos;
-        be1 = pOvls[i].path.bepos;
+        ae1 = pOvls[ i ].path.aepos;
+        be1 = pOvls[ i ].path.bepos;
 
-        for (k = i+1; k < n && pOvls[k].bread == b; k++)
+        for ( k = i + 1; k < n && pOvls[ k ].bread == b; k++ )
         {
-            if (  pOvls[k].flags & ignore_mask ||
-                 (pOvls[i].flags & OVL_COMP) != (pOvls[k].flags & OVL_COMP))
+            if ( pOvls[ k ].flags & ignore_mask ||
+                 ( pOvls[ i ].flags & OVL_COMP ) != ( pOvls[ k ].flags & OVL_COMP ) )
             {
                 continue;
             }
 
-            ab2 = pOvls[k].path.abpos;
-            bb2 = pOvls[k].path.bbpos;
+            ab2 = pOvls[ k ].path.abpos;
+            bb2 = pOvls[ k ].path.bbpos;
 
-            int deltaa = abs(ae1 - ab2);
-            int deltab = abs(be1 - bb2);
+            int deltaa = abs( ae1 - ab2 );
+            int deltab = abs( be1 - bb2 );
 
             if ( deltaa < fuzz && deltab < fuzz )
             {
-                if (pOvls[i].path.abpos < beg - MIN_LR && pOvls[k].path.aepos > end + MIN_LR)
+                if ( pOvls[ i ].path.abpos < beg - MIN_LR && pOvls[ k ].path.aepos > end + MIN_LR )
                 {
                     t++;
 
                     // printf("stitch using b %d\n", b);
                 }
             }
-
         }
     }
 
     return t;
 }
 
-static int ovl_intersect(Overlap* a, Overlap* b)
+static int ovl_intersect( Overlap* a, Overlap* b )
 {
     return intersect( a->path.abpos, a->path.aepos, b->path.abpos, b->path.aepos );
 }
 
-static int handle_gaps_and_breaks(GapContext* ctx, Overlap* ovls, int novl)
+static int handle_gaps_and_breaks( GapContext* ctx, Overlap* ovls, int novl )
 {
-    int stitch = ctx->stitch;
-    int stitch_min_reads = ctx->stitch_min_reads;
+    int stitch               = ctx->stitch;
+    int stitch_min_reads     = ctx->stitch_min_reads;
+    uint64_t min_spanning    = ctx->min_spanning;
     HITS_TRACK* trackExclude = ctx->trackExclude;
 
-    bzero(ctx->rm_bins, sizeof(uint64) * ctx->rm_maxbins);
+    bzero( ctx->rm_bins, sizeof( uint64 ) * ctx->rm_maxbins );
 
     int trim_b = INT_MAX;
     int trim_e = 0;
 
     int i;
-    for (i = 0; i < novl; i++)
+    for ( i = 0; i < novl; i++ )
     {
         Overlap* ovl = ovls + i;
 
@@ -288,40 +291,40 @@ static int handle_gaps_and_breaks(GapContext* ctx, Overlap* ovls, int novl)
         }
 
         int j;
-        for ( j = i + 1; j < novl && ovls[j].bread == ovl->bread; j++)
+        for ( j = i + 1; j < novl && ovls[ j ].bread == ovl->bread; j++ )
         {
-            if ( ovl_intersect(ovl, ovls + j) )
+            if ( ovl_intersect( ovl, ovls + j ) )
             {
-                if ( ovl->path.aepos - ovl->path.abpos < ovls[j].path.aepos - ovls[j].path.abpos )
+                if ( ovl->path.aepos - ovl->path.abpos < ovls[ j ].path.aepos - ovls[ j ].path.abpos )
                 {
                     ovl->flags |= OVL_TEMP;
                 }
                 else
                 {
-                    ovls[j].flags |= OVL_TEMP;
+                    ovls[ j ].flags |= OVL_TEMP;
                 }
             }
         }
 
-        if (ovl->flags & OVL_TEMP)
+        if ( ovl->flags & OVL_TEMP )
         {
             continue;
         }
 
-        int b = (ovl->path.abpos + MIN_LR) / BIN_SIZE;
-        int e = (ovl->path.aepos - MIN_LR) / BIN_SIZE;
+        int b = ( ovl->path.abpos + MIN_LR ) / BIN_SIZE;
+        int e = ( ovl->path.aepos - MIN_LR ) / BIN_SIZE;
 
-        trim_b = MIN(ovl->path.abpos, trim_b);
-        trim_e = MAX(ovl->path.aepos, trim_e);
+        trim_b = MIN( ovl->path.abpos, trim_b );
+        trim_e = MAX( ovl->path.aepos, trim_e );
 
-        while (b < e)
+        while ( b < e )
         {
-            ctx->rm_bins[b]++;
+            ctx->rm_bins[ b ]++;
             b++;
         }
     }
 
-    if (trim_b >= trim_e)
+    if ( trim_b >= trim_e )
     {
         return 1;
     }
@@ -333,18 +336,17 @@ static int handle_gaps_and_breaks(GapContext* ctx, Overlap* ovls, int novl)
 
     int beg = -1;
 
-    while (b < e)
+    while ( b < e )
     {
-        // if (ctx->rm_bins[b] != 0)
-        if (ctx->rm_bins[b] > 1)
+        if ( ctx->rm_bins[ b ] >= min_spanning )
         {
-            if (beg != -1)
+            if ( beg != -1 )
             {
-                int breakb = (beg - 1) * BIN_SIZE;
-                int breake = (b + 1) * BIN_SIZE;
+                int breakb = ( beg - 1 ) * BIN_SIZE;
+                int breake = ( b + 1 ) * BIN_SIZE;
 
 #ifdef DEBUG_GAPS
-                printf("READ %7d BREAK %3d..%3d ", ovls->aread, beg, b);
+                printf( "READ %7d BREAK %3d..%3d ", ovls->aread, beg, b );
 #endif
                 // break covered by track interval
 
@@ -355,19 +357,19 @@ static int handle_gaps_and_breaks(GapContext* ctx, Overlap* ovls, int novl)
                     track_anno* ta = trackExclude->anno;
                     track_data* td = trackExclude->data;
 
-                    track_anno tab = ta[ovls->aread] / sizeof(track_data);
-                    track_anno tae = ta[ovls->aread + 1] / sizeof(track_data);
+                    track_anno tab = ta[ ovls->aread ] / sizeof( track_data );
+                    track_anno tae = ta[ ovls->aread + 1 ] / sizeof( track_data );
 
                     int masked = 0;
 
                     track_data maskb, maske;
 
-                    while (tab < tae)
+                    while ( tab < tae )
                     {
-                        maskb = td[tab];
-                        maske = td[tab + 1];
+                        maskb = td[ tab ];
+                        maske = td[ tab + 1 ];
 
-                        if (breakb > maskb && breake < maske)
+                        if ( breakb > maskb && breake < maske )
                         {
                             masked = 1;
                             break;
@@ -376,10 +378,10 @@ static int handle_gaps_and_breaks(GapContext* ctx, Overlap* ovls, int novl)
                         tab += 2;
                     }
 
-                    if (masked)
+                    if ( masked )
                     {
 #ifdef DEBUG_GAPS
-                        printf(" MASKED %5d..%5d\n", maskb, maske);
+                        printf( " MASKED %5d..%5d\n", maskb, maske );
 #endif
                         skip = 1;
                     }
@@ -387,24 +389,24 @@ static int handle_gaps_and_breaks(GapContext* ctx, Overlap* ovls, int novl)
 
                 if ( !skip && stitch >= stitch_min_reads )
                 {
-                    int nstitch = stitchable(ovls, novl, stitch, breakb, breake);
+                    int nstitch = stitchable( ovls, novl, stitch, breakb, breake );
 
-                    if (nstitch)
+                    if ( nstitch )
                     {
 #ifdef DEBUG_GAPS
-                        printf(" STITCHABLE using %d\n", nstitch);
+                        printf( " STITCHABLE using %d\n", nstitch );
 #endif
                         skip = 1;
                     }
                 }
 
-                if (!skip)
+                if ( !skip )
                 {
 #ifdef DEBUG_GAPS
-                    printf("\n");
+                    printf( "\n" );
 #endif
                     ctx->stats_breaks += 1;
-                    ctx->stats_breaks_novl += drop_break(ovls, novl, breakb, breake);
+                    ctx->stats_breaks_novl += drop_break( ovls, novl, breakb, breake );
                 }
 
                 beg = -1;
@@ -412,7 +414,7 @@ static int handle_gaps_and_breaks(GapContext* ctx, Overlap* ovls, int novl)
         }
         else
         {
-            if (beg == -1)
+            if ( beg == -1 )
             {
                 beg = b;
             }
@@ -421,26 +423,26 @@ static int handle_gaps_and_breaks(GapContext* ctx, Overlap* ovls, int novl)
         b++;
     }
 
-    if (beg != -1)
+    if ( beg != -1 )
     {
-        int breakb = (beg - 1) * BIN_SIZE;
-        int breake = (b + 1) * BIN_SIZE;
+        int breakb = ( beg - 1 ) * BIN_SIZE;
+        int breake = ( b + 1 ) * BIN_SIZE;
 
         ctx->stats_breaks += 1;
-        ctx->stats_breaks_novl += drop_break(ovls, novl, breakb, breake);
+        ctx->stats_breaks_novl += drop_break( ovls, novl, breakb, breake );
     }
 
     return 1;
 }
 
-static int contained(int ab, int ae, int bb, int be)
+static int contained( int ab, int ae, int bb, int be )
 {
-    if (ab >= bb && ae <= be)
+    if ( ab >= bb && ae <= be )
     {
         return 1;
     }
 
-    if (bb >= ab && be <= ae)
+    if ( bb >= ab && be <= ae )
     {
         return 2;
     }
@@ -448,9 +450,9 @@ static int contained(int ab, int ae, int bb, int be)
     return 0;
 }
 
-static int drop_containments(GapContext* ctx, Overlap* ovl, int novl)
+static int drop_containments( GapContext* ctx, Overlap* ovl, int novl )
 {
-    if (novl < 2)
+    if ( novl < 2 )
     {
         return 1;
     }
@@ -459,78 +461,78 @@ static int drop_containments(GapContext* ctx, Overlap* ovl, int novl)
     int ab1, ab2, ae1, ae2;
     int bb1, bb2, be1, be2;
 
-    for (i = 0; i < novl; i++)
+    for ( i = 0; i < novl; i++ )
     {
-        int bread = ovl[i].bread;
+        int bread = ovl[ i ].bread;
 
-        if ( (ovl[i].flags & OVL_DISCARD) ||
-              ovl[i].aread == bread )
+        if ( ( ovl[ i ].flags & OVL_DISCARD ) ||
+             ovl[ i ].aread == bread )
         {
             continue;
         }
 
-        int blen = DB_READ_LEN(ctx->db, bread);
+        int blen = DB_READ_LEN( ctx->db, bread );
 
-        ab1 = ovl[i].path.abpos;
-        ae1 = ovl[i].path.aepos;
+        ab1 = ovl[ i ].path.abpos;
+        ae1 = ovl[ i ].path.aepos;
 
-        if (ovl[i].flags & OVL_COMP)
+        if ( ovl[ i ].flags & OVL_COMP )
         {
-            bb1 = blen - ovl[i].path.bepos;
-            be1 = blen - ovl[i].path.bbpos;
+            bb1 = blen - ovl[ i ].path.bepos;
+            be1 = blen - ovl[ i ].path.bbpos;
         }
         else
         {
-            bb1 = ovl[i].path.bbpos;
-            be1 = ovl[i].path.bepos;
+            bb1 = ovl[ i ].path.bbpos;
+            be1 = ovl[ i ].path.bepos;
         }
 
         int k;
-        for (k = i+1; k < novl; k++)
+        for ( k = i + 1; k < novl; k++ )
         {
-            if (ovl[k].flags & OVL_DISCARD)
+            if ( ovl[ k ].flags & OVL_DISCARD )
             {
                 continue;
             }
 
-            if (ovl[k].bread != bread)
+            if ( ovl[ k ].bread != bread )
             {
-                break ;
+                break;
             }
 
-            ab2 = ovl[k].path.abpos;
-            ae2 = ovl[k].path.aepos;
+            ab2 = ovl[ k ].path.abpos;
+            ae2 = ovl[ k ].path.aepos;
 
-            if (ovl[k].flags & OVL_COMP)
+            if ( ovl[ k ].flags & OVL_COMP )
             {
-                bb2 = blen - ovl[k].path.bepos;
-                be2 = blen - ovl[k].path.bbpos;
+                bb2 = blen - ovl[ k ].path.bepos;
+                be2 = blen - ovl[ k ].path.bbpos;
             }
             else
             {
-                bb2 = ovl[k].path.bbpos;
-                be2 = ovl[k].path.bepos;
+                bb2 = ovl[ k ].path.bbpos;
+                be2 = ovl[ k ].path.bepos;
             }
 
-            int cont = contained(ab1, ae1, ab2, ae2);
-            if ( cont && contained(bb1, be1, bb2, be2) )
+            int cont = contained( ab1, ae1, ab2, ae2 );
+            if ( cont && contained( bb1, be1, bb2, be2 ) )
             {
 #ifdef VERBOSE_CONTAINMENT
-                printf("CONTAINMENT %8d @ %5d..%5d -> %8d @ %5d..%5d\n"
-                       "                       %5d..%5d -> %8d @ %5d..%5d\n",
-                        a, ab1, ae1, ovl[i].bread, bb1, be1,
-                           ab2, ae2, ovl[k].bread, bb2, be2);
+                printf( "CONTAINMENT %8d @ %5d..%5d -> %8d @ %5d..%5d\n"
+                        "                       %5d..%5d -> %8d @ %5d..%5d\n",
+                        a, ab1, ae1, ovl[ i ].bread, bb1, be1,
+                        ab2, ae2, ovl[ k ].bread, bb2, be2 );
 #endif
 
-                if (cont == 1)
+                if ( cont == 1 )
                 {
-                    ovl[i].flags |= OVL_DISCARD | OVL_CONT;
+                    ovl[ i ].flags |= OVL_DISCARD | OVL_CONT;
                     ctx->stats_contained++;
                     break;
                 }
-                else if (cont == 2)
+                else if ( cont == 2 )
                 {
-                    ovl[k].flags |= OVL_DISCARD | OVL_CONT;
+                    ovl[ k ].flags |= OVL_DISCARD | OVL_CONT;
                     ctx->stats_contained++;
                 }
             }
@@ -540,87 +542,87 @@ static int drop_containments(GapContext* ctx, Overlap* ovl, int novl)
     return 1;
 }
 
-static void gaps_pre(PassContext* pctx, GapContext* ctx)
+static void gaps_pre( PassContext* pctx, GapContext* ctx )
 {
 #ifdef VERBOSE
-    printf(ANSI_COLOR_GREEN "PASS gaps" ANSI_COLOR_RESET "\n");
+    printf( ANSI_COLOR_GREEN "PASS gaps" ANSI_COLOR_RESET "\n" );
 #endif
 
-    ctx->rm_maxbins = ( DB_READ_MAXLEN(ctx->db) + BIN_SIZE ) / BIN_SIZE;
-    ctx->rm_bins = malloc(sizeof(uint64) * ctx->rm_maxbins);
+    ctx->rm_maxbins = ( DB_READ_MAXLEN( ctx->db ) + BIN_SIZE ) / BIN_SIZE;
+    ctx->rm_bins    = malloc( sizeof( uint64 ) * ctx->rm_maxbins );
 
-    ctx->rc_left = NULL;
+    ctx->rc_left    = NULL;
     ctx->rc_maxleft = 0;
 
-    ctx->rc_right = NULL;
+    ctx->rc_right    = NULL;
     ctx->rc_maxright = 0;
 
     // trim
 
-    ctx->trim = trim_init(ctx->db, pctx->twidth, ctx->trackTrim, ctx->rl);
-
+    ctx->trim = trim_init( ctx->db, pctx->twidth, ctx->trackTrim, ctx->rl );
 }
 
-static void gaps_post(GapContext* ctx)
+static void gaps_post( GapContext* ctx )
 {
 #ifdef VERBOSE
-	if(ctx->trackTrim)
-	{
-		printf("%13lld of %13lld overlaps trimmed\n", ctx->trim->nTrimmedOvls, ctx->trim->nOvls);
-		printf("%13lld of %13lld bases trimmed\n", ctx->trim->nTrimmedBases, ctx->trim->nOvlBases);
-	}
+    if ( ctx->trackTrim )
+    {
+        printf( "%13lld of %13lld overlaps trimmed\n", ctx->trim->nTrimmedOvls, ctx->trim->nOvls );
+        printf( "%13lld of %13lld bases trimmed\n", ctx->trim->nTrimmedBases, ctx->trim->nOvlBases );
+    }
 
-    printf("dropped %" PRIu64 " containments\n", ctx->stats_contained);
-    printf("dropped %" PRIu64 " overlaps in %" PRIu64 " break/gaps\n", ctx->stats_breaks_novl, ctx->stats_breaks);
+    printf( "dropped %" PRIu64 " containments\n", ctx->stats_contained );
+    printf( "dropped %" PRIu64 " overlaps in %" PRIu64 " break/gaps\n", ctx->stats_breaks_novl, ctx->stats_breaks );
 #endif
 
-    free(ctx->rm_bins);
+    free( ctx->rm_bins );
 
-    free(ctx->rc_left);
-    free(ctx->rc_right);
+    free( ctx->rc_left );
+    free( ctx->rc_right );
 
-    if(ctx->trackTrim)
+    if ( ctx->trackTrim )
     {
-    	trim_close(ctx->trim);
+        trim_close( ctx->trim );
     }
 }
 
-static int gaps_handler(void* _ctx, Overlap* ovl, int novl)
+static int gaps_handler( void* _ctx, Overlap* ovl, int novl )
 {
     GapContext* ctx = (GapContext*)_ctx;
 
     // trim
-    if (ctx->trackTrim)
+    if ( ctx->trackTrim )
     {
         int i;
-		for (i = 0; i < novl; i++)
-		{
-			trim_overlap(ctx->trim, ovl + i);
-		}
+        for ( i = 0; i < novl; i++ )
+        {
+            trim_overlap( ctx->trim, ovl + i );
+        }
     }
 
-    drop_containments(ctx, ovl, novl);
+    drop_containments( ctx, ovl, novl );
 
-    handle_gaps_and_breaks(ctx, ovl, novl);
+    handle_gaps_and_breaks( ctx, ovl, novl );
 
     return 1;
 }
 
-static void usage(FILE* fout, const char* app)
+static void usage( FILE* fout, const char* app )
 {
-    fprintf( fout, "usage: %s [-pL] [-sS n] [-e track] [-t track] database input.las output.las\n\n", app );
+    fprintf( fout, "usage: %s [-Lp] [-msS n] [-et track] database input.las output.las\n\n", app );
 
     fprintf( fout, "Detect gaps, regions not spanned by any reads, and discards all alignments on one side of the gap.\n\n" );
 
     fprintf( fout, "options: -s n  don't count alignments that would be stitchable with a maximum distance of n (%d)\n", DEF_ARG_S );
-    fprintf( fout, "         -S n  minimum number of reads needed for stitching (%d)\n", DEF_ARG_SS);
+    fprintf( fout, "         -S n  minimum number of reads needed for stitching (%d)\n", DEF_ARG_SS );
     fprintf( fout, "         -p  purge alignments tagged as discarded\n" );
     fprintf( fout, "         -e track  exclude gaps located in the intervals of the track\n" );
     fprintf( fout, "         -t track  trim overlaps before gap detection\n" );
     fprintf( fout, "         -L two-pass processing with read caching\n" );
+    fprintf( fout, "         -m n  minimum number of reads need to span a region to not make it a gap (%d)\n", DEF_ARG_M );
 }
 
-int main(int argc, char* argv[])
+int main( int argc, char* argv[] )
 {
     HITS_DB db;
     PassContext* pctx;
@@ -630,89 +632,100 @@ int main(int argc, char* argv[])
     char* app = argv[ 0 ];
 
     // process arguments
-    int arg_purge = DEF_ARG_P;
+    int arg_purge       = DEF_ARG_P;
     char* arg_trimTrack = NULL;
-    char* excludeTrack = NULL;
+    char* excludeTrack  = NULL;
     // char* repeatTrack = NULL;
 
-    bzero(&gctx, sizeof(GapContext));
+    bzero( &gctx, sizeof( GapContext ) );
 
-    gctx.stitch = DEF_ARG_S;
+    gctx.stitch           = DEF_ARG_S;
     gctx.stitch_min_reads = DEF_ARG_SS;
+    gctx.min_spanning     = DEF_ARG_M;
 
     opterr = 0;
 
     int c;
-    while ((c = getopt(argc, argv, "e:Lps:S:t:")) != -1)
+    while ( ( c = getopt( argc, argv, "e:Lm:ps:S:t:" ) ) != -1 )
     {
-        switch (c)
+        switch ( c )
         {
             case 'e':
-                      excludeTrack = optarg;
-                      break;
+                excludeTrack = optarg;
+                break;
 
             case 'L':
-                      gctx.use_read_loader = 1;
-                      break;
+                gctx.use_read_loader = 1;
+                break;
+
+            case 'm':
+                gctx.min_spanning = strtol( optarg, NULL, 10 );
+                break;
 
             case 'p':
-                      arg_purge = 1;
-                      break;
+                arg_purge = 1;
+                break;
 
             case 's':
-                      gctx.stitch = atoi(optarg);
-                      break;
+                gctx.stitch = atoi( optarg );
+                break;
 
             case 'S':
-                      gctx.stitch_min_reads = atoi(optarg);
-                      break;
+                gctx.stitch_min_reads = atoi( optarg );
+                break;
 
             case 't':
-                      arg_trimTrack = optarg;
-                      break;
+                arg_trimTrack = optarg;
+                break;
 
             default:
-                      usage(stdout, app);
-                      exit(1);
+                usage( stdout, app );
+                exit( 1 );
         }
     }
 
-    if (argc - optind < 3)
+    if ( gctx.min_spanning < 0 )
     {
-        usage(stdout, app);
-        exit(1);
+        fprintf( stderr, "-m must be positive\n" );
+        exit( 1 );
     }
 
-    char* pcPathReadsIn = argv[optind++];
-    char* pcPathOverlapsIn = argv[optind++];
-    char* pcPathOverlapsOut = argv[optind++];
-
-    if ( (fileOvlIn = fopen(pcPathOverlapsIn, "r")) == NULL )
+    if ( argc - optind < 3 )
     {
-        fprintf(stderr, "could not open input track '%s'\n", pcPathOverlapsIn);
-        exit(1);
+        usage( stdout, app );
+        exit( 1 );
     }
 
-    if ( (fileOvlOut = fopen(pcPathOverlapsOut, "w")) == NULL )
+    char* pcPathReadsIn     = argv[ optind++ ];
+    char* pcPathOverlapsIn  = argv[ optind++ ];
+    char* pcPathOverlapsOut = argv[ optind++ ];
+
+    if ( ( fileOvlIn = fopen( pcPathOverlapsIn, "r" ) ) == NULL )
     {
-        fprintf(stderr, "could not open output track '%s'\n", pcPathOverlapsOut);
-        exit(1);
+        fprintf( stderr, "could not open input track '%s'\n", pcPathOverlapsIn );
+        exit( 1 );
     }
 
-    if ( Open_DB(pcPathReadsIn, &db) )
+    if ( ( fileOvlOut = fopen( pcPathOverlapsOut, "w" ) ) == NULL )
     {
-        fprintf(stderr, "could not open database '%s'\n", pcPathReadsIn);
-        exit(1);
+        fprintf( stderr, "could not open output track '%s'\n", pcPathOverlapsOut );
+        exit( 1 );
     }
 
-    if (excludeTrack)
+    if ( Open_DB( pcPathReadsIn, &db ) )
     {
-        gctx.trackExclude = track_load(&db, excludeTrack);
+        fprintf( stderr, "could not open database '%s'\n", pcPathReadsIn );
+        exit( 1 );
+    }
 
-        if (!gctx.trackExclude)
+    if ( excludeTrack )
+    {
+        gctx.trackExclude = track_load( &db, excludeTrack );
+
+        if ( !gctx.trackExclude )
         {
-            fprintf(stderr, "could not open track '%s'\n", excludeTrack);
-            exit(1);
+            fprintf( stderr, "could not open track '%s'\n", excludeTrack );
+            exit( 1 );
         }
     }
 
@@ -720,63 +733,62 @@ int main(int argc, char* argv[])
 
     if ( arg_trimTrack != NULL )
     {
-    	gctx.trackTrim = track_load(gctx.db, arg_trimTrack);
-        if (!gctx.trackTrim)
+        gctx.trackTrim = track_load( gctx.db, arg_trimTrack );
+        if ( !gctx.trackTrim )
         {
-            fprintf(stderr, "could not open track '%s'\n", arg_trimTrack);
-            exit(1);
+            fprintf( stderr, "could not open track '%s'\n", arg_trimTrack );
+            exit( 1 );
         }
 
-    	if ( gctx.use_read_loader )
-    	{
-			gctx.rl = rl_init(&db, 1);
+        if ( gctx.use_read_loader )
+        {
+            gctx.rl = rl_init( &db, 1 );
 
-			pctx = pass_init(fileOvlIn, NULL);
+            pctx = pass_init( fileOvlIn, NULL );
 
-			pctx->data = &gctx;
-			pctx->split_b = 1;
-			pctx->load_trace = 0;
+            pctx->data       = &gctx;
+            pctx->split_b    = 1;
+            pctx->load_trace = 0;
 
-			pass(pctx, loader_handler);
-			rl_load_added(gctx.rl);
-			pass_free(pctx);
-    	}
-	}
+            pass( pctx, loader_handler );
+            rl_load_added( gctx.rl );
+            pass_free( pctx );
+        }
+    }
     else if ( gctx.use_read_loader )
     {
-        fprintf(stderr, "read loader requires a trim track\n");
-        exit(1);
+        fprintf( stderr, "read loader requires a trim track\n" );
+        exit( 1 );
     }
 
-    pctx = pass_init(fileOvlIn, fileOvlOut);
+    pctx = pass_init( fileOvlIn, fileOvlOut );
 
-    pctx->split_b = 0;
-    pctx->load_trace = 1;
-    pctx->unpack_trace = (gctx.trackTrim == NULL ? 0 : 1);
-    pctx->data = &gctx;
-    pctx->write_overlaps = 1;
+    pctx->split_b         = 0;
+    pctx->load_trace      = 1;
+    pctx->unpack_trace    = ( gctx.trackTrim == NULL ? 0 : 1 );
+    pctx->data            = &gctx;
+    pctx->write_overlaps  = 1;
     pctx->purge_discarded = arg_purge;
 
-    gaps_pre(pctx, &gctx);
+    gaps_pre( pctx, &gctx );
 
-    pass(pctx, gaps_handler);
+    pass( pctx, gaps_handler );
 
-    gaps_post(&gctx);
+    gaps_post( &gctx );
 
     // cleanup
 
-    Close_DB(&db);
+    Close_DB( &db );
 
     if ( gctx.use_read_loader )
     {
-		rl_free(gctx.rl);
+        rl_free( gctx.rl );
     }
 
-    pass_free(pctx);
+    pass_free( pctx );
 
-    fclose(fileOvlIn);
-    fclose(fileOvlOut);
+    fclose( fileOvlIn );
+    fclose( fileOvlOut );
 
     return 0;
 }
-
