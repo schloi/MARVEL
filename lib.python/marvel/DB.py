@@ -130,7 +130,9 @@ class Track(object):
         ob = self.anno[rid]
         oe = self.anno[rid + 1]
 
-        if ob < oe:
+        if ob == oe:
+            return [ 0, self.db.length(rid) ]
+        elif ob < oe:
             return self.data[ ob : oe ]
 
         return []
