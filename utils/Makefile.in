@@ -3,7 +3,7 @@ include ../Makefile.settings
 
 ALL = FAsort \
 	  LAcartoons LAcheck LAcount LAindex LAmerge LAshow LAstats \
-	  TKcombine TKmerge TKshow \
+	  TKadjust TKcombine TKmerge TKshow \
 	  gff2track
 
 with_gtk = @with_gtk@
@@ -61,6 +61,9 @@ LAstats: LAstats.c $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIBE)/types.h $(PATH_L
 
 H5dextract: H5dextract.c H5dextractUtils.c $(PATH_LIB)/stats.h $(PATH_LIB)/stats.c
 	$(CC) $(CFLAGS) $(hdf5_flags) -o H5dextract H5dextract.c H5dextractUtils.c $(PATH_LIB)/stats.c -lhdf5 $(CLIBS)
+
+TKadjust: TKadjust.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/compression.c
+	$(CC) $(CFLAGS) -o TKadjust TKadjust.c $(PATH_LIB)/tracks.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)
 
 TKcombine: TKcombine.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/compression.c
 	$(CC) $(CFLAGS) -o TKcombine TKcombine.c $(PATH_LIB)/tracks.c $(PATH_DB)/QV.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)
