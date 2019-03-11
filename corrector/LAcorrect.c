@@ -1706,6 +1706,8 @@ int main( int argc, char* argv[] )
             db.reads[ values[ i ] ].flags = READ_CORRECT;
         }
 
+        free(values);
+
         fclose( fileIn );
     }
     else
@@ -1787,7 +1789,11 @@ int main( int argc, char* argv[] )
     {
         fclose( cargs[ i ].fileOvls );
         fclose( cargs[ i ].fileOut );
-        fclose( cargs[ i ].db.bases );
+
+        if ( cargs[i].db.bases )
+        {
+            fclose( cargs[ i ].db.bases );
+        }
     }
 
     free( cargs );
