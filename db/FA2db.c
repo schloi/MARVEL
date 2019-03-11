@@ -175,7 +175,7 @@ static void parse_header( CreateContext* ctx, char* header, pacbio_read* pr )
             int skip = 1;
             for ( i = 0; i < ctx->t_create_n; i++ )
             {
-                printf( "header %s <-> %.*s\n", ctx->t_create[ i ], (int)( c - name ), name );
+                // printf( "header %s <-> %.*s\n", ctx->t_create[ i ], (int)( c - name ), name );
 
                 if ( strlen( ctx->t_create[ i ] ) == ( size_t )( c - name ) && strncmp( ctx->t_create[ i ], name, c - name ) == 0 )
                 {
