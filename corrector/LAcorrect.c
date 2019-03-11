@@ -1430,12 +1430,12 @@ static void* corrector_thread( void* arg )
     cctx.align_work_data = New_Work_Data();
 
     ovl_trace* trace = NULL;
-    int tmax, tcur;
-    tcur = tmax = 0;
+    int tmax = 0;
+    int tcur = 0;
 
     size_t tbytes = TBYTES( cctx.twidth );
 
-    int omax              = 500;
+    size_t omax              = 500;
     Overlap* pOvls        = malloc( sizeof( Overlap ) * omax );
     Overlap** ovls_sorted = malloc( sizeof( Overlap* ) * omax );
 
@@ -1446,8 +1446,8 @@ static void* corrector_thread( void* arg )
         fseek( fileOvls, tbytes * pOvls->path.tlen, SEEK_CUR );
     }
 
-    int a, n;
-    n = 0;
+    int a;
+    uint64_t n = 0;
 
     cctx.ncorrected = 0;
 
@@ -1480,8 +1480,6 @@ static void* corrector_thread( void* arg )
                 break;
             }
 
-            ovls_sorted[ n ] = pOvls + n;
-
             if ( pOvls[ n ].flags & OVL_DISCARD || pOvls[ n ].path.tlen == 0 )
             {
                 fseek( fileOvls, tbytes * pOvls[ n ].path.tlen, SEEK_CUR );
@@ -1494,7 +1492,7 @@ static void* corrector_thread( void* arg )
                 trace = realloc( trace, sizeof( ovl_trace ) * tmax );
 
                 tcur = 0;
-                int k;
+                uint64_t k;
                 for ( k = 0; k < n; k++ )
                 {
                     pOvls[ k ].path.trace = trace + tcur;
@@ -1511,9 +1509,16 @@ static void* corrector_thread( void* arg )
             if ( n >= omax )
             {
                 omax        = 1.2 * n + 10;
+
                 pOvls       = realloc( pOvls, sizeof( Overlap ) * omax );
                 ovls_sorted = realloc( ovls_sorted, sizeof( Overlap* ) * omax );
             }
+        }
+
+        uint64_t j;
+        for ( j = 0; j < n; j++)
+        {
+            ovls_sorted[j] = pOvls + j;
         }
 
         qsort( ovls_sorted, n, sizeof( Overlap* ), cmp_povl_length );
