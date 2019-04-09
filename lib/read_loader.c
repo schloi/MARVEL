@@ -7,6 +7,7 @@
 
 #define BLOCK_BUFFER (100*1024*1024)
 
+#undef DEBUG_RL
 
 Read_Loader* rl_init(HITS_DB* db, size_t max_mem)
 {
@@ -98,16 +99,19 @@ void rl_load(Read_Loader* rl, int* rids, int nrids)
     qsort(rids, nrids, sizeof(int), cmp_rids);
     nrids = unique(rids, nrids);
 
-    uint64 totallen = 0;
     int i;
+    uint64 totallen = 0;
     for (i = 0; i < nrids; i++)
     {
-        totallen += reads[i].rlen;
+        int rid = rids[i];
+        totallen += reads[rid].rlen;
     }
 
-    // printf("%''llu bytes needed for %d reads\n", totallen, nrids);
+#ifdef DEBUG_RL
+    printf("%''llu bytes needed for %d reads\n", totallen, nrids);
+#endif // DEBUG_RL
 
-    if (totallen > rl->maxreads)
+    if (totallen >= rl->maxreads)
     {
         rl->maxreads = totallen * 1.2 + 1000;
         rl->reads = (char*)realloc(rl->reads, rl->maxreads);
@@ -143,7 +147,9 @@ void rl_load(Read_Loader* rl, int* rids, int nrids)
             offe = reads[re].boff;
         }
 
-        // printf("reading from read %'llu..%'llu byte %'zu..%'zu\n", rb, re, offb, offe);
+#ifdef DEBUG_RL
+        printf("reading from read %'llu..%'llu byte %'zu..%'zu\n", rb, re, offb, offe);
+#endif // DEBUG_RL
 
         fseeko(bases, offb, SEEK_SET);
 
@@ -160,11 +166,11 @@ void rl_load(Read_Loader* rl, int* rids, int nrids)
             int len = reads[rid].rlen;
             int clen = COMPRESSED_LEN(len);
 
-            /*
-            printf("  %'8d @ %'8lld %'8lld %d %d\n",
+#ifdef DEBUG_RL
+            printf("  %'8d @ %'8lld %'8lld %lld %d\n",
                     rid, reads[rid].boff, reads[rid].boff - offb,
                     curreads, clen);
-            */
+#endif // DEBUG_RL
 
             memcpy(rl->reads + curreads, buffer + (reads[rid].boff - offb), clen);
             rl->index[rid] = rl->reads + curreads;
