@@ -18,6 +18,17 @@
 
 HITS_TRACK* track_load_block( HITS_DB* db, char* tname )
 {
+    // TODO: clean this up
+    // WORKAROUND: Load_Track already trims the track if only a block of the db has been loaded
+
+    FILE* afile = fopen( Catenate( db->path, ".", tname, ".a2" ), "r" );
+    if ( afile == NULL )
+    {
+        return Load_Track( db, tname );
+    }
+    fclose(afile);
+
+
     HITS_TRACK* track = track_load( db, tname );
 
     if ( track == NULL )
@@ -52,11 +63,8 @@ HITS_TRACK* track_load( HITS_DB* db, char* track )
 {
     FILE* afile = fopen( Catenate( db->path, ".", track, ".a2" ), "r" );
 
-    // printf("%s\n", Catenate(db->path, ".", track, ".a2"));
-
     if ( afile == NULL )
     {
-        // printf("fall back to Load_Track\n");
         return Load_Track( db, track );
     }
 
