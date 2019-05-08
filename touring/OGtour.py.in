@@ -788,7 +788,8 @@ def graph_compute_paths(g, arrStartVertices, bbdist_prop,
             start = 0
             end = 0
 
-            logging.info("found path consisting of {} reads".format(len(path) + 1))
+            logging.info("found path consisting of {} reads (@ {} of {})".format(len(path) + 1,
+                    vcur, len(arrStartVertices)))
 
             while len(path) > 0 and eflags_prop[ path[0] ] & (LAS.OVL_MODULE | LAS.OVL_OPTIONAL):
                 del path[0]
