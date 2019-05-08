@@ -282,6 +282,10 @@ static void pre_annotate( PassContext* pctx, AnnotateContext* ctx )
 
 static void post_annotate( AnnotateContext* ctx )
 {
+#ifdef VERBOSE
+    printf( "saving tracks\n" );
+#endif
+
     int j;
     track_anno qoff, coff;
 
