@@ -1999,7 +1999,7 @@ int main( int argc, char* argv[] )
     if ( !fctx.trackTrim )
     {
         fprintf( stderr, "could not load track %s\n", arg_trimTrack );
-        // exit( 1 );
+        exit( 1 );
     }
 
     if ( pathRules )
@@ -2052,7 +2052,7 @@ int main( int argc, char* argv[] )
 
         pctx->data       = &fctx;
         pctx->split_b    = 1;
-        pctx->load_trace = 0;
+        pctx->load_trace = 1;
 
         pass( pctx, loader_handler );
         rl_load_added( fctx.rl );
