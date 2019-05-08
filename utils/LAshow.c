@@ -794,8 +794,14 @@ int main( int argc, char* argv[] )
 
     pctx = pass_init( fileOvlIn, NULL );
 
+    if ( !pctx )
+    {
+        fprintf(stderr, "pass_init failed on %s\n", pcPathOverlaps);
+        exit(1);
+    }
+
     pctx->split_b      = 0;
-    pctx->load_trace   = ( sctx.show_aln || sctx.trace );
+    pctx->load_trace   = 1; // ( sctx.show_aln || sctx.trace );
     pctx->unpack_trace = ( sctx.show_aln || sctx.trace );
     pctx->data         = &sctx;
 
