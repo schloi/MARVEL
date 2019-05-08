@@ -1,11 +1,12 @@
 /*
- takes two tracks containing intervals and merges them
- into a single track, removing contained/duplicate intervals
- in the process and merging overlapping ones.
+    takes two tracks containing intervals and merges them
+    into a single track, removing contained/duplicate intervals
+    in the process and merging overlapping ones.
 
- Source tracks and result track can be trimmed and/or untrimmed
+    Source tracks and result track can be trimmed and/or untrimmed
 
- Date: March 2015
+    Created: March 2015
+    Rewrite: April 2019
  */
 
 #include <assert.h>
@@ -23,12 +24,23 @@
 
 #undef DEBUG
 
-static int cmp_intervals( const void* a, const void* b )
+static int cmp_trackdata_3( const void* a, const void* b )
 {
     track_data* x = (track_data*)a;
     track_data* y = (track_data*)b;
 
-    return x[ 0 ] - y[ 0 ];
+    int i;
+    for ( i = 0; i < 3; i++ )
+    {
+        track_data d = x[ i ] - y[ i ];
+
+        if ( d != 0 )
+        {
+            return d;
+        }
+    }
+
+    return 0;
 }
 
 static void usage()
@@ -108,23 +120,16 @@ int main( int argc, char* argv[] )
         exit( 1 );
     }
 
+    // read all tracks into an array of triplets (read_id,  begin, end)
+
     int nreads = db.ureads;
 
-    track_anno* offset_out = (track_anno*)malloc( sizeof( track_anno ) * ( nreads + 1 ) );
-    bzero( offset_out, sizeof( track_anno ) * ( nreads + 1 ) );
+    uint64_t tmax    = 1000;
+    track_data* temp = malloc( sizeof( track_data ) * tmax );
+    uint64_t tcur    = 0;
 
-    uint64_t dcur        = 0;
-    uint64_t dmax        = 100;
-    track_data* data_out = (track_data*)malloc( sizeof( track_data ) * dmax );
-
-    uint64_t tcur          = 0;
-    uint64_t tmax          = 100;
-    track_data* temp       = (track_data*)malloc( sizeof( track_data ) * tmax );
-    track_anno* offset_tmp = (track_anno*)malloc( sizeof( track_anno ) * ( nreads + 1 ) );
-    bzero( offset_tmp, sizeof( track_anno ) * ( nreads + 1 ) );
-
-    int64 noverlap = 0;
-    int64 ncontain = 0;
+    uint64_t noverlap = 0;
+    uint64_t ncontain = 0;
 
     HITS_TRACK* inTrack;
     char* tmpTrackName = malloc( 1000 );
@@ -161,151 +166,126 @@ int main( int argc, char* argv[] )
 
             if ( verbose )
             {
-                printf( "%lld in %s", anno_in[ db.nreads ] / sizeof( track_data ), inTrack->name );
+                printf( "%lld intervals in %s\n", anno_in[ db.nreads ] / ( 2 * sizeof( track_data )), inTrack->name );
             }
 
-            bzero( offset_tmp, sizeof( track_anno ) * ( nreads + 1 ) );
-            tcur = 0;
-            dcur = 0;
+            uint64_t needed = anno_in[ db.nreads ] / 2 + anno_in[ db.nreads ] / sizeof( track_data );
+
+            if ( tcur + needed > tmax )
+            {
+                tmax = ( tcur + needed ) * 1.2 + 1000;
+                temp = realloc( temp, tmax * sizeof( track_data ) );
+            }
+
             for ( j = 0; j < db.nreads; j++ )
             {
-                // check input track
-                int ispace, ospace;
-
-                offset_tmp[ j ] = tcur;
-
                 track_anno i_ob = anno_in[ j ] / sizeof( track_data );
                 track_anno i_oe = anno_in[ j + 1 ] / sizeof( track_data );
 
                 assert( i_ob <= i_oe );
 
-                ispace = i_oe - i_ob;
-
-                // check current out track
-                track_anno o_ob = offset_out[ j ] / sizeof( track_data );
-                track_anno o_oe = offset_out[ j + 1 ] / sizeof( track_data );
-
-                assert( o_ob <= o_oe );
-
-                ospace = o_oe - o_ob;
-
-                if ( ispace == 0 && ospace == 0 )
+                if ( i_ob == i_oe )
+                {
                     continue;
-
-                if ( tcur + ospace + ispace >= tmax )
-                {
-                    tmax = tmax * 1.2 + ospace + ispace;
-                    temp = (track_data*)realloc( temp, sizeof( track_data ) * tmax );
                 }
 
-                // merge inTrack and current out-track into temp
-                if ( ispace > 0 )
+                while ( i_ob < i_oe )
                 {
-                    memcpy( temp + tcur, data_in + i_ob, sizeof( track_data ) * ( i_oe - i_ob ) );
-                    tcur += ispace;
+                    temp[ tcur ]     = j;
+                    temp[ tcur + 1 ] = data_in[ i_ob ];
+                    temp[ tcur + 2 ] = data_in[ i_ob + 1];
+
+                    i_ob += 2;
+                    tcur += 3;
                 }
-                if ( ospace > 0 )
-                {
-                    memcpy( temp + tcur, data_out + o_ob, sizeof( track_data ) * ( o_oe - o_ob ) );
-                    tcur += ospace;
-                }
-
-                if ( ispace != 0 && ospace != 0 )
-                {
-                    qsort( temp + ( tcur - ispace - ospace ), ( ispace + ospace ) / 2, sizeof( track_data ) * 2, cmp_intervals );
-
-                    uint64_t k;
-                    for ( k = tcur - ispace - ospace + 2; k < tcur; k += 2 )
-                    {
-                        // contained -> replace with previous
-                        if ( temp[ k + 1 ] <= temp[ k - 1 ] )
-                        {
-                            temp[ k ]     = temp[ k - 2 ];
-                            temp[ k + 1 ] = temp[ k - 1 ];
-
-                            temp[ k - 2 ] = temp[ k - 1 ] = -1;
-
-                            ncontain++;
-                        }
-                        // overlapping
-                        else if ( temp[ k ] <= temp[ k - 1 ] )
-                        {
-                            temp[ k ] = temp[ k - 2 ];
-
-                            temp[ k - 2 ] = temp[ k - 1 ] = -1;
-
-                            noverlap++;
-                        }
-                    }
-                }
-            }
-
-            // copy tmp into data_out
-            if ( dcur + tcur >= dmax )
-            {
-                dmax     = dmax * 1.2 + tcur;
-                data_out = (track_data*)realloc( data_out, sizeof( track_data ) * dmax );
-            }
-            bzero( offset_out, sizeof( track_anno ) * ( nreads + 1 ) );
-
-            offset_tmp[ nreads ] = tcur;
-
-            for ( j = 0; j < nreads; j++ )
-            {
-                track_anno k;
-                for ( k = offset_tmp[ j ]; k < offset_tmp[ j + 1 ]; k += 2 )
-                {
-                    if ( temp[ k ] == -1 )
-                    {
-                        continue;
-                    }
-
-                    data_out[ dcur++ ] = temp[ k ];
-                    data_out[ dcur++ ] = temp[ k + 1 ];
-
-                    offset_out[ j ] += sizeof( track_data ) * 2;
-                }
-            }
-
-            track_anno coff, off;
-            off = 0;
-
-            for ( j = 0; j <= nreads; j++ )
-            {
-                coff            = offset_out[ j ];
-                offset_out[ j ] = off;
-                off += coff;
-            }
-
-            for ( j = 0; j < nreads; j++ )
-            {
-                assert( offset_out[ j ] <= offset_out[ j + 1 ] );
-            }
-
-            // TODO use track_close, but it has to be adapted to update the linked list of DB tracks
-            Close_Track( &db, inTrack->name );
-
-            if ( verbose )
-            {
-                printf( " %lld contained, %lld overlapped, %lld cum\n", ncontain, noverlap, offset_out[ nreads ] / sizeof( track_data ) );
             }
         }
     }
 
-    if ( verbose )
+    printf("%lld intervals\n", tcur / 3);
+
+    // sort triplets
+
+    qsort( temp, tcur / 3, sizeof( track_data ) * 3, cmp_trackdata_3 );
+
+    uint64_t discarded = 0;
+
+    for ( i = 3; i < tcur; i += 3 )
     {
-        printf( "%lld contained\n%lld overlapped\n", ncontain, noverlap );
-        printf( "%lld in %s\n", offset_out[ nreads ] / sizeof( track_data ),
-                nameTrackResult );
+        // read id changed
+        if ( temp[ i - 3 ] != temp[ i ] )
+        {
+            continue;
+        }
+
+        // start > previous end -> neither contained not intersecting
+        if ( temp[ i + 1 ] > temp[ i - 1 ] )
+        {
+            continue;
+        }
+
+        // overlapping, extend previous intervals
+        if ( temp[ i + 2 ] > temp[ i - 1 ] )
+        {
+            temp[ i - 1 ] = temp[ i + 2 ];
+        }
+
+        // discard current
+        memset( temp + i, 0, sizeof( track_data ) * 3 );
+        discarded += 3;
     }
 
-    track_write( &db, nameTrackResult, 0, offset_out, data_out,
+    printf("%lld intervals discarded\n", discarded / 3);
+
+    // sort triplets again, moving discarded (0, 0, 0) triplets to the front
+
+    qsort( temp, tcur / 3, sizeof( track_data ) * 3, cmp_trackdata_3 );
+
+    // count number of intervals for each read, discard read id
+    // and store (begin, end) tuples at beginning of the array
+
+    track_anno* offset_out = (track_anno*)malloc( sizeof( track_anno ) * ( nreads + 1 ) );
+    bzero( offset_out, sizeof( track_anno ) * ( nreads + 1 ) );
+
+    uint64_t tcur_free = 0;
+    for ( i = discarded ; i < tcur ; i += 3 )
+    {
+        offset_out[ temp[i] ] += sizeof(track_data) * 2;
+
+        temp[tcur_free] = temp[i + 1];
+        temp[tcur_free + 1] = temp[i + 2];
+
+        tcur_free += 2;
+    }
+
+    // turn interval counts per read into offsets
+
+    track_anno coff, off;
+    off = 0;
+
+    for ( j = 0; j <= nreads; j++ )
+    {
+        coff            = offset_out[ j ];
+        offset_out[ j ] = off;
+        off += coff;
+    }
+
+    // sanity checks
+
+#ifdef DEBUG
+    for ( j = 0; j < nreads; j++ )
+    {
+        assert( offset_out[ j ] <= offset_out[ j + 1 ] );
+    }
+#endif
+
+    // write track, free memory and optionally delete input tracks
+
+    track_write( &db, nameTrackResult, 0, offset_out, temp,
                  offset_out[ nreads ] / sizeof( track_data ) );
 
     free( temp );
-    free( data_out );
     free( offset_out );
-    free( offset_tmp );
 
     if ( delete )
     {
