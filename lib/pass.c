@@ -1,20 +1,42 @@
 
+#include <assert.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
 
 #include "pass.h"
 #include "oflags.h"
+
+#define SIZE_IO_BUFFER ( 1024 * 1024 )
+
 
 static inline size_t ovl_header_length()
 {
     return sizeof(ovl_header_novl) + sizeof(ovl_header_twidth);
 }
 
-
 PassContext* pass_init(FILE* fileOvlIn, FILE* fileOvlOut)
 {
-    PassContext* ctx = malloc(sizeof(PassContext));
+    PassContext* ctx = calloc(1, sizeof(PassContext));
+
+#if defined(__unix__)
+    posix_fadvise(fileno(fileOvlIn), 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
+
+    if ( !ctx->bufIn )
+    {
+        ctx->bufIn = malloc( SIZE_IO_BUFFER );
+        setvbuf(fileOvlIn, ctx->bufIn, _IOFBF, SIZE_IO_BUFFER);
+    }
+
+    if ( fileOvlOut )
+    {
+        if ( !ctx->bufOut )
+        {
+            ctx->bufOut = malloc( SIZE_IO_BUFFER );
+            setvbuf(fileOvlOut, ctx->bufOut, _IOFBF, SIZE_IO_BUFFER);
+        }
+    }
 
     ctx->fileOvlIn = fileOvlIn;
     ctx->trace = NULL;
@@ -83,6 +105,19 @@ void pass_free(PassContext* ctx)
     }
 
     free(ctx->trace);
+
+    /*
+    if ( ctx->bufIn )
+    {
+        free(ctx->bufIn);
+    }
+
+    if ( ctx->bufOut )
+    {
+        free(ctx->bufOut);
+    }
+    */
+
     free(ctx);
 }
 
@@ -178,8 +213,13 @@ void pass(PassContext* ctx, pass_handler handler)
 
         while (1)
         {
-            if (Read_Overlap(ctx->fileOvlIn, pOvls+n) ||
-                pOvls[n].aread != a ||
+            if (Read_Overlap(ctx->fileOvlIn, pOvls+n))
+            {
+                cont = 0;
+                break;
+            }
+
+            if (pOvls[n].aread != a ||
                 (split_b && pOvls[n].bread != b))
             {
                 break;
@@ -225,7 +265,12 @@ void pass(PassContext* ctx, pass_handler handler)
             }
         }
 
-        cont = handler(ctx->data, pOvls, n);
+        int hcont = handler(ctx->data, pOvls, n);
+
+        if ( cont && !hcont )
+        {
+            cont = 0;
+        }
 
         if (write_overlaps)
         {
@@ -249,11 +294,10 @@ void pass(PassContext* ctx, pass_handler handler)
 
                     Write_Overlap(ctx->fileOvlOut, pOvls + j, ctx->tbytes);
                     ctx->novl_out++;
-
-                    if (isDiscarded)
-                    {
-                        ctx->novl_out_discarded++;
-                    }
+                }
+                else
+                {
+                    ctx->novl_out_discarded++;
                 }
             }
         }
