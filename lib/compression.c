@@ -11,7 +11,7 @@
 
 #define COMPRESS_MAX_CHUNK ( 8 * 1024 * 1024 )
 
-void compress_chunks(void* ibuf, uint64_t ilen, void** _obuf, uint64_t* _olen)
+int compress_chunks(void* ibuf, uint64_t ilen, void** _obuf, uint64_t* _olen)
 {
     uLongf chunk = COMPRESS_MAX_CHUNK;
 
@@ -32,7 +32,17 @@ void compress_chunks(void* ibuf, uint64_t ilen, void** _obuf, uint64_t* _olen)
         }
         uLongf cchunk = omax - (ocur - obuf);
 
-        compress(ocur + sizeof(uint64_t), &cchunk, icur, chunk);
+        if ( compress(ocur + sizeof(uint64_t), &cchunk, icur, chunk) != Z_OK )
+        {
+            fprintf(stderr, "failed to compress");
+
+            free(obuf);
+
+            *_obuf = NULL;
+            *_olen = 0;
+
+            return 0;
+        }
 
 #ifdef DEBUG_COMPRESSION
         printf("compressed chunk of %lu to %lu\n", chunk, cchunk);
@@ -49,9 +59,11 @@ void compress_chunks(void* ibuf, uint64_t ilen, void** _obuf, uint64_t* _olen)
     *_olen = ocur - obuf;
 
     // return ( ocur - obuf );
+
+    return 1;
 }
 
-void uncompress_chunks(void* ibuf, uint64_t ilen, void* obuf, uint64_t olen)
+int uncompress_chunks(void* ibuf, uint64_t ilen, void* obuf, uint64_t olen)
 {
     UNUSED(olen);
 
@@ -73,7 +85,11 @@ void uncompress_chunks(void* ibuf, uint64_t ilen, void* obuf, uint64_t olen)
         printf("uncompress %lu into %" PRIu64 " %ld", clen, olen, destlen);
 #endif
 
-        uncompress(ocur, &destlen, icur + sizeof(uint64_t), clen);
+        if ( uncompress(ocur, &destlen, icur + sizeof(uint64_t), clen) != Z_OK )
+        {
+            fprintf(stderr, "failed to uncompress\n");
+            return 0;
+        }
 
 #ifdef DEBUG_COMPRESSION
         printf(" to %lu\n", destlen);
@@ -82,6 +98,8 @@ void uncompress_chunks(void* ibuf, uint64_t ilen, void* obuf, uint64_t olen)
         icur += sizeof(uint64_t) + clen;
         ocur += destlen;
     }
+
+    return 1;
 }
 
 #ifdef DEBUG_COMPRESSION

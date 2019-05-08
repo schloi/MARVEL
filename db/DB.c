@@ -1,40 +1,3 @@
-/************************************************************************************\
-*                                                                                    *
- * Copyright (c) 2014, Dr. Eugene W. Myers (EWM). All rights reserved.                *
- *                                                                                    *
- * Redistribution and use in source and binary forms, with or without modification,   *
- * are permitted provided that the following conditions are met:                      *
- *                                                                                    *
- *  · Redistributions of source code must retain the above copyright notice, this     *
- *    list of conditions and the following disclaimer.                                *
- *                                                                                    *
- *  · Redistributions in binary form must reproduce the above copyright notice, this  *
- *    list of conditions and the following disclaimer in the documentation and/or     *
- *    other materials provided with the distribution.                                 *
- *                                                                                    *
- *  · The name of EWM may not be used to endorse or promote products derived from     *
- *    this software without specific prior written permission.                        *
- *                                                                                    *
- * THIS SOFTWARE IS PROVIDED BY EWM ”AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES,    *
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND       *
- * FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL EWM BE LIABLE   *
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES *
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS  *
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY      *
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING     *
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN  *
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                      *
- *                                                                                    *
- * For any issues regarding this software and its use, contact EWM at:                *
- *                                                                                    *
- *   Eugene W. Myers Jr.                                                              *
- *   Bautzner Str. 122e                                                               *
- *   01099 Dresden                                                                    *
- *   GERMANY                                                                          *
- *   Email: gene.myers@gmail.com                                                      *
- *                                                                                    *
- \************************************************************************************/
-
 /*******************************************************************************************
  *
  *  Compressed data base module.  Auxiliary routines to open and manipulate a data base for
@@ -51,12 +14,13 @@
 
 #include <ctype.h>
 #include <dirent.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/param.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <sys/param.h>
 
 #include "DB.h"
 
@@ -1263,6 +1227,10 @@ int Load_Read( HITS_DB* db, int i, char* read, int ascii )
         if ( bases == NULL )
             EXIT( 1 );
         db->bases = (void*)bases;
+
+#if defined(__unix__)
+        posix_fadvise(fileno(bases), 0, 0, POSIX_FADV_RANDOM);
+#endif
     }
 
     off = r[ i ].boff;
@@ -1293,63 +1261,6 @@ int Load_Read( HITS_DB* db, int i, char* read, int ascii )
     else
         read[ -1 ] = 4;
     return ( 0 );
-}
-
-char* Load_Subread( HITS_DB* db, int i, int beg, int end, char* read, int ascii )
-{
-    FILE* bases = (FILE*)db->bases;
-    int64 off;
-    int len, clen;
-    int bbeg, bend;
-    HITS_READ* r = db->reads;
-
-    if ( i >= db->nreads )
-    {
-        EPRINTF( EPLACE, "%s: Index out of bounds (Load_Read)\n", Prog_Name );
-        EXIT( NULL );
-    }
-    if ( bases == NULL )
-    {
-        bases = Fopen( Catenate( db->path, "", "", ".bps" ), "r" );
-        if ( bases == NULL )
-            EXIT( NULL );
-        db->bases = (void*)bases;
-    }
-
-    bbeg = beg / 4;
-    bend = ( end - 1 ) / 4 + 1;
-
-    off = r[ i ].boff + bbeg;
-    len = end - beg;
-
-    if ( ftello( bases ) != off )
-        fseeko( bases, off, SEEK_SET );
-    clen = bend - bbeg;
-    if ( clen > 0 )
-    {
-        if ( fread( read, clen, 1, bases ) != 1 )
-        {
-            EPRINTF( EPLACE, "%s: Failed read of .bps file (Load_Read)\n", Prog_Name );
-            EXIT( NULL );
-        }
-    }
-    Uncompress_Read( 4 * clen, read );
-    read += beg % 4;
-    read[ len ] = 4;
-    if ( ascii == 1 )
-    {
-        Lower_Read( read );
-        read[ -1 ] = '\0';
-    }
-    else if ( ascii == 2 )
-    {
-        Upper_Read( read );
-        read[ -1 ] = '\0';
-    }
-    else
-        read[ -1 ] = 4;
-
-    return ( read );
 }
 
 /*******************************************************************************************

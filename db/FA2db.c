@@ -1073,6 +1073,7 @@ int main( int argc, char* argv[] )
         readFastaFile( &ctx, ng->name );
     }
 
+
     //  Finished loading all sequences: update relevant fields in db record
 
     db.ureads = ctx.ureads;

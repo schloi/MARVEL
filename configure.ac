@@ -54,6 +54,9 @@ AC_CHECK_LIB([z], [compress])
 AC_CHECK_LIB([pthread], [pthread_create])
 AC_CHECK_LIB([bsd], [fgetln])
 
+# TODO: platform specific AC_CHECK_LIB call for libunwind
+
+
 # Check for pkg-config program, used for configuring some libraries.
 m4_define_default([PKG_PROG_PKG_CONFIG],
     [AC_MSG_CHECKING([pkg-config])
