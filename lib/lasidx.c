@@ -12,6 +12,10 @@
 #include "lasidx.h"
 #include "pass.h"
 
+#define SIZE_IO_BUFFER ( 1 * 1024 * 1024 )
+
+#define SEEK_PAST_TRACE
+
 static char* lasidx_filename(const char* pathLas)
 {
     char* pathIdx = strdup(pathLas);
@@ -38,10 +42,12 @@ static time_t file_mtime(const char* path)
     return attr.st_mtime;
 }
 
+
 lasidx* lasidx_create(HITS_DB* db, const char* pathLas)
 {
     FILE* fileLas;
     FILE* fileIdx;
+    void* buffer;
 
     if ( (fileLas = fopen(pathLas, "r")) == NULL )
     {
@@ -59,6 +65,9 @@ lasidx* lasidx_create(HITS_DB* db, const char* pathLas)
 
         return NULL;
     }
+
+    buffer = malloc( SIZE_IO_BUFFER );
+    setvbuf(fileLas, buffer, _IOFBF, SIZE_IO_BUFFER);
 
     printf("indexing %s\n", pathLas);
 
@@ -80,6 +89,36 @@ lasidx* lasidx_create(HITS_DB* db, const char* pathLas)
     Overlap ovl;
     int a = -1;
 
+    /*
+    {
+        off_t size = pctx->sizeOvlIn - (sizeof(ovl_header_novl) + sizeof(ovl_header_twidth));
+
+        void* buffer = malloc(size);
+        fread(buffer, size, 1, fileLas);
+
+        printf("START\n");
+
+        void* cur = buffer;
+        while ( (cur - buffer) < size )
+        {
+            Overlap* ovl = cur - sizeof(void*);
+            // printf("%d\n", ovl->aread);
+            cur += sizeof(Overlap) - sizeof(void*) + tbytes * ovl->path.tlen;
+        }
+
+        printf("END\n");
+
+        free(buffer);
+    }
+
+    return NULL;
+    */
+
+#ifdef SEEK_PAST_TRACE
+    size_t tmax = 1000;
+    ovl_trace* trace = malloc(sizeof(ovl_trace) * tmax);
+#endif
+
     while (!Read_Overlap(fileLas, &ovl))
     {
         if (a != ovl.aread)
@@ -90,8 +129,27 @@ lasidx* lasidx_create(HITS_DB* db, const char* pathLas)
             a = ovl.aread;
         }
 
+#ifdef SEEK_PAST_TRACE
         fseek(fileLas, tbytes * ovl.path.tlen, SEEK_CUR);
+#else
+
+        if ( ovl.path.tlen > tmax )
+        {
+            tmax = ovl.path.tlen * 1.2 + 1000;
+            trace = realloc( sizeof(ovl_trace) * tmax );
+        }
+
+        ovl.path.trace = trace;
+
+        Read_Trace(fileLas, &ovl, tbytes);
+
+#endif
+
     }
+
+#ifdef SEEK_PAST_TRACE
+    free(trace);
+#endif
 
     if (a != ovl.aread)
     {
@@ -127,6 +185,8 @@ lasidx* lasidx_create(HITS_DB* db, const char* pathLas)
 
     pass_free(pctx);
     free(pathIdx);
+
+    free(buffer);
 
     return lasIndex;
 }

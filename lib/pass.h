@@ -28,6 +28,9 @@ typedef struct
     FILE* fileOvlIn;
     FILE* fileOvlOut;
 
+    void* bufIn;
+    void* bufOut;
+
     ovl_header_twidth twidth;
     ovl_header_novl novl;               // number of overlaps reads in
     ovl_header_novl novl_out;           // written out
