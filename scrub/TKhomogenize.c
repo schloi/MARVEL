@@ -379,15 +379,6 @@ static int handler_homogenize(void* _ctx, Overlap* ovl, int novl)
             trim_be = blen;
         }
 
-#ifdef DEBUG_HOMOGENIZE
-        if (a == 592526)
-        {
-            printf("%d (%d) -> %d (%d)  %5d..%5d -> %5d..%5d\n", a, DB_READ_LEN(ctx->db, a), b, DB_READ_LEN(ctx->db, b),
-                    ovl[i].path.abpos, ovl[i].path.aepos, ovl[i].path.bbpos, ovl[i].path.bepos);
-            fflush(stdout);
-        }
-#endif
-
         int ab = ovl[i].path.abpos;
         int ae = ovl[i].path.aepos;
 
@@ -432,12 +423,6 @@ static int handler_homogenize(void* _ctx, Overlap* ovl, int novl)
             int j;
             for (j = 0; j < tlen; j += 2)
             {
-#ifdef DEBUG_HOMOGENIZE
-                if (a == 592526 && b == 5971679)
-                {
-                    printf("%2d %2d %5d %5d %5d %5d\n", j, tlen, aoff, boff, ibb, ibe);
-                }
-#endif
                 if ( (aoff >= iab || j == tlen - 2) && ibb == -1 )
                 {
                     ibb = MIN(boff, ovl[i].path.bepos);
@@ -474,20 +459,6 @@ static int handler_homogenize(void* _ctx, Overlap* ovl, int novl)
             }
 
             assert(ibb <= ibe);
-
-#ifdef DEBUG_HOMOGENIZE
-            if (a == 592526)
-            {
-                printf("%6d %c %6d :: A %5d..%5d A_R %5d..%5d B %5d..%5d -> IA %5d..%5d IB %5d..%5d\n",
-                            ovl[i].aread, ovl[i].flags & OVL_COMP ? 'c' : 'n', ovl[i].bread,
-                            ab, ae,
-                            beg, end,
-                            ovl[i].path.bbpos, ovl[i].path.bepos,
-                            iab, iae,
-                            ibb, ibe);
-                return 0;
-            }
-#endif
 
             // repeat tag the b read
 
