@@ -4,7 +4,7 @@ include ../Makefile.settings
 ALL = FAsort \
 	  LAcartoons LAcheck LAcount LAindex LAmerge LAshow LAstats \
 	  TKadjust TKcombine TKmerge TKshow \
-	  gff2track
+	  txt2track
 
 with_gtk = @with_gtk@
 with_hdf5 = @with_hdf5@
@@ -29,8 +29,8 @@ clean:
 FAsort: FAsort.c $(PATH_LIB)/utils.h $(PATH_LIB)/utils.c
 	$(CC) $(CFLAGS) -o FAsort FAsort.c $(PATH_LIB)/utils.c $(CLIBS)
 
-gff2track: gff2track.c $(PATH_LIB)/lasidx.h $(PATH_LIB)/lasidx.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/compression.c
-	$(CC) $(CFLAGS) -o gff2track gff2track.c $(PATH_LIB)/lasidx.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_LIB)/pass.c $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_LIB)/oflags.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)
+txt2track: txt2track.c $(PATH_LIB)/lasidx.h $(PATH_LIB)/lasidx.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/compression.c
+	$(CC) $(CFLAGS) -o txt2track txt2track.c $(PATH_LIB)/lasidx.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_LIB)/pass.c $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_LIB)/oflags.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)
 
 LAcartoons: LAcartoons.c $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/pass.h $(PATH_LIB)/pass.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/compression.c
 	$(CC) $(CFLAGS) -o LAcartoons LAcartoons.c $(PATH_LIB)/pass.c $(PATH_LIB)/oflags.c $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DB)/DB.c $(PATH_DB)/QV.c $(PATH_LIB)/compression.c $(CLIBS)
