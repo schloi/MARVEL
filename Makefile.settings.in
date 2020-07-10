@@ -22,7 +22,7 @@ INSTALL_SCRIPT = @INSTALL_SCRIPT@
 GTK_LIBS       = @GTK_LIBS@
 GTK_CFLAGS     = @GTK_CFLAGS@
 
-VPATH = $(PATH_DB) $(PATH_DALIGN) $(PATH_LIB) $(PATH_LIBE) $(PATH_MSA)
+VPATH = $(PATH_DB) $(PATH_LIB) $(PATH_LIBE) $(PATH_MSA)
 
 CFLAGS += -Wunused-macros -Wall -Wextra -I../
 CLIBS = -lm -lz
@@ -36,6 +36,6 @@ CLIBS = -lm -lz
 
 debug ?= 0
 ifeq ($(debug), 1)
-	CFLAGS = -Wunused-macros -Wall -Wextra -I../ -g -O0 -Wunreachable-code -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls
+	CFLAGS += -Wunused-macros -Wall -Wextra -I../ -g -O0 -Wunreachable-code -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls
 endif
 

@@ -23,12 +23,12 @@ typedef struct
 {
     Event* peb;
     Event* pee;
-    
+
     int eb, ee;
     int type;
     int link;
     int done;
 } Border;
 
-void find_borders(Border** ppBorder, int* bmax, int* bcur, Event** pEvents, int l, int r, 
+void find_borders(Border** ppBorder, int* bmax, int* bcur, Event** pEvents, int l, int r,
             float min_density, int min_events, int max_dist);

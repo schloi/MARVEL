@@ -54,6 +54,7 @@
 #define _A_MODULE
 
 #include "db/DB.h"
+#include <inttypes.h>
 
 #define TRACE_XOVR 125   //  If the trace spacing is not more than this value, then can
 //    and do compress traces pts to 8-bit unsigned ints

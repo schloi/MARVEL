@@ -12,4 +12,5 @@ config.h.in
 config.h.in~
 config.log
 config.status
+configure
 configure.scan

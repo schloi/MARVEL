@@ -392,6 +392,7 @@ static void show( ShowContext* ctx, Overlap* ovls, int novl )
                 Complement_Seq( ctx->align->bseq, ovlBLen );
             }
 
+
             Compute_Trace_PTS( ctx->align, ctx->align_work, ctx->twidth, 0 );
 
             Print_Reference( stdout, ctx->align, ctx->align_work, 0, 100, 0, 0, 5 );

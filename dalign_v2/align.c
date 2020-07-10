@@ -1,19 +1,4 @@
 
-/*******************************************************************************************
- *
- *  Fast alignment discovery and trace generation along with utilites for displaying alignments
- *     Based on previously unpublished ideas from 2005, subsequently refined in 2013-14.  Basic
- *     idea is to keep a dynamically selected interval of the f.r. waves from my 1986 O(nd) paper.
- *     A recent cool idea is to not record all the details of an alignment while discovering it
- *     but simply record trace points through which the optimal alignment passes every 100bp,
- *     allowing rapid recomputation of the alignment details between trace points.
- *
- *  Author :  Gene Myers
- *  First  :  June 2013
- *  Current:  June 1, 2014
- *
- ********************************************************************************************/
-
 #include <limits.h>
 #include <math.h>
 #include <stdint.h>
@@ -22,9 +7,9 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "align.h"
 #include "db/DB.h"
-#include <assert.h>
+#include "align.h"
+#include "ovlbuffer.h"
 
 #undef DEBUG_PASSES    //  Show forward / backward extension termini for Local_Alignment
 #undef DEBUG_POINTS    //  Show trace points
@@ -36,7 +21,8 @@
 #undef DEBUG_EXTEND //  Show waves of Extend_Until_Overlap
 
 #undef DEBUG_ALIGN  //  Show division points of Compute_Trace
-#undef DEBUG_SCRIPT //  Show trace additions for Compute_Trace
+#undef DEBUG_TRACE  //  Show trace additions for Compute_Trace
+#undef DEBUG_SCRIPT //  Show script additions for Compute_Trace
 #undef DEBUG_AWAVE  //  Show F/R waves of Compute_Trace
 
 #undef SHOW_TRACE //  Show full trace for Print_Alignment
@@ -45,9 +31,9 @@
 
 /****************************************************************************************\
 *                                                                                        *
- *  Working Storage Abstraction                                                           *
- *                                                                                        *
- \****************************************************************************************/
+*  Working Storage Abstraction                                                           *
+*                                                                                        *
+\****************************************************************************************/
 
 typedef struct //  Hidden from the user, working space for each thread
 {
@@ -59,6 +45,8 @@ typedef struct //  Hidden from the user, working space for each thread
     void* points;
     int tramax;
     void* trace;
+    int alnmax;
+    void* alnpts;
 } _Work_Data;
 
 Work_Data* New_Work_Data()
@@ -74,6 +62,8 @@ Work_Data* New_Work_Data()
     work->points = NULL;
     work->tramax = 0;
     work->trace  = NULL;
+    work->alnmax = 0;
+    work->alnpts = NULL;
     work->celmax = 0;
     work->cells  = NULL;
     return ( (Work_Data*)work );
@@ -107,6 +97,20 @@ static int enlarge_points( _Work_Data* work, int newmax )
     return ( 0 );
 }
 
+static int enlarge_alnpts( _Work_Data* work, int newmax )
+{
+    void* vec;
+    int max;
+
+    max = ( (int)( newmax * 1.2 ) ) + 10000;
+    vec = Realloc( work->alnpts, max, "Enlarging point vector" );
+    if ( vec == NULL )
+        EXIT( 1 );
+    work->alnmax = max;
+    work->alnpts = vec;
+    return ( 0 );
+}
+
 static int enlarge_trace( _Work_Data* work, int newmax )
 {
     void* vec;
@@ -132,21 +136,24 @@ void Free_Work_Data( Work_Data* ework )
         free( work->trace );
     if ( work->points != NULL )
         free( work->points );
+    if ( work->alnpts != NULL )
+        free( work->alnpts );
     free( work );
 }
 
 /****************************************************************************************\
 *                                                                                        *
- *  ADAPTIVE PATH FINDING                                                                 *
- *                                                                                        *
- \****************************************************************************************/
+*  ADAPTIVE PATH FINDING                                                                 *
+*                                                                                        *
+\****************************************************************************************/
 
 //  Absolute/Fixed Parameters
+
 #define BVEC uint64 //  Can be uint32 if PATH_LEN <= 32
 
-#define TRIM_LEN 15 //  Report as the tip, the last wave maximum for which the last
-//     2*TRIM_LEN edits are prefix-positive at rate ave_corr*f(bias)
-//     (max value is 20)
+#define TRIM_LEN 15 //  Report as the tip, the last wave maximum for which the last      \
+                    //     2*TRIM_LEN edits are prefix-positive at rate ave_corr*f(bias) \
+                    //     (max value is 20)
 
 #define PATH_LEN 60 //  Follow the last PATH_LEN columns/edges (max value is 63)
 
@@ -158,30 +165,14 @@ void Free_Work_Data( Work_Data* ework )
 #define TRIM_MLAG 200                 //  How far can last trim point be behind best point
 #define WAVE_LAG 30                   //  How far can worst point be behind the best point
 
-static double Bias_Factor[ 10 ] =
-    {.690, .690, .690, .690, .780, .850, .900, .933, .966, 1.000};
+static double Bias_Factor[ 10 ] = {.690, .690, .690, .690, .780,
+                                   .850, .900, .933, .966, 1.000};
 
-//  Adjustable paramters
-
-typedef struct
-{
-    double ave_corr;
-    int trace_space;
-    float freq[ 4 ];
-    int ave_path;
-    int16* score;
-    int16* table;
-    int nthreads;                // HEIDELBERG_MODIFICATION
-    Overlap_IO_Buffer* ioBuffer; // HEIDELBERG_MODIFICATION
-    int symmetric;               // HEIDELBERG_MODIFICATION
-    int only_identity;           // HEIDELBERG_MODIFICATION
-    int no_trace_points;         // HEIDELBERG_MODIFICATION
-} _Align_Spec;
 
 /* Fill in bit table: TABLE[x] = 1 iff the alignment modeled by x (1 = match, 0 = mismatch)
- has a non-negative score for every suffix of the alignment under the scoring scheme
- where match = MATCH and mismatch = -1.  MATCH is set so that an alignment with TRIM_PCT
- matches has zero score ( (1-TRIM_PCT) / TRIM_PCT ).                                     */
+     has a non-negative score for every suffix of the alignment under the scoring scheme
+     where match = MATCH and mismatch = -1.  MATCH is set so that an alignment with TRIM_PCT
+     matches has zero score ( (1-TRIM_PCT) / TRIM_PCT ).                                     */
 
 #define FRACTION 1000 //  Implicit fractional part of scores, i.e. score = x/FRACTION
 
@@ -189,8 +180,8 @@ typedef struct
 {
     int mscore;
     int dscore;
-    int16* table;
-    int16* score;
+    int16_t* table;
+    int16_t* score;
 } Table_Bits;
 
 static void set_table( int bit, int prefix, int score, int max, Table_Bits* parms )
@@ -211,19 +202,20 @@ static void set_table( int bit, int prefix, int score, int max, Table_Bits* parm
 
 /* Create an alignment specification record including path tip tables & values */
 
-Align_Spec* New_Align_Spec( double ave_corr, int trace_space, float* freq, int nthreads, int symmetric, int only_identity, int no_trace_points )
+Align_Spec* New_Align_Spec( double ave_corr, int trace_space, float* freq, int reach, int nthreads )
 {
-    _Align_Spec* spec;
+    Align_Spec* spec;
     Table_Bits parms;
     double match;
     int bias;
 
-    spec = (_Align_Spec*)Malloc( sizeof( _Align_Spec ), "Allocating alignment specification" );
+    spec = (Align_Spec*)Malloc( sizeof( Align_Spec ), "Allocating alignment specification" );
     if ( spec == NULL )
         EXIT( NULL );
 
     spec->ave_corr    = ave_corr;
     spec->trace_space = trace_space;
+    spec->reach       = reach;
     spec->freq[ 0 ]   = freq[ 0 ];
     spec->freq[ 1 ]   = freq[ 1 ];
     spec->freq[ 2 ]   = freq[ 2 ];
@@ -257,21 +249,19 @@ Align_Spec* New_Align_Spec( double ave_corr, int trace_space, float* freq, int n
     spec->table = parms.table;
     spec->score = parms.score;
 
-    { // HEIDELBERG_MODIFICATION
+    {
         spec->nthreads      = nthreads;
-        spec->symmetric     = symmetric;
-        spec->only_identity = only_identity;
 
         int i;
-        spec->ioBuffer = (Overlap_IO_Buffer*)malloc( sizeof( Overlap_IO_Buffer ) * nthreads );
+        spec->ioBuffer = malloc( sizeof( Overlap_IO_Buffer ) * nthreads );
         for ( i = 0; i < nthreads; i++ )
         {
             Overlap_IO_Buffer* ob = CreateOverlapBuffer( nthreads,
-                                                         ( trace_space <= TRACE_XOVR ) ? sizeof( uint8 ) : sizeof( uint16 ), no_trace_points );
+                                                         ( trace_space <= TRACE_XOVR ) ? sizeof( uint8 ) : sizeof( uint16 ), 0 );
             if ( ob == NULL )
                 exit( 1 );
 
-            spec->ioBuffer[ i ] = *ob;
+            ((Overlap_IO_Buffer*)(spec->ioBuffer))[ i ] = *ob;
         }
     }
 
@@ -280,31 +270,36 @@ Align_Spec* New_Align_Spec( double ave_corr, int trace_space, float* freq, int n
 
 void Free_Align_Spec( Align_Spec* espec )
 {
-    _Align_Spec* spec = (_Align_Spec*)espec;
+    Align_Spec* spec = (Align_Spec*)espec;
     free( spec->score );
     free( spec );
 }
 
 double Average_Correlation( Align_Spec* espec )
 {
-    return ( ( (_Align_Spec*)espec )->ave_corr );
+    return ( ( (Align_Spec*)espec )->ave_corr );
 }
 
 int Trace_Spacing( Align_Spec* espec )
 {
-    return ( ( (_Align_Spec*)espec )->trace_space );
+    return ( ( (Align_Spec*)espec )->trace_space );
 }
 
 float* Base_Frequencies( Align_Spec* espec )
 {
-    return ( ( (_Align_Spec*)espec )->freq );
+    return ( ( (Align_Spec*)espec )->freq );
+}
+
+int Overlap_If_Possible( Align_Spec* espec )
+{
+    return ( ( (Align_Spec*)espec )->reach );
 }
 
 /****************************************************************************************\
 *                                                                                        *
- *  LOCAL ALIGNMENT FINDER: forward_/reverse_wave and Local_Alignment                     *
- *                                                                                        *
- \****************************************************************************************/
+*  LOCAL ALIGNMENT FINDER: forward_/reverse_wave and Local_Alignment                     *
+*                                                                                        *
+\****************************************************************************************/
 
 #ifdef WAVE_STATS
 
@@ -353,8 +348,8 @@ static void print_wave( int* V, int* M, int low, int hgh, int besta )
 #endif
 
 /* At each furthest reaching point, keep a-coordinate of point (V), bitvector
- recording the last TRIM_LEN columns of the implied alignment (T), and the
- # of matches (1-bits) in the bitvector (M).                               */
+     recording the last TRIM_LEN columns of the implied alignment (T), and the
+     # of matches (1-bits) in the bitvector (M).                               */
 
 typedef struct
 {
@@ -366,7 +361,8 @@ typedef struct
 
 static int VectorEl = 6 * sizeof( int ) + sizeof( BVEC );
 
-static int forward_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, Path* bpath, int* mind, int maxd, int mida, int minp, int maxp )
+static int forward_wave( _Work_Data* work, Align_Spec* spec, Alignment* align, Path* bpath,
+                         int* mind, int maxd, int mida, int minp, int maxp, int aoff, int boff )
 {
     char* aseq  = align->aseq;
     char* bseq  = align->bseq;
@@ -384,10 +380,11 @@ static int forward_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
     int *NA, *NB;
     int *_NA, *_NB;
     Pebble* cells;
-    int avail, cmax, boff;
+    int avail, cmax;
 
     int TRACE_SPACE = spec->trace_space;
     int PATH_AVE    = spec->ave_path;
+    int REACH       = spec->reach;
     int16* SCORE    = spec->score;
     int16* TABLE    = spec->table;
 
@@ -431,11 +428,6 @@ static int forward_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
         cells = (Pebble*)( work->cells );
         cmax  = work->celmax;
         avail = 0;
-
-        if ( COMP( align->flags ) )
-            boff = align->blen % TRACE_SPACE;
-        else
-            boff = 0;
     }
 
     /* Compute 0-wave starting from mid-line */
@@ -475,7 +467,7 @@ static int forward_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
                 work->cells  = (void*)cells;
             }
 
-            na = ( ( y + k ) / TRACE_SPACE ) * TRACE_SPACE;
+            na = ( ( ( y + k ) + ( TRACE_SPACE - aoff ) ) / TRACE_SPACE - 1 ) * TRACE_SPACE + aoff;
 #ifdef SHOW_TPS
             printf( " A %d: %d,%d,0,%d\n", avail, -1, k, na );
             fflush( stdout );
@@ -830,7 +822,8 @@ static int forward_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
                     if ( avail >= cmax )
                     {
                         cmax  = ( (int)( avail * 1.2 ) ) + 10000;
-                        cells = (Pebble*)Realloc( cells, cmax * sizeof( Pebble ), "Reallocating trace cells" );
+                        cells = (Pebble*)Realloc( cells, cmax * sizeof( Pebble ),
+                                                  "Reallocating trace cells" );
                         if ( cells == NULL )
                             EXIT( 1 );
                         work->celmax = cmax;
@@ -857,7 +850,8 @@ static int forward_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
                     if ( avail >= cmax )
                     {
                         cmax  = ( (int)( avail * 1.2 ) ) + 10000;
-                        cells = (Pebble*)Realloc( cells, cmax * sizeof( Pebble ), "Reallocating trace cells" );
+                        cells = (Pebble*)Realloc( cells, cmax * sizeof( Pebble ),
+                                                  "Reallocating trace cells" );
                         if ( cells == NULL )
                             EXIT( 1 );
                         work->celmax = cmax;
@@ -975,7 +969,7 @@ static int forward_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
         int a, b, k, h;
         int d, e;
 
-        if ( morem >= 0 )
+        if ( morem >= 0 && REACH )
         {
             trimx  = morea - morey;
             trimy  = morey;
@@ -1091,17 +1085,6 @@ static int forward_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
         apath->bepos = trimy;
         apath->diffs = trimd;
         apath->tlen  = atlen;
-        if ( COMP( align->flags ) )
-        {
-            bpath->abpos = align->blen - apath->bepos;
-            bpath->bbpos = align->alen - apath->aepos;
-        }
-        else
-        {
-            bpath->aepos = apath->bepos;
-            bpath->bepos = apath->aepos;
-        }
-        bpath->diffs = trimd;
         bpath->tlen  = btlen;
     }
 
@@ -1111,7 +1094,8 @@ static int forward_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
 
 /*** Reverse Wave ***/
 
-static int reverse_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, Path* bpath, int mind, int maxd, int mida, int minp, int maxp )
+static int reverse_wave( _Work_Data* work, Align_Spec* spec, Alignment* align, Path* bpath,
+                         int mind, int maxd, int mida, int minp, int maxp, int aoff, int boff )
 {
     char* aseq  = align->aseq - 1;
     char* bseq  = align->bseq - 1;
@@ -1129,10 +1113,11 @@ static int reverse_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
     int *NA, *NB;
     int *_NA, *_NB;
     Pebble* cells;
-    int avail, cmax, boff;
+    int avail, cmax;
 
     int TRACE_SPACE = spec->trace_space;
     int PATH_AVE    = spec->ave_path;
+    int REACH       = spec->reach;
     int16* SCORE    = spec->score;
     int16* TABLE    = spec->table;
 
@@ -1176,11 +1161,6 @@ static int reverse_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
         cells = (Pebble*)( work->cells );
         cmax  = work->celmax;
         avail = 0;
-
-        if ( COMP( align->flags ) )
-            boff = align->blen % TRACE_SPACE;
-        else
-            boff = 0;
     }
 
     more  = 1;
@@ -1218,7 +1198,7 @@ static int reverse_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
                 work->cells  = (void*)cells;
             }
 
-            na = ( ( y + k + TRACE_SPACE - 1 ) / TRACE_SPACE - 1 ) * TRACE_SPACE;
+            na = ( ( ( y + k ) + ( TRACE_SPACE - aoff ) - 1 ) / TRACE_SPACE - 1 ) * TRACE_SPACE + aoff;
 #ifdef SHOW_TPS
             printf( " A %d: -1,%d,0,%d\n", avail, k, na + TRACE_SPACE );
             fflush( stdout );
@@ -1568,7 +1548,8 @@ static int reverse_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
                     if ( avail >= cmax )
                     {
                         cmax  = ( (int)( avail * 1.2 ) ) + 10000;
-                        cells = (Pebble*)Realloc( cells, cmax * sizeof( Pebble ), "Reallocating trace cells" );
+                        cells = (Pebble*)Realloc( cells, cmax * sizeof( Pebble ),
+                                                  "Reallocating trace cells" );
                         if ( cells == NULL )
                             EXIT( 1 );
                         work->celmax = cmax;
@@ -1594,7 +1575,8 @@ static int reverse_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
                     if ( avail >= cmax )
                     {
                         cmax  = ( (int)( avail * 1.2 ) ) + 10000;
-                        cells = (Pebble*)Realloc( cells, cmax * sizeof( Pebble ), "Reallocating trace cells" );
+                        cells = (Pebble*)Realloc( cells, cmax * sizeof( Pebble ),
+                                                  "Reallocating trace cells" );
                         if ( cells == NULL )
                             EXIT( 1 );
                         work->celmax = cmax;
@@ -1712,7 +1694,7 @@ static int reverse_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
         int a, b, k, h;
         int d, e;
 
-        if ( morem >= 0 )
+        if ( morem >= 0 && REACH )
         {
             trimx  = morea - morey;
             trimy  = morey;
@@ -1741,7 +1723,7 @@ static int reverse_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
         printf( "  A path = (%5d,%5d)\n", b + k, b );
         fflush( stdout );
 #endif
-        if ( ( b + k ) % TRACE_SPACE != 0 )
+        if ( ( b + k ) % TRACE_SPACE != aoff )
         {
             h = cells[ h ].ptr;
             if ( h < 0 )
@@ -1897,17 +1879,6 @@ static int reverse_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
         apath->diffs = apath->diffs + trimd;
         apath->tlen  = apath->tlen - atlen;
         apath->trace = atrace + atlen;
-        if ( COMP( align->flags ) )
-        {
-            bpath->aepos = align->blen - apath->bbpos;
-            bpath->bepos = align->alen - apath->abpos;
-        }
-        else
-        {
-            bpath->abpos = apath->bbpos;
-            bpath->bbpos = apath->abpos;
-        }
-        bpath->diffs = bpath->diffs + trimd;
         bpath->tlen  = bpath->tlen - btlen;
         bpath->trace = btrace + btlen;
     }
@@ -1916,15 +1887,17 @@ static int reverse_wave( _Work_Data* work, _Align_Spec* spec, Alignment* align, 
 }
 
 /* Find the longest local alignment between aseq and bseq through (xcnt,ycnt)
- See associated .h file for the precise definition of the interface.
- */
+   See associated .h file for the precise definition of the interface.
+*/
 
-Path* Local_Alignment( Alignment* align, Work_Data* ework, Align_Spec* espec, int low, int hgh, int anti, int lbord, int hbord )
+Path* Local_Alignment( Alignment* align, Work_Data* ework, Align_Spec* espec,
+                       int low, int hgh, int anti, int lbord, int hbord )
 {
     _Work_Data* work  = (_Work_Data*)ework;
-    _Align_Spec* spec = (_Align_Spec*)espec;
+    Align_Spec* spec = (Align_Spec*)espec;
 
     Path *apath, *bpath;
+    int aoff, boff;
     int minp, maxp;
     int selfie;
 
@@ -1984,7 +1957,23 @@ Path* Local_Alignment( Alignment* align, Work_Data* ework, Align_Spec* espec, in
     else
         maxp = hgh + hbord;
 
-    if ( forward_wave( work, spec, align, bpath, &low, hgh, anti, minp, maxp ) )
+    if ( ACOMP( align->flags ) )
+    {
+        aoff = align->alen % spec->trace_space;
+        boff = 0;
+    }
+    else if ( COMP( align->flags ) )
+    {
+        aoff = 0;
+        boff = align->blen % spec->trace_space;
+    }
+    else
+    {
+        aoff = 0;
+        boff = 0;
+    }
+
+    if ( forward_wave( work, spec, align, bpath, &low, hgh, anti, minp, maxp, aoff, boff ) )
         EXIT( NULL );
 
 #ifdef DEBUG_PASSES
@@ -1993,7 +1982,7 @@ Path* Local_Alignment( Alignment* align, Work_Data* ework, Align_Spec* espec, in
             apath->aepos, apath->bepos, apath->diffs );
 #endif
 
-    if ( reverse_wave( work, spec, align, bpath, low, low, anti, minp, maxp ) )
+    if ( reverse_wave( work, spec, align, bpath, low, low, anti, minp, maxp, aoff, boff ) )
         EXIT( NULL );
 
 #ifdef DEBUG_PASSES
@@ -2001,14 +1990,24 @@ Path* Local_Alignment( Alignment* align, Work_Data* ework, Align_Spec* espec, in
             ( anti + low ) / 2, ( anti - low ) / 2, apath->abpos, apath->bbpos, apath->diffs );
 #endif
 
-    if ( COMP( align->flags ) )
+    bpath->diffs = apath->diffs;
+    if ( ACOMP( align->flags ) )
     {
-        uint16* trace = (uint16*)bpath->trace;
+        uint16* trace = (uint16*)apath->trace;
         uint16 p;
         int i, j;
 
-        i = bpath->tlen - 2;
-        j = 0;
+        bpath->aepos = apath->bepos;
+        bpath->bepos = apath->aepos;
+        bpath->abpos = apath->bbpos;
+        bpath->bbpos = apath->abpos;
+
+        apath->abpos = align->alen - bpath->bepos;
+        apath->bbpos = align->blen - bpath->aepos;
+        apath->aepos = align->alen - bpath->bbpos;
+        apath->bepos = align->blen - bpath->abpos;
+        i            = apath->tlen - 2;
+        j            = 0;
         while ( j < i )
         {
             p              = trace[ i ];
@@ -2021,6 +2020,37 @@ Path* Local_Alignment( Alignment* align, Work_Data* ework, Align_Spec* espec, in
             j += 2;
         }
     }
+    else if ( COMP( align->flags ) )
+    {
+        uint16* trace = (uint16*)bpath->trace;
+        uint16 p;
+        int i, j;
+
+        bpath->abpos = align->blen - apath->bepos;
+        bpath->bbpos = align->alen - apath->aepos;
+        bpath->aepos = align->blen - apath->bbpos;
+        bpath->bepos = align->alen - apath->abpos;
+        i            = bpath->tlen - 2;
+        j            = 0;
+        while ( j < i )
+        {
+            p              = trace[ i ];
+            trace[ i ]     = trace[ j ];
+            trace[ j ]     = p;
+            p              = trace[ i + 1 ];
+            trace[ i + 1 ] = trace[ j + 1 ];
+            trace[ j + 1 ] = p;
+            i -= 2;
+            j += 2;
+        }
+    }
+    else
+    {
+        bpath->aepos = apath->bepos;
+        bpath->bepos = apath->aepos;
+        bpath->abpos = apath->bbpos;
+        bpath->bbpos = apath->abpos;
+    }
 
 #ifdef DEBUG_POINTS
     {
@@ -2028,7 +2058,7 @@ Path* Local_Alignment( Alignment* align, Work_Data* ework, Align_Spec* espec, in
         int a, h;
 
         printf( "\nA-path (%d,%d)->(%d,%d)", apath->abpos, apath->bbpos, apath->aepos, apath->bepos );
-        printf( " %c\n", ( COMP( align->flags ) ? 'c' : 'n' ) );
+        printf( " %c\n", ( ( COMP( align->flags ) || ACOMP( align->flags ) ) ? 'c' : 'n' ) );
         a = apath->bbpos;
         for ( h = 1; h < apath->tlen; h += 2 )
         {
@@ -2044,7 +2074,8 @@ Path* Local_Alignment( Alignment* align, Work_Data* ework, Align_Spec* espec, in
         int a, h;
 
         printf( "\nB-path (%d,%d)->(%d,%d)", bpath->abpos, bpath->bbpos, bpath->aepos, bpath->bepos );
-        printf( " %c [%d,%d]\n", ( COMP( align->flags ) ? 'c' : 'n' ), align->blen, align->alen );
+        printf( " %c [%d,%d]\n", ( ( COMP( align->flags ) || ACOMP( align->flags ) ) ? 'c' : 'n' ),
+                align->blen, align->alen );
         a = bpath->bbpos;
         for ( h = 1; h < bpath->tlen; h += 2 )
         {
@@ -2061,13 +2092,14 @@ Path* Local_Alignment( Alignment* align, Work_Data* ework, Align_Spec* espec, in
 
 /****************************************************************************************\
 *                                                                                        *
- *  EXTENSION VERSION OF LOCAL ALIGNMENT                                                  *
- *                                                                                        *
- \****************************************************************************************/
+*  EXTENSION VERSION OF LOCAL ALIGNMENT                                                  *
+*                                                                                        *
+\****************************************************************************************/
 
 static int VectorEn = 4 * sizeof( int ) + sizeof( BVEC );
 
-static int forward_extend( _Work_Data* work, _Align_Spec* spec, Alignment* align, int midd, int mida, int minp, int maxp )
+static int forward_extend( _Work_Data* work, Align_Spec* spec, Alignment* align,
+                           int midd, int mida, int minp, int maxp )
 {
     char* aseq  = align->aseq;
     char* bseq  = align->bseq;
@@ -2452,7 +2484,8 @@ static int forward_extend( _Work_Data* work, _Align_Spec* spec, Alignment* align
                     if ( avail >= cmax )
                     {
                         cmax  = ( (int)( avail * 1.2 ) ) + 10000;
-                        cells = (Pebble*)Realloc( cells, cmax * sizeof( Pebble ), "Reallocating trace cells" );
+                        cells = (Pebble*)Realloc( cells, cmax * sizeof( Pebble ),
+                                                  "Reallocating trace cells" );
                         if ( cells == NULL )
                             EXIT( 1 );
                         work->celmax = cmax;
@@ -2634,7 +2667,8 @@ static int forward_extend( _Work_Data* work, _Align_Spec* spec, Alignment* align
     return ( 0 );
 }
 
-static int reverse_extend( _Work_Data* work, _Align_Spec* spec, Alignment* align, int midd, int mida, int minp, int maxp )
+static int reverse_extend( _Work_Data* work, Align_Spec* spec, Alignment* align,
+                           int midd, int mida, int minp, int maxp )
 {
     char* aseq  = align->aseq - 1;
     char* bseq  = align->bseq - 1;
@@ -3013,7 +3047,8 @@ static int reverse_extend( _Work_Data* work, _Align_Spec* spec, Alignment* align
                     if ( avail >= cmax )
                     {
                         cmax  = ( (int)( avail * 1.2 ) ) + 10000;
-                        cells = (Pebble*)Realloc( cells, cmax * sizeof( Pebble ), "Reallocating trace cells" );
+                        cells = (Pebble*)Realloc( cells, cmax * sizeof( Pebble ),
+                                                  "Reallocating trace cells" );
                         if ( cells == NULL )
                             EXIT( 1 );
                         work->celmax = cmax;
@@ -3223,13 +3258,14 @@ static int reverse_extend( _Work_Data* work, _Align_Spec* spec, Alignment* align
 }
 
 /* Find the longest local alignment between aseq and bseq through (xcnt,ycnt)
- See associated .h file for the precise definition of the interface.
- */
+   See associated .h file for the precise definition of the interface.
+*/
 
-int Find_Extension( Alignment* align, Work_Data* ework, Align_Spec* espec, int diag, int anti, int lbord, int hbord, int prefix )
+int Find_Extension( Alignment* align, Work_Data* ework, Align_Spec* espec,
+                    int diag, int anti, int lbord, int hbord, int prefix )
 {
     _Work_Data* work  = (_Work_Data*)ework;
-    _Align_Spec* spec = (_Align_Spec*)espec;
+    Align_Spec* spec = (Align_Spec*)espec;
 
     Path* apath;
     int minp, maxp;
@@ -3276,8 +3312,8 @@ int Find_Extension( Alignment* align, Work_Data* ework, Align_Spec* espec, int d
     {
         if ( reverse_extend( work, spec, align, diag, anti, minp, maxp ) )
             EXIT( 1 );
-        apath->aepos = ( anti - diag ) / 2;
-        apath->bepos = ( anti + diag ) / 2;
+        apath->aepos = ( anti + diag ) / 2;
+        apath->bepos = ( anti - diag ) / 2;
 #ifdef DEBUG_PASSES
         printf( "E1 (%d,%d) => (%d,%d) %d\n",
                 ( anti + diag ) / 2, ( anti - diag ) / 2, apath->abpos, apath->bbpos, apath->diffs );
@@ -3287,8 +3323,8 @@ int Find_Extension( Alignment* align, Work_Data* ework, Align_Spec* espec, int d
     {
         if ( forward_extend( work, spec, align, diag, anti, minp, maxp ) )
             EXIT( 1 );
-        apath->abpos = ( anti - diag ) / 2;
-        apath->bbpos = ( anti + diag ) / 2;
+        apath->abpos = ( anti + diag ) / 2;
+        apath->bbpos = ( anti - diag ) / 2;
 #ifdef DEBUG_PASSES
         printf( "F1 (%d,%d) => (%d,%d) %d\n",
                 ( anti + diag ) / 2, ( anti - diag ) / 2, apath->aepos, apath->bepos, apath->diffs );
@@ -3318,9 +3354,9 @@ int Find_Extension( Alignment* align, Work_Data* ework, Align_Spec* espec, int d
 
 /****************************************************************************************\
 *                                                                                        *
- *  OVERLAP MANIPULATION                                                                  *
- *                                                                                        *
- \****************************************************************************************/
+*  OVERLAP MANIPULATION                                                                  *
+*                                                                                        *
+\****************************************************************************************/
 
 static int64 PtrSize   = sizeof( void* );
 static int64 OvlIOSize = sizeof( Overlap ) - sizeof( void* );
@@ -3342,21 +3378,37 @@ int Read_Trace( FILE* input, Overlap* ovl, int tbytes )
     return ( 0 );
 }
 
-void Write_Overlap( FILE* output, Overlap* ovl, int tbytes )
+int Write_Overlap( FILE* output, Overlap* ovl, int tbytes )
 {
-    fwrite( ( (char*)ovl ) + PtrSize, OvlIOSize, 1, output );
+    if ( fwrite( ( (char*)ovl ) + PtrSize, OvlIOSize, 1, output ) != 1 )
+        return ( 1 );
     if ( ovl->path.trace != NULL )
-        fwrite( ovl->path.trace, tbytes, ovl->path.tlen, output );
+        if ( fwrite( ovl->path.trace, tbytes, ovl->path.tlen, output ) != (size_t)ovl->path.tlen )
+            return ( 1 );
+    return ( 0 );
 }
 
-void Compress_TraceTo8( Overlap* ovl )
+int Compress_TraceTo8( Overlap* ovl, int check )
 {
     uint16* t16 = (uint16*)ovl->path.trace;
     uint8* t8   = (uint8*)ovl->path.trace;
-    int j;
+    int j, x;
 
-    for ( j = 0; j < ovl->path.tlen; j++ )
-        t8[ j ] = ( uint8 )( t16[ j ] );
+    if ( check )
+        for ( j = 0; j < ovl->path.tlen; j++ )
+        {
+            x = t16[ j ];
+            if ( x > 255 )
+            {
+                fprintf( stderr, "%s: Compression of trace to bytes fails, value too big\n", Prog_Name );
+                EXIT( 1 );
+            }
+            t8[ j ] = (uint8)x;
+        }
+    else
+        for ( j = 0; j < ovl->path.tlen; j++ )
+            t8[ j ] = ( uint8 )( t16[ j ] );
+    return ( 0 );
 }
 
 void Decompress_TraceTo16( Overlap* ovl )
@@ -3378,7 +3430,8 @@ void Print_Overlap( FILE* output, Overlap* ovl, int tbytes, int indent )
         fprintf( output, "c(%d)\n", ovl->bread );
     else
         fprintf( output, "%d\n", ovl->bread );
-    fprintf( output, "%*s  [%d,%d] vs [%d,%d] w. %d diffs\n", indent, "", ovl->path.abpos, ovl->path.aepos, ovl->path.bbpos, ovl->path.bepos, ovl->path.diffs );
+    fprintf( output, "%*s  [%d,%d] vs [%d,%d] w. %d diffs\n", indent, "",
+             ovl->path.abpos, ovl->path.aepos, ovl->path.bbpos, ovl->path.bepos, ovl->path.diffs );
 
     if ( tbytes == 1 )
     {
@@ -3418,32 +3471,53 @@ void Print_Overlap( FILE* output, Overlap* ovl, int tbytes, int indent )
 
 int Check_Trace_Points( Overlap* ovl, int tspace, int verbose, char* fname )
 {
-    int i, p;
+    int i, p, q;
 
-    if ( ( ( ovl->path.aepos - 1 ) / tspace - ovl->path.abpos / tspace ) * 2 != ovl->path.tlen - 2 )
+    if ( tspace != 0 )
     {
-        if ( verbose )
-            EPRINTF( EPLACE, "  %s: Wrong number of trace points\n", fname );
-        return ( 1 );
-    }
-    p = ovl->path.bbpos;
-    if ( tspace <= TRACE_XOVR )
-    {
-        uint8* trace8 = (uint8*)ovl->path.trace;
-        for ( i = 1; i < ovl->path.tlen; i += 2 )
-            p += trace8[ i ];
+        if ( ( ( ovl->path.aepos - 1 ) / tspace - ovl->path.abpos / tspace ) * 2 != ovl->path.tlen - 2 )
+        {
+            if ( verbose )
+                EPRINTF( EPLACE, "  %s: Wrong number of trace points\n", fname );
+            return ( 1 );
+        }
+        p = ovl->path.bbpos;
+        if ( tspace <= TRACE_XOVR )
+        {
+            uint8* trace8 = (uint8*)ovl->path.trace;
+            for ( i = 1; i < ovl->path.tlen; i += 2 )
+                p += trace8[ i ];
+        }
+        else
+        {
+            uint16* trace16 = (uint16*)ovl->path.trace;
+            for ( i = 1; i < ovl->path.tlen; i += 2 )
+                p += trace16[ i ];
+        }
+        if ( p != ovl->path.bepos )
+        {
+            if ( verbose )
+                EPRINTF( EPLACE, "  %s: Trace point sum != aligned interval\n", fname );
+            return ( 1 );
+        }
     }
     else
     {
         uint16* trace16 = (uint16*)ovl->path.trace;
+
+        p = ovl->path.bbpos;
+        q = ovl->path.abpos;
         for ( i = 1; i < ovl->path.tlen; i += 2 )
+        {
             p += trace16[ i ];
-    }
-    if ( p != ovl->path.bepos )
-    {
-        if ( verbose )
-            EPRINTF( EPLACE, "  %s: Trace point sum != aligned interval\n", fname );
-        return ( 1 );
+            q += trace16[ i - 1 ];
+        }
+        if ( p != ovl->path.bepos || q != ovl->path.aepos )
+        {
+            if ( verbose )
+                EPRINTF( EPLACE, "  %s: Trace point sum != aligned interval\n", fname );
+            return ( 1 );
+        }
     }
     return ( 0 );
 }
@@ -3519,13 +3593,13 @@ void Flip_Alignment( Alignment* align, int full )
 
 /****************************************************************************************\
 *                                                                                        *
- *  ALIGNMENT PRINTING                                                                    *
- *                                                                                        *
- \****************************************************************************************/
+*  ALIGNMENT PRINTING                                                                    *
+*                                                                                        *
+\****************************************************************************************/
 
 /* Complement the sequence in fragment aseq.  The operation does the
- complementation/reversal in place.  Calling it a second time on a
- given fragment restores it to its original state.                */
+   complementation/reversal in place.  Calling it a second time on a
+   given fragment restores it to its original state.                */
 
 void Complement_Seq( char* aseq, int len )
 {
@@ -3545,14 +3619,13 @@ void Complement_Seq( char* aseq, int len )
 }
 
 /* Print an alignment to file between a and b given in trace (unpacked).
- Prefix gives the length of the initial prefix of a that is unaligned.  */
+   Prefix gives the length of the initial prefix of a that is unaligned.  */
 
-static char ToL[ 8 ] =
-    {'a', 'c', 'g', 't', '.', '[', ']', '-'};
-static char ToU[ 8 ] =
-    {'A', 'C', 'G', 'T', '.', '[', ']', '-'};
+static char ToL[ 8 ] = {'a', 'c', 'g', 't', '.', '[', ']', '-'};
+static char ToU[ 8 ] = {'A', 'C', 'G', 'T', '.', '[', ']', '-'};
 
-int Print_Alignment( FILE* file, Alignment* align, Work_Data* ework, int indent, int width, int border, int upper, int coord )
+int Print_Alignment( FILE* file, Alignment* align, Work_Data* ework,
+                     int indent, int width, int border, int upper, int coord )
 {
     _Work_Data* work = (_Work_Data*)ework;
     int* trace       = align->path->trace;
@@ -3564,6 +3637,7 @@ int Print_Alignment( FILE* file, Alignment* align, Work_Data* ework, int indent,
     char mtag, dtag;
     int prefa, prefb;
     int aend, bend;
+    int comp, blen;
     int sa, sb;
     int match, diff;
     char* N2A;
@@ -3594,6 +3668,9 @@ int Print_Alignment( FILE* file, Alignment* align, Work_Data* ework, int indent,
     aend = align->path->aepos;
     bend = align->path->bepos;
 
+    comp = COMP( align->flags );
+    blen = align->blen;
+
     Abuf[ width ] = Bbuf[ width ] = Dbuf[ width ] = '\0';
     /* buffer/output next column */
 #define COLUMN( x, y )                                                         \
@@ -3605,15 +3682,18 @@ int Print_Alignment( FILE* file, Alignment* align, Work_Data* ework, int indent,
             fprintf( file, "%*s", indent, "" );                                \
             if ( coord > 0 )                                                   \
             {                                                                  \
-                if ( sa <= aend )                                              \
+                if ( sa < aend )                                               \
                     fprintf( file, " %*d", coord, sa );                        \
                 else                                                           \
                     fprintf( file, " %*s", coord, "" );                        \
                 fprintf( file, " %s\n", Abuf );                                \
                 fprintf( file, "%*s %*s %s\n", indent, "", coord, "", Dbuf );  \
                 fprintf( file, "%*s", indent, "" );                            \
-                if ( sb <= bend )                                              \
-                    fprintf( file, " %*d", coord, sb );                        \
+                if ( sb < bend )                                               \
+                    if ( comp )                                                \
+                        fprintf( file, " %*d", coord, blen - sb );             \
+                    else                                                       \
+                        fprintf( file, " %*d", coord, sb );                    \
                 else                                                           \
                     fprintf( file, " %*s", coord, "" );                        \
                 fprintf( file, " %s", Bbuf );                                  \
@@ -3626,8 +3706,8 @@ int Print_Alignment( FILE* file, Alignment* align, Work_Data* ework, int indent,
             }                                                                  \
             fprintf( file, " %5.1f%%\n", ( 100. * diff ) / ( diff + match ) ); \
             o     = 0;                                                         \
-            sa    = i;                                                         \
-            sb    = j;                                                         \
+            sa    = i - 1;                                                     \
+            sb    = j - 1;                                                     \
             match = diff = 0;                                                  \
         }                                                                      \
         u = ( x );                                                             \
@@ -3663,8 +3743,8 @@ int Print_Alignment( FILE* file, Alignment* align, Work_Data* ework, int indent,
         prefb = border;
     }
 
-    sa   = i;
-    sb   = j;
+    sa   = i - 1;
+    sb   = j - 1;
     mtag = ':';
     dtag = ':';
 
@@ -3787,15 +3867,18 @@ int Print_Alignment( FILE* file, Alignment* align, Work_Data* ework, int indent,
     fprintf( file, "%*s", indent, "" );
     if ( coord > 0 )
     {
-        if ( sa <= aend )
+        if ( sa < aend )
             fprintf( file, " %*d", coord, sa );
         else
             fprintf( file, " %*s", coord, "" );
         fprintf( file, " %.*s\n", o, Abuf );
         fprintf( file, "%*s %*s %.*s\n", indent, "", coord, "", o, Dbuf );
         fprintf( file, "%*s", indent, "" );
-        if ( sb <= bend )
-            fprintf( file, " %*d", coord, sb );
+        if ( sb < bend )
+            if ( comp )
+                fprintf( file, " %*d", coord, blen - sb );
+            else
+                fprintf( file, " %*d", coord, sb );
         else
             fprintf( file, " %*s", coord, "" );
         fprintf( file, " %.*s", o, Bbuf );
@@ -3815,7 +3898,8 @@ int Print_Alignment( FILE* file, Alignment* align, Work_Data* ework, int indent,
     return ( 0 );
 }
 
-int Print_Reference( FILE* file, Alignment* align, Work_Data* ework, int indent, int block, int border, int upper, int coord )
+int Print_Reference( FILE* file, Alignment* align, Work_Data* ework,
+                     int indent, int block, int border, int upper, int coord )
 {
     _Work_Data* work = (_Work_Data*)ework;
     int* trace       = align->path->trace;
@@ -3827,6 +3911,7 @@ int Print_Reference( FILE* file, Alignment* align, Work_Data* ework, int indent,
     char mtag, dtag;
     int prefa, prefb;
     int aend, bend;
+    int comp, blen;
     int sa, sb, s0;
     int match, diff;
     char* N2A;
@@ -3862,37 +3947,44 @@ int Print_Reference( FILE* file, Alignment* align, Work_Data* ework, int indent,
     aend = align->path->aepos;
     bend = align->path->bepos;
 
+    comp = COMP( align->flags );
+    blen = align->blen;
+
 #define BLOCK( x, y )                                                              \
     {                                                                              \
         int u, v;                                                                  \
         if ( i % block == 1 && i != s0 && x < 4 && o > 0 )                         \
         {                                                                          \
+            fprintf( file, "\n" );                                                 \
             fprintf( file, "%*s", indent, "" );                                    \
             if ( coord > 0 )                                                       \
             {                                                                      \
-                if ( sa <= aend )                                                  \
+                if ( sa < aend )                                                   \
                     fprintf( file, " %*d", coord, sa );                            \
                 else                                                               \
                     fprintf( file, " %*s", coord, "" );                            \
                 fprintf( file, " %.*s\n", o, Abuf );                               \
                 fprintf( file, "%*s %*s %.*s\n", indent, "", coord, "", o, Dbuf ); \
                 fprintf( file, "%*s", indent, "" );                                \
-                if ( sb <= bend )                                                  \
-                    fprintf( file, " %*d", coord, sb );                            \
+                if ( sb < bend )                                                   \
+                    if ( comp )                                                    \
+                        fprintf( file, " %*d", coord, blen - sb );                 \
+                    else                                                           \
+                        fprintf( file, " %*d", coord, sb );                        \
                 else                                                               \
                     fprintf( file, " %*s", coord, "" );                            \
                 fprintf( file, " %.*s", o, Bbuf );                                 \
-                fprintf( file, " %5.1f%%\n", ( 100. * diff ) / ( diff + match ) ); \
             }                                                                      \
             else                                                                   \
             {                                                                      \
-                fprintf( file, "%.*s\n", o, Abuf );                                \
-                fprintf( file, "%*s%.*s\n", indent, "", o, Dbuf );                 \
-                fprintf( file, "%*s%.*s\n", indent, "", o, Bbuf );                 \
+                fprintf( file, " %.*s\n", o, Abuf );                               \
+                fprintf( file, "%*s %.*s\n", indent, "", o, Dbuf );                \
+                fprintf( file, "%*s %.*s", indent, "", o, Bbuf );                  \
             }                                                                      \
+            fprintf( file, " %5.1f%%\n", ( 100. * diff ) / ( diff + match ) );     \
             o     = 0;                                                             \
-            sa    = i;                                                             \
-            sb    = j;                                                             \
+            sa    = i - 1;                                                         \
+            sb    = j - 1;                                                         \
             match = diff = 0;                                                      \
         }                                                                          \
         u = ( x );                                                                 \
@@ -3941,8 +4033,8 @@ int Print_Reference( FILE* file, Alignment* align, Work_Data* ework, int indent,
     }
 
     s0   = i;
-    sa   = i;
-    sb   = j;
+    sa   = i - 1;
+    sb   = j - 1;
     mtag = ':';
     dtag = ':';
 
@@ -3971,7 +4063,7 @@ int Print_Reference( FILE* file, Alignment* align, Work_Data* ework, int indent,
         BLOCK( 5, 5 )
 
     mtag = '|';
-    dtag = ' ';
+    dtag = '*';
 
     match = diff = 0;
 
@@ -4061,40 +4153,43 @@ int Print_Reference( FILE* file, Alignment* align, Work_Data* ework, int indent,
 
     /* Print remainder of buffered col.s */
 
+    fprintf( file, "\n" );
     fprintf( file, "%*s", indent, "" );
     if ( coord > 0 )
     {
-        if ( sa <= aend )
+        if ( sa < aend )
             fprintf( file, " %*d", coord, sa );
         else
             fprintf( file, " %*s", coord, "" );
         fprintf( file, " %.*s\n", o, Abuf );
         fprintf( file, "%*s %*s %.*s\n", indent, "", coord, "", o, Dbuf );
         fprintf( file, "%*s", indent, "" );
-        if ( sb <= bend )
-            fprintf( file, " %*d", coord, sb );
+        if ( sb < bend )
+            if ( comp )
+                fprintf( file, " %*d", coord, blen - sb );
+            else
+                fprintf( file, " %*d", coord, sb );
         else
             fprintf( file, " %*s", coord, "" );
         fprintf( file, " %.*s", o, Bbuf );
-
-        if ( diff + match > 0 )
-            fprintf( file, " %5.1f%%\n", ( 100. * diff ) / ( diff + match ) );
-        else
-            fprintf( file, "\n" );
     }
     else
     {
-        fprintf( file, "%.*s\n", o, Abuf );
-        fprintf( file, "%*s%.*s\n", indent, "", o, Dbuf );
-        fprintf( file, "%*s%.*s\n", indent, "", o, Bbuf );
+        fprintf( file, " %.*s\n", o, Abuf );
+        fprintf( file, "%*s %.*s\n", indent, "", o, Dbuf );
+        fprintf( file, "%*s %.*s", indent, "", o, Bbuf );
     }
+    if ( diff + match > 0 )
+        fprintf( file, " %5.1f%%\n", ( 100. * diff ) / ( diff + match ) );
+    else
+        fprintf( file, "\n" );
 
     fflush( file );
     return ( 0 );
 }
 
 /* Print an ASCII representation of the overlap in align between fragments
- a and b to given file.                                                  */
+   a and b to given file.                                                  */
 
 static inline void repchar( FILE* file, int symbol, int rep )
 {
@@ -4154,7 +4249,8 @@ void Alignment_Cartoon( FILE* file, Alignment* align, int indent, int coord )
 
         asub = path->aepos - path->abpos;
         bsub = path->bepos - path->bbpos;
-        fprintf( file, "   dif/(len1+len2) = %d/(%d+%d) = %5.2f%%\n", path->diffs, asub, bsub, ( 200. * path->diffs ) / ( asub + bsub ) );
+        fprintf( file, "   dif/(len1+len2) = %d/(%d+%d) = %5.2f%%\n",
+                 path->diffs, asub, bsub, ( 200. * path->diffs ) / ( asub + bsub ) );
     }
 
     {
@@ -4219,9 +4315,9 @@ void Alignment_Cartoon( FILE* file, Alignment* align, int indent, int coord )
 
 /****************************************************************************************\
 *                                                                                        *
- *  O(ND) trace algorithm                                                                 *
- *                                                                                        *
- \****************************************************************************************/
+*  O(ND) trace algorithm                                                                 *
+*                                                                                        *
+\****************************************************************************************/
 
 #ifdef DEBUG_AWAVE
 
@@ -4247,14 +4343,340 @@ static int depth = 0;
 typedef struct
 {
     int* Stop;         //  Ongoing stack of alignment indels
+    uint16* Trace;     //  Base of Trace Vector
     char *Aabs, *Babs; //  Absolute base of A and B sequences
 
     int **PVF, **PHF; //  List of waves for iterative np algorithms
     int mida, midb;   //  mid point division for mid-point algorithms
 
     int *VF, *VB; //  Forward/Reverse waves for nd algorithms
-                  //  (defunct: were used for O(nd) algorithms)
 } Trace_Waves;
+
+static int split_nd( char* A, int M, char* B, int N, Trace_Waves* wave, int* px, int* py )
+{
+    int x, y;
+    int D;
+
+    int* VF = wave->VF;
+    int* VB = wave->VB;
+    int flow; //  fhgh == D !
+    int blow, bhgh;
+    char* a;
+
+    y = 0;
+    if ( N < M )
+        while ( y < N && B[ y ] == A[ y ] )
+            y += 1;
+    else
+    {
+        while ( y < M && B[ y ] == A[ y ] )
+            y += 1;
+        if ( y >= M && N == M )
+        {
+            *px = *py = M;
+            return ( 0 );
+        }
+    }
+
+    flow     = 0;
+    VF[ 0 ]  = y;
+    VF[ -1 ] = -2;
+
+    x = N - M;
+    a = A - x;
+    y = N - 1;
+    if ( N > M )
+        while ( y >= x && B[ y ] == a[ y ] )
+            y -= 1;
+    else
+        while ( y >= 0 && B[ y ] == a[ y ] )
+            y -= 1;
+
+    blow = bhgh = -x;
+    VB += x;
+    VB[ blow ]     = y;
+    VB[ blow - 1 ] = N + 1;
+
+    for ( D = 1; 1; D += 1 )
+    {
+        int k, r;
+        int am, ac, ap;
+
+        //  Forward wave
+
+        flow -= 1;
+        am = ac = VF[ flow - 1 ] = -2;
+
+        a = A + D;
+        x = M - D;
+        for ( k = D; k >= flow; k-- )
+        {
+            ap = ac;
+            ac = am + 1;
+            am = VF[ k - 1 ];
+
+            if ( ac < am )
+                if ( ap < am )
+                    y = am;
+                else
+                    y = ap;
+            else if ( ap < ac )
+                y = ac;
+            else
+                y = ap;
+
+            if ( blow <= k && k <= bhgh )
+            {
+                r = VB[ k ];
+                if ( y > r )
+                {
+                    D = ( D << 1 ) - 1;
+                    if ( ap > r )
+                        y = ap;
+                    else if ( ac > r )
+                        y = ac;
+                    else
+                        y = r + 1;
+                    x   = k + y;
+                    *px = x;
+                    *py = y;
+                    return ( D );
+                }
+            }
+
+            if ( N < x )
+                while ( y < N && B[ y ] == a[ y ] )
+                    y += 1;
+            else
+                while ( y < x && B[ y ] == a[ y ] )
+                    y += 1;
+
+            VF[ k ] = y;
+            a -= 1;
+            x += 1;
+        }
+
+#ifdef DEBUG_AWAVE
+        print_awave( VF, flow, D );
+#endif
+
+        //  Reverse Wave
+
+        bhgh += 1;
+        blow -= 1;
+        am = ac = VB[ blow - 1 ] = N + 1;
+
+        a = A + bhgh;
+        x = -bhgh;
+        for ( k = bhgh; k >= blow; k-- )
+        {
+            ap = ac + 1;
+            ac = am;
+            am = VB[ k - 1 ];
+
+            if ( ac > am )
+                if ( ap > am )
+                    y = am;
+                else
+                    y = ap;
+            else if ( ap > ac )
+                y = ac;
+            else
+                y = ap;
+
+            if ( flow <= k && k <= D )
+            {
+                r = VF[ k ];
+                if ( y <= r )
+                {
+                    D = ( D << 1 );
+                    if ( ap <= r )
+                        y = ap;
+                    else if ( ac <= r )
+                        y = ac;
+                    else
+                        y = r;
+                    x   = k + y;
+                    *px = x;
+                    *py = y;
+                    return ( D );
+                }
+            }
+
+            y -= 1;
+            if ( x > 0 )
+                while ( y >= x && B[ y ] == a[ y ] )
+                    y -= 1;
+            else
+                while ( y >= 0 && B[ y ] == a[ y ] )
+                    y -= 1;
+
+            VB[ k ] = y;
+            a -= 1;
+            x += 1;
+        }
+
+#ifdef DEBUG_AWAVE
+        print_awave( VB, blow, bhgh );
+#endif
+    }
+}
+
+static int trace_nd( char* A, int M, char* B, int N, Trace_Waves* wave, int tspace )
+{
+    int x, y;
+    int D, s;
+
+#ifdef DEBUG_ALIGN
+    printf( "%*s %ld,%ld: %d vs %d\n", depth, "", A - wave->Aabs, B - wave->Babs, M, N );
+    fflush( stdout );
+#endif
+
+    if ( M <= 0 )
+    {
+        y = ( ( ( A - wave->Aabs ) / tspace ) << 1 );
+        wave->Trace[ y ] += N;
+        wave->Trace[ y + 1 ] += N;
+#ifdef DEBUG_TRACE
+        printf( "%*s Adding1 (%d,%d) to tp %d(%d,%d)\n", depth, "", N, N, y >> 1,
+                wave->Trace[ y + 1 ], wave->Trace[ y ] );
+        fflush( stdout );
+#endif
+        return ( N );
+    }
+
+    if ( N <= 0 )
+    {
+        x = A - wave->Aabs;
+        y = x / tspace;
+        x = ( y + 1 ) * tspace - x;
+        y <<= 1;
+        for ( s = M; s > 0; s -= x, x = tspace )
+        {
+            if ( x > s )
+                x = s;
+            wave->Trace[ y ] += x;
+#ifdef DEBUG_TRACE
+            printf( "%*s Adding2 (0,%d) to tp %d(%d,%d)\n", depth, "", x, y >> 1,
+                    wave->Trace[ y + 1 ], wave->Trace[ y ] );
+            fflush( stdout );
+#endif
+            y += 2;
+        }
+        return ( M );
+    }
+
+    D = split_nd( A, M, B, N, wave, &x, &y );
+
+    if ( D > 1 )
+    {
+#ifdef DEBUG_ALIGN
+        printf( "%*s (%d,%d) @ %d\n", depth, "", x, y, D );
+        fflush( stdout );
+        depth += 2;
+#endif
+
+        s = A - wave->Aabs;
+        if ( ( s / tspace + 1 ) * tspace - s >= x )
+        {
+            s = ( ( s / tspace ) << 1 );
+            wave->Trace[ s ] += ( D + 1 ) / 2;
+            wave->Trace[ s + 1 ] += y;
+#ifdef DEBUG_TRACE
+            printf( "%*s Adding3 (%d,%d) to tp %d(%d,%d)\n", depth, "", y, ( D + 1 ) / 2, s >> 1,
+                    wave->Trace[ s + 1 ], wave->Trace[ s ] );
+            fflush( stdout );
+#endif
+        }
+        else
+            trace_nd( A, x, B, y, wave, tspace );
+
+        s = ( A + x ) - wave->Aabs;
+        if ( ( s / tspace + 1 ) * tspace - s >= M - x )
+        {
+            s = ( ( s / tspace ) << 1 );
+            wave->Trace[ s ] += D / 2;
+            wave->Trace[ s + 1 ] += N - y;
+#ifdef DEBUG_TRACE
+            printf( "%*s Adding4 (%d,%d)) to tp %d(%d,%d)\n", depth, "", N - y, D / 2, s >> 1,
+                    wave->Trace[ s + 1 ], wave->Trace[ s ] );
+            fflush( stdout );
+#endif
+        }
+        else
+            trace_nd( A + x, M - x, B + y, N - y, wave, tspace );
+
+#ifdef DEBUG_ALIGN
+        depth -= 2;
+#endif
+    }
+
+    else
+    {
+        int u, v;
+
+        if ( D == 0 || M < N )
+            s = x;
+        else
+            s = x - 1;
+        if ( s > 0 )
+        {
+            u = A - wave->Aabs;
+            v = u / tspace;
+            u = ( v + 1 ) * tspace - u;
+            for ( v <<= 1; s > 0; s -= u, u = tspace )
+            {
+                if ( u > s )
+                    u = s;
+                wave->Trace[ v + 1 ] += u;
+#ifdef DEBUG_TRACE
+                printf( "%*s Adding5 (%d,0)) to tp %d(%d,%d)\n", depth, "", u, v >> 1,
+                        wave->Trace[ v + 1 ], wave->Trace[ v ] );
+                fflush( stdout );
+#endif
+                v += 2;
+            }
+        }
+
+        if ( D == 0 )
+            return ( D );
+
+        if ( M < N )
+            y = ( ( ( ( A + x ) - wave->Aabs ) / tspace ) << 1 );
+        else
+            y = ( ( ( ( A + ( x - 1 ) ) - wave->Aabs ) / tspace ) << 1 );
+        wave->Trace[ y ] += 1;
+        if ( M <= N )
+            wave->Trace[ y + 1 ] += 1;
+#ifdef DEBUG_TRACE
+        printf( "%*s Adding5 (%d,1)) to tp %d(%d,%d)\n", depth, "", N >= M, y >> 1,
+                wave->Trace[ y + 1 ], wave->Trace[ y ] );
+        fflush( stdout );
+#endif
+
+        s = M - x;
+        if ( s > 0 )
+        {
+            u = ( A + x ) - wave->Aabs;
+            v = u / tspace;
+            u = ( v + 1 ) * tspace - u;
+            for ( v <<= 1; s > 0; s -= u, u = tspace )
+            {
+                if ( u > s )
+                    u = s;
+                wave->Trace[ v + 1 ] += u;
+#ifdef DEBUG_TRACE
+                printf( "%*s Adding5 (%d,0)) to tp %d(%d,%d)\n", depth, "", u, v >> 1,
+                        wave->Trace[ v + 1 ], wave->Trace[ v ] );
+                fflush( stdout );
+#endif
+                v += 2;
+            }
+        }
+    }
+
+    return ( D );
+}
 
 static int dandc_nd( char* A, int M, char* B, int N, Trace_Waves* wave )
 {
@@ -4277,6 +4699,7 @@ static int dandc_nd( char* A, int M, char* B, int N, Trace_Waves* wave )
         }
         return ( N );
     }
+
     if ( N <= 0 )
     {
         y = ( B - wave->Babs ) + 1;
@@ -4290,183 +4713,26 @@ static int dandc_nd( char* A, int M, char* B, int N, Trace_Waves* wave )
         return ( M );
     }
 
-    {
-        int* VF = wave->VF;
-        int* VB = wave->VB;
-        int flow; //  fhgh == D !
-        int blow, bhgh;
-        char* a;
+    D = split_nd( A, M, B, N, wave, &x, &y );
 
-        y = 0;
-        if ( N < M )
-            while ( y < N && B[ y ] == A[ y ] )
-                y += 1;
-        else
-        {
-            while ( y < M && B[ y ] == A[ y ] )
-                y += 1;
-            if ( y >= M && N == M )
-                return ( 0 );
-        }
-
-        flow     = 0;
-        VF[ 0 ]  = y;
-        VF[ -1 ] = -2;
-
-        x = N - M;
-        a = A - x;
-        y = N - 1;
-        if ( N > M )
-            while ( y >= x && B[ y ] == a[ y ] )
-                y -= 1;
-        else
-            while ( y >= 0 && B[ y ] == a[ y ] )
-                y -= 1;
-
-        blow = bhgh = -x;
-        VB += x;
-        VB[ blow ]     = y;
-        VB[ blow - 1 ] = N + 1;
-
-        for ( D = 1; 1; D += 1 )
-        {
-            int k, r;
-            int am, ac, ap;
-
-            //  Forward wave
-
-            flow -= 1;
-            am = ac = VF[ flow - 1 ] = -2;
-
-            a = A + D;
-            x = M - D;
-            for ( k = D; k >= flow; k-- )
-            {
-                ap = ac;
-                ac = am + 1;
-                am = VF[ k - 1 ];
-
-                if ( ac < am )
-                    if ( ap < am )
-                        y = am;
-                    else
-                        y = ap;
-                else if ( ap < ac )
-                    y = ac;
-                else
-                    y = ap;
-
-                if ( blow <= k && k <= bhgh )
-                {
-                    r = VB[ k ];
-                    if ( y > r )
-                    {
-                        D = ( D << 1 ) - 1;
-                        if ( ap > r )
-                            y = ap;
-                        else if ( ac > r )
-                            y = ac;
-                        else
-                            y = r + 1;
-                        x = k + y;
-                        goto OVERLAP2;
-                    }
-                }
-
-                if ( N < x )
-                    while ( y < N && B[ y ] == a[ y ] )
-                        y += 1;
-                else
-                    while ( y < x && B[ y ] == a[ y ] )
-                        y += 1;
-
-                VF[ k ] = y;
-                a -= 1;
-                x += 1;
-            }
-
-#ifdef DEBUG_AWAVE
-            print_awave( VF, flow, D );
-#endif
-
-            //  Reverse Wave
-
-            bhgh += 1;
-            blow -= 1;
-            am = ac = VB[ blow - 1 ] = N + 1;
-
-            a = A + bhgh;
-            x = -bhgh;
-            for ( k = bhgh; k >= blow; k-- )
-            {
-                ap = ac + 1;
-                ac = am;
-                am = VB[ k - 1 ];
-
-                if ( ac > am )
-                    if ( ap > am )
-                        y = am;
-                    else
-                        y = ap;
-                else if ( ap > ac )
-                    y = ac;
-                else
-                    y = ap;
-
-                if ( flow <= k && k <= D )
-                {
-                    r = VF[ k ];
-                    if ( y <= r )
-                    {
-                        D = ( D << 1 );
-                        if ( ap <= r )
-                            y = ap;
-                        else if ( ac <= r )
-                            y = ac;
-                        else
-                            y = r;
-                        x = k + y;
-                        goto OVERLAP2;
-                    }
-                }
-
-                y -= 1;
-                if ( x > 0 )
-                    while ( y >= x && B[ y ] == a[ y ] )
-                        y -= 1;
-                else
-                    while ( y >= 0 && B[ y ] == a[ y ] )
-                        y -= 1;
-
-                VB[ k ] = y;
-                a -= 1;
-                x += 1;
-            }
-
-#ifdef DEBUG_AWAVE
-            print_awave( VB, blow, bhgh );
-#endif
-        }
-    }
-
-OVERLAP2:
-
-#ifdef DEBUG_ALIGN
-    printf( "%*s (%d,%d) @ %d\n", depth, "", x, y, D );
-    fflush( stdout );
-#endif
     if ( D > 1 )
     {
 #ifdef DEBUG_ALIGN
+        printf( "%*s (%d,%d) @ %d\n", depth, "", x, y, D );
+        fflush( stdout );
         depth += 2;
 #endif
+
         dandc_nd( A, x, B, y, wave );
         dandc_nd( A + x, M - x, B + y, N - y, wave );
+
 #ifdef DEBUG_ALIGN
         depth -= 2;
 #endif
     }
+
     else if ( D == 1 )
+
     {
         if ( M > N )
         {
@@ -4475,6 +4741,7 @@ OVERLAP2:
             printf( "%*s  D %ld(%ld)\n", depth, "", ( A - wave->Aabs ) + x, ( B - wave->Babs ) + y + 1 );
 #endif
         }
+
         else if ( M < N )
         {
             *wave->Stop++ = ( wave->Aabs - A ) - x - 1;
@@ -4482,6 +4749,7 @@ OVERLAP2:
             printf( "%*s  I %ld(%ld)\n", depth, "", ( B - wave->Babs ) + y, ( A - wave->Aabs ) + x + 1 );
 #endif
         }
+
 #ifdef DEBUG_SCRIPT
         else
             printf( "%*s  %ld S %ld\n", depth, "", ( wave->Aabs - A ) + x, ( B - wave->Babs ) + y );
@@ -4491,69 +4759,177 @@ OVERLAP2:
     return ( D );
 }
 
-static int Compute_Trace_ND_ALL( Alignment* align, Work_Data* ework )
+int Compute_Alignment( Alignment* align, Work_Data* ework, int task, int tspace )
 {
     _Work_Data* work = (_Work_Data*)ework;
     Trace_Waves wave;
 
     int L, D;
     int asub, bsub;
+    char *aseq, *bseq;
     Path* path;
     int* trace;
+    uint16* strace;
 
     path = align->path;
     asub = path->aepos - path->abpos;
     bsub = path->bepos - path->bbpos;
+    aseq = align->aseq + path->abpos;
+    bseq = align->bseq + path->bbpos;
 
-    if ( asub < bsub )
-        L = bsub;
+    L = 0;
+    if ( task != DIFF_ONLY )
+    {
+        if ( task == DIFF_TRACE || task == PLUS_TRACE )
+            L = 2 * ( ( ( path->aepos + ( tspace - 1 ) ) / tspace - path->abpos / tspace ) + 1 ) * sizeof( uint16 );
+        else if ( asub < bsub )
+            L = bsub * sizeof( int );
+        else
+            L = asub * sizeof( int );
+        if ( L > work->alnmax )
+            if ( enlarge_alnpts( work, L ) )
+                EXIT( 1 );
+    }
+
+    trace  = ( (int*)work->alnpts );
+    strace = ( (uint16*)work->alnpts );
+
+    if ( asub > bsub )
+        D = ( 4 * asub + 6 ) * sizeof( int );
     else
-        L = asub;
-    L *= sizeof( int );
-    if ( L > work->tramax )
-        if ( enlarge_trace( work, L ) )
-            EXIT( 1 );
-
-    trace = wave.Stop = ( (int*)work->trace );
-
-    D = 2 * ( path->diffs + 4 ) * sizeof( int );
+        D = ( 4 * bsub + 6 ) * sizeof( int );
     if ( D > work->vecmax )
         if ( enlarge_vector( work, D ) )
             EXIT( 1 );
 
-    D       = ( path->diffs + 3 ) / 2;
-    wave.VF = ( (int*)work->vector ) + ( D + 1 );
-    wave.VB = wave.VF + ( 2 * D + 1 );
+    if ( asub > bsub )
+    {
+        wave.VF = ( (int*)work->vector ) + ( asub + 1 );
+        wave.VB = wave.VF + ( 2 * asub + 3 );
+    }
+    else
+    {
+        wave.VF = ( (int*)work->vector ) + ( bsub + 1 );
+        wave.VB = wave.VF + ( 2 * bsub + 3 );
+    }
 
     wave.Aabs = align->aseq;
     wave.Babs = align->bseq;
 
-    path->diffs = dandc_nd( align->aseq + path->abpos, path->aepos - path->abpos, align->bseq + path->bbpos, path->bepos - path->bbpos, &wave );
+    if ( task == DIFF_ONLY )
+    {
+        wave.mida = -1;
+        if ( asub <= 0 )
+            path->diffs = bsub;
+        else if ( bsub <= 0 )
+            path->diffs = asub;
+        else
+            path->diffs = split_nd( aseq, asub, bseq, bsub, &wave, &wave.mida, &wave.midb );
+        path->trace = NULL;
+        path->tlen  = -1;
+        return ( 0 );
+    }
+
+    else if ( task < DIFF_ONLY && wave.mida >= 0 )
+    {
+        int x = wave.mida;
+        int y = wave.midb;
+
+        if ( task == PLUS_ALIGN )
+        {
+            wave.Stop = trace;
+            dandc_nd( aseq, x, bseq, y, &wave );
+            dandc_nd( aseq + x, asub - x, bseq + y, bsub - y, &wave );
+            path->tlen = wave.Stop - trace;
+        }
+        else
+        {
+            int i, n;
+
+            wave.Trace = strace - 2 * ( path->abpos / tspace );
+            n          = L / sizeof( uint16 );
+            for ( i = 0; i < n; i++ )
+                strace[ i ] = 0;
+
+            trace_nd( aseq, x, bseq, y, &wave, tspace );
+            trace_nd( aseq + x, asub - x, bseq + y, bsub - y, &wave, tspace );
+
+            if ( strace[ n - 1 ] != 0 ) //  Last element is to capture all inserts on TP boundary
+            {
+                strace[ n - 3 ] += strace[ n - 1 ];
+                strace[ n - 4 ] += strace[ n - 2 ];
+            }
+            path->tlen = n - 2;
+
+#ifdef DEBUG_SCRIPT
+            printf( "  Trace:\n" );
+            for ( i = 0; i < path->tlen; i += 2 )
+                printf( "    %3d  %3d\n", strace[ i ], strace[ i + 1 ] );
+            fflush( stdout );
+#endif
+        }
+    }
+
+    else
+    {
+        if ( task == DIFF_ALIGN )
+        {
+            wave.Stop   = trace;
+            path->diffs = dandc_nd( aseq, asub, bseq, bsub, &wave );
+            path->tlen  = wave.Stop - trace;
+        }
+        else
+        {
+            int i, n;
+
+            wave.Trace = strace - 2 * ( path->abpos / tspace );
+            n          = L / sizeof( uint16 );
+            for ( i = 0; i < n; i++ )
+                strace[ i ] = 0;
+            path->diffs = trace_nd( aseq, asub, bseq, bsub, &wave, tspace );
+
+            if ( strace[ n - 1 ] != 0 ) //  Last element is to capture all inserts on TP boundary
+            {
+                strace[ n - 3 ] += strace[ n - 1 ];
+                strace[ n - 4 ] += strace[ n - 2 ];
+            }
+            path->tlen = n - 2;
+
+#ifdef DEBUG_SCRIPT
+            printf( "  Trace:\n" );
+            for ( i = 0; i < path->tlen; i += 2 )
+                printf( "    %3d  %3d\n", strace[ i ], strace[ i + 1 ] );
+            fflush( stdout );
+#endif
+        }
+    }
+
     path->trace = trace;
-    path->tlen  = wave.Stop - trace;
     return ( 0 );
 }
 
 /****************************************************************************************\
 *                                                                                        *
- *  O(NP) tracing algorithms                                                              *
- *                                                                                        *
- \****************************************************************************************/
+*  O(NP) tracing algorithms                                                              *
+*                                                                                        *
+\****************************************************************************************/
 
 /* Iterative O(np) algorithm for finding the alignment between two substrings (specified
- by a Path record).  The variation includes handling substitutions and guarantees
- to find left-most alignments so that low complexity runs are always aligned in
- the same way.
- */
+     by a Path record).  The variation includes handling substitutions and guarantees
+     to find left-most alignments so that low complexity runs are always aligned in
+     the same way.
+*/
 
 #ifdef DEBUG_ALIGN
 
-static int ToA[ 4 ] =
-    {'a', 'c', 'g', 't'};
+static int ToA[ 4 ] = {'a', 'c', 'g', 't'};
 
 #endif
 
-static int iter_np( char* A, int M, char* B, int N, Trace_Waves* wave, int mode )
+static char* TP_Align =
+    "Bad alignment between trace points (Compute_Trace), source DB likely incorrect";
+
+static int iter_np( char* A, int M, char* B, int N, Trace_Waves* wave, int mode, int dmax )
 {
     int** PVF = wave->PVF;
     int** PHF = wave->PHF;
@@ -4589,19 +4965,25 @@ static int iter_np( char* A, int M, char* B, int N, Trace_Waves* wave, int mode 
             hgh = 0;
         }
 
-        posl = -INT32_MAX;
-        posh = INT32_MAX;
+        posl = -dmax;
+        posh = dmax;
         if ( wave->Aabs == wave->Babs )
         {
             if ( B == A )
             {
-                EPRINTF( EPLACE, "Error: self comparison starts on diagonal 0 (Compute_Trace)\n" );
+                EPRINTF( EPLACE, "%s: self comparison starts on diagonal 0 (Compute_Trace)\n", Prog_Name );
                 EXIT( -1 );
             }
             else if ( B < A )
-                posl = ( B - A ) + 1;
+            {
+                if ( ( B - A ) + 1 > posl )
+                    posl = ( B - A ) + 1;
+            }
             else
-                posh = ( B - A ) - 1;
+            {
+                if ( ( B - A ) - 1 < posh )
+                    posh = ( B - A ) - 1;
+            }
         }
 
         F1 = PVF[ -2 ];
@@ -4619,6 +5001,12 @@ static int iter_np( char* A, int M, char* B, int N, Trace_Waves* wave, int mode 
             int k, i, j;
             int am, ac, ap;
             char* a;
+
+            if ( D > dmax )
+            {
+                EPRINTF( EPLACE, "%s: %s\n", Prog_Name, TP_Align );
+                EXIT( -1 );
+            }
 
             F2 = F1;
             F1 = F0;
@@ -4864,8 +5252,7 @@ static int iter_np( char* A, int M, char* B, int N, Trace_Waves* wave, int mode 
                 k             = h;
             }
 
-        else
-            //  mode == GREEDIEST
+        else //  mode == GREEDIEST
 
             while ( e != 3 )
             {
@@ -4915,7 +5302,7 @@ static int iter_np( char* A, int M, char* B, int N, Trace_Waves* wave, int mode 
     return ( D + abs( del ) );
 }
 
-static int middle_np( char* A, int M, char* B, int N, Trace_Waves* wave, int mode )
+static int middle_np( char* A, int M, char* B, int N, Trace_Waves* wave, int mode, int dmax )
 {
     int** PVF = wave->PVF;
     int** PHF = wave->PHF;
@@ -4951,19 +5338,25 @@ static int middle_np( char* A, int M, char* B, int N, Trace_Waves* wave, int mod
             hgh = 0;
         }
 
-        posl = -INT32_MAX;
-        posh = INT32_MAX;
+        posl = -dmax;
+        posh = dmax;
         if ( wave->Aabs == wave->Babs )
         {
             if ( B == A )
             {
-                EPRINTF( EPLACE, "Error: self comparison starts on diagonal 0 (Compute_Trace)\n" );
+                EPRINTF( EPLACE, "%s: self comparison starts on diagonal 0 (Compute_Trace)\n", Prog_Name );
                 EXIT( 1 );
             }
             else if ( B < A )
-                posl = ( B - A ) + 1;
+            {
+                if ( ( B - A ) + 1 > posl )
+                    posl = ( B - A ) + 1;
+            }
             else
-                posh = ( B - A ) - 1;
+            {
+                if ( ( B - A ) - 1 < posh )
+                    posh = ( B - A ) - 1;
+            }
         }
 
         F1 = PVF[ -2 ];
@@ -4981,6 +5374,12 @@ static int middle_np( char* A, int M, char* B, int N, Trace_Waves* wave, int mod
             int k, i, j;
             int am, ac, ap;
             char* a;
+
+            if ( D > dmax )
+            {
+                EPRINTF( EPLACE, "%s: %s\n", Prog_Name, TP_Align );
+                EXIT( -1 );
+            }
 
             F2 = F1;
             F1 = F0;
@@ -5186,8 +5585,7 @@ static int middle_np( char* A, int M, char* B, int N, Trace_Waves* wave, int mod
                 k = h;
             }
 
-        else
-            //  mode == GREEDIEST
+        else //  mode == GREEDIEST
 
             for ( f = d / 2; d > f; d-- )
             {
@@ -5211,77 +5609,11 @@ static int middle_np( char* A, int M, char* B, int N, Trace_Waves* wave, int mod
 
 /****************************************************************************************\
 *                                                                                        *
- *  COMPUTE_TRACE FLAVORS                                                                 *
- *                                                                                        *
- \****************************************************************************************/
+*  COMPUTE_TRACE FLAVORS                                                                 *
+*                                                                                        *
+\****************************************************************************************/
 
-int Compute_Trace_ALL( Alignment* align, Work_Data* ework )
-{
-    _Work_Data* work = (_Work_Data*)ework;
-    Trace_Waves wave;
-
-    Path* path;
-    char *aseq, *bseq;
-    int M, N, D;
-
-    path = align->path;
-    aseq = align->aseq;
-    bseq = align->bseq;
-
-    M = path->aepos - path->abpos;
-    N = path->bepos - path->bbpos;
-
-    {
-        int64 s;
-        int d;
-        int dmax;
-        int **PVF, **PHF;
-
-        if ( M < N )
-            s = N;
-        else
-            s = M;
-        s *= sizeof( int );
-        if ( s > work->tramax )
-            if ( enlarge_trace( work, s ) )
-                EXIT( 1 );
-
-        dmax = path->diffs - abs( M - N );
-
-        s = ( dmax + 3 ) * 2 * ( ( M + N + 3 ) * sizeof( int ) + sizeof( int* ) );
-
-        if ( s > 256000000 )
-            return ( Compute_Trace_ND_ALL( align, ework ) );
-
-        if ( s > work->vecmax )
-            if ( enlarge_vector( work, s ) )
-                EXIT( 1 );
-
-        wave.PVF = PVF = ( (int**)( work->vector ) ) + 2;
-        wave.PHF = PHF = PVF + ( dmax + 3 );
-
-        s         = M + N + 3;
-        PVF[ -2 ] = ( (int*)( PHF + ( dmax + 1 ) ) ) + ( N + 1 );
-        for ( d = -1; d <= dmax; d++ )
-            PVF[ d ] = PVF[ d - 1 ] + s;
-        PHF[ -2 ] = PVF[ dmax ] + s;
-        for ( d = -1; d <= dmax; d++ )
-            PHF[ d ] = PHF[ d - 1 ] + s;
-    }
-
-    wave.Stop = ( (int*)work->trace );
-    wave.Aabs = aseq;
-    wave.Babs = bseq;
-
-    D = iter_np( aseq + path->abpos, M, bseq + path->bbpos, N, &wave, GREEDIEST );
-    if ( D < 0 )
-        EXIT( 1 );
-    path->diffs = D;
-    path->trace = work->trace;
-    path->tlen  = wave.Stop - ( (int*)path->trace );
-
-    return ( 0 );
-}
+static char* TP_Error = "Trace point out of bounds (Compute_Trace), source DB likely incorrect";
 
 int Compute_Trace_PTS( Alignment* align, Work_Data* ework, int trace_spacing, int mode )
 {
@@ -5290,12 +5622,15 @@ int Compute_Trace_PTS( Alignment* align, Work_Data* ework, int trace_spacing, in
 
     Path* path;
     char *aseq, *bseq;
+    int alen, blen;
     uint16* points;
     int tlen;
     int ab, bb;
     int ae, be;
-    int diffs;
+    int diffs, dmax;
 
+    alen   = align->alen;
+    blen   = align->blen;
     path   = align->path;
     aseq   = align->aseq;
     bseq   = align->bseq;
@@ -5306,7 +5641,7 @@ int Compute_Trace_PTS( Alignment* align, Work_Data* ework, int trace_spacing, in
         int64 s;
         int d;
         int M, N;
-        int dmax, nmax;
+        int nmax;
         int **PVF, **PHF;
 
         M = path->aepos - path->abpos;
@@ -5365,7 +5700,12 @@ int Compute_Trace_PTS( Alignment* align, Work_Data* ework, int trace_spacing, in
         {
             ae = ae + trace_spacing;
             be = bb + points[ i ];
-            d  = iter_np( aseq + ab, ae - ab, bseq + bb, be - bb, &wave, mode );
+            if ( ae > alen || be > blen )
+            {
+                EPRINTF( EPLACE, "%s: %s\n", Prog_Name, TP_Error );
+                EXIT( 1 );
+            }
+            d = iter_np( aseq + ab, ae - ab, bseq + bb, be - bb, &wave, mode, dmax );
             if ( d < 0 )
                 EXIT( 1 );
             diffs += d;
@@ -5374,7 +5714,12 @@ int Compute_Trace_PTS( Alignment* align, Work_Data* ework, int trace_spacing, in
         }
         ae = path->aepos;
         be = path->bepos;
-        d  = iter_np( aseq + ab, ae - ab, bseq + bb, be - bb, &wave, mode );
+        if ( ae > alen || be > blen )
+        {
+            EPRINTF( EPLACE, "%s: %s\n", Prog_Name, TP_Error );
+            EXIT( 1 );
+        }
+        d = iter_np( aseq + ab, ae - ab, bseq + bb, be - bb, &wave, mode, dmax );
         if ( d < 0 )
             EXIT( 1 );
         diffs += d;
@@ -5394,12 +5739,15 @@ int Compute_Trace_MID( Alignment* align, Work_Data* ework, int trace_spacing, in
 
     Path* path;
     char *aseq, *bseq;
+    int alen, blen;
     uint16* points;
     int tlen;
     int ab, bb;
     int ae, be;
-    int diffs;
+    int diffs, dmax;
 
+    alen   = align->alen;
+    blen   = align->blen;
     path   = align->path;
     aseq   = align->aseq;
     bseq   = align->bseq;
@@ -5410,7 +5758,7 @@ int Compute_Trace_MID( Alignment* align, Work_Data* ework, int trace_spacing, in
         int64 s;
         int d;
         int M, N;
-        int dmax, nmax;
+        int nmax;
         int **PVF, **PHF;
 
         M = path->aepos - path->abpos;
@@ -5471,11 +5819,16 @@ int Compute_Trace_MID( Alignment* align, Work_Data* ework, int trace_spacing, in
         {
             ae = ae + trace_spacing;
             be = bb + points[ i ];
-            if ( middle_np( aseq + ab, ae - ab, bseq + bb, be - bb, &wave, mode ) )
+            if ( ae > alen || be > blen )
+            {
+                EPRINTF( EPLACE, "%s: %s\n", Prog_Name, TP_Error );
+                EXIT( 1 );
+            }
+            if ( middle_np( aseq + ab, ae - ab, bseq + bb, be - bb, &wave, mode, dmax ) )
                 EXIT( 1 );
             af = wave.mida;
             bf = wave.midb;
-            d  = iter_np( aseq + as, af - as, bseq + bs, bf - bs, &wave, mode );
+            d  = iter_np( aseq + as, af - as, bseq + bs, bf - bs, &wave, mode, dmax );
             if ( d < 0 )
                 EXIT( 1 );
             diffs += d;
@@ -5488,18 +5841,23 @@ int Compute_Trace_MID( Alignment* align, Work_Data* ework, int trace_spacing, in
         ae = path->aepos;
         be = path->bepos;
 
-        if ( middle_np( aseq + ab, ae - ab, bseq + bb, be - bb, &wave, mode ) )
+        if ( ae > alen || be > blen )
+        {
+            EPRINTF( EPLACE, "%s: %s\n", Prog_Name, TP_Error );
+            EXIT( 1 );
+        }
+        if ( middle_np( aseq + ab, ae - ab, bseq + bb, be - bb, &wave, mode, dmax ) )
             EXIT( 1 );
         af = wave.mida;
         bf = wave.midb;
-        d  = iter_np( aseq + as, af - as, bseq + bs, bf - bs, &wave, mode );
+        d  = iter_np( aseq + as, af - as, bseq + bs, bf - bs, &wave, mode, dmax );
         if ( d < 0 )
             EXIT( 1 );
         diffs += d;
         as = af;
         bs = bf;
 
-        d += iter_np( aseq + af, ae - as, bseq + bf, be - bs, &wave, mode );
+        d += iter_np( aseq + af, ae - as, bseq + bf, be - bs, &wave, mode, dmax );
         if ( d < 0 )
             EXIT( 1 );
         diffs += d;
@@ -5519,12 +5877,15 @@ int Compute_Trace_IRR( Alignment* align, Work_Data* ework, int mode )
 
     Path* path;
     char *aseq, *bseq;
+    int alen, blen;
     uint16* points;
     int tlen;
     int ab, bb;
     int ae, be;
-    int diffs;
+    int diffs, dmax;
 
+    alen   = align->alen;
+    blen   = align->blen;
     path   = align->path;
     aseq   = align->aseq;
     bseq   = align->bseq;
@@ -5535,7 +5896,7 @@ int Compute_Trace_IRR( Alignment* align, Work_Data* ework, int mode )
         int64 s;
         int d;
         int M, N;
-        int mmax, nmax, dmax;
+        int mmax, nmax;
         int **PVF, **PHF;
 
         M = path->aepos - path->abpos;
@@ -5598,7 +5959,12 @@ int Compute_Trace_IRR( Alignment* align, Work_Data* ework, int mode )
         {
             ae = ab + points[ i ];
             be = bb + points[ i + 1 ];
-            d  = iter_np( aseq + ab, ae - ab, bseq + bb, be - bb, &wave, mode );
+            if ( ae > alen || be > blen )
+            {
+                EPRINTF( EPLACE, "%s: %s\n", Prog_Name, TP_Error );
+                EXIT( 1 );
+            }
+            d = iter_np( aseq + ab, ae - ab, bseq + bb, be - bb, &wave, mode, dmax );
             if ( d < 0 )
                 EXIT( 1 );
             diffs += d;
@@ -5612,436 +5978,4 @@ int Compute_Trace_IRR( Alignment* align, Work_Data* ework, int mode )
     path->diffs = diffs;
 
     return ( 0 );
-}
-
-/*
- * HEIDELBERG_ADDITION
- */
-
-int Num_Threads( Align_Spec* espec )
-{
-    return ( ( (_Align_Spec*)espec )->nthreads );
-}
-
-Overlap_IO_Buffer* OVL_IO_Buffer( Align_Spec* espec )
-{
-    return ( ( (_Align_Spec*)espec )->ioBuffer );
-}
-
-int Only_Identity( Align_Spec* espec )
-{
-    return ( ( (_Align_Spec*)espec )->only_identity );
-}
-
-int Symmetric( Align_Spec* espec )
-{
-    return ( ( (_Align_Spec*)espec )->symmetric );
-}
-
-// set initial overlap buffer size to 500'000 overlaps
-#define BUFFER_NOVLS 500000
-
-Overlap_IO_Buffer* CreateOverlapBuffer( int nthreads, int tbytes, int no_trace )
-{
-    Overlap_IO_Buffer* iobuf = (Overlap_IO_Buffer*)malloc( sizeof( Overlap_IO_Buffer ) );
-    if ( iobuf == NULL )
-    {
-        fprintf( stderr, "[ERROR] - Cannot allocate Overlap_IO_Buffer!\n" );
-        return NULL;
-    }
-
-    iobuf->omax     = BUFFER_NOVLS / nthreads + 1;
-    iobuf->otop     = 0;
-    iobuf->ovls     = (Overlap*)malloc( sizeof( Overlap ) * iobuf->omax );
-    iobuf->no_trace = no_trace;
-
-    if ( iobuf->ovls == NULL )
-    {
-        fprintf( stderr, "[ERROR] - Cannot allocate Overlap buffer of size: %d!\n", iobuf->omax );
-        return NULL;
-    }
-
-    if ( no_trace )
-    {
-
-        iobuf->tbytes = 0;
-        iobuf->tmax   = 0;
-        iobuf->ttop   = 0;
-        return iobuf;
-    }
-
-    if ( tbytes < 1 || tbytes > 2 )
-    {
-        fprintf( stderr, "[ERROR] - Unsupported size of trace: %d!\n", tbytes );
-        return NULL;
-    }
-    iobuf->tbytes = tbytes;
-    iobuf->tmax   = iobuf->omax * 120; // assumption: in average 120 trace points per overlap
-    iobuf->ttop   = 0;
-    if ( tbytes == 1 )
-        iobuf->trace = (uint8*)malloc( sizeof( uint8 ) * iobuf->tmax );
-    else
-        iobuf->trace = (uint16*)malloc( sizeof( uint16 ) * iobuf->tmax );
-
-    if ( iobuf->trace == NULL )
-    {
-        fprintf( stderr, "[ERROR] - Cannot allocate trace buffer of size: %llu!\n", iobuf->tmax );
-        return NULL;
-    }
-
-    return iobuf;
-}
-
-int AddOverlapToBuffer( Overlap_IO_Buffer* iobuf, Overlap* ovl, int tbytes )
-{
-    if ( iobuf == NULL )
-    {
-        fprintf( stderr, "[ERROR] - Cannot add overlap to Overlap_IO_Buffer. Buffer is NULL!\n" );
-        return 1;
-    }
-
-    // reallocate buffers
-    if ( iobuf->otop == iobuf->omax )
-    {
-        iobuf->omax = ( iobuf->omax * 1.2 ) + 1000;
-        iobuf->ovls = (Overlap*)realloc( iobuf->ovls, sizeof( Overlap ) * iobuf->omax );
-        if ( iobuf->ovls == NULL )
-        {
-            fprintf( stderr, "[ERROR] - Cannot add increase overlap buffer size to %d!\n", iobuf->omax );
-            return 1;
-        }
-    }
-
-    if ( ovl->path.trace != NULL && ( iobuf->no_trace == 0 ) )
-    {
-        if ( iobuf->ttop + ovl->path.tlen >= iobuf->tmax )
-        {
-            iobuf->tmax = ( iobuf->tmax * 1.2 ) + 1000;
-            void* t;
-            if ( iobuf->tbytes == 1 )
-                t = (uint8*)realloc( iobuf->trace, sizeof( uint8 ) * iobuf->tmax );
-            else
-                t = (uint16*)realloc( iobuf->trace, sizeof( uint16 ) * iobuf->tmax );
-
-            if ( t == NULL )
-            {
-                fprintf( stderr, "[ERROR] - Cannot add increase trace point buffer size to %llu!\n", iobuf->tmax );
-                return 1;
-            }
-
-            if ( t != iobuf->trace )
-            {
-                // adjust trace offset
-                int i, cumOff = 0;
-                for ( i = 0; i < iobuf->otop; i++ )
-                {
-                    iobuf->ovls[ i ].path.trace = t + cumOff;
-                    cumOff += iobuf->ovls[ i ].path.tlen;
-                }
-
-                iobuf->trace = t;
-            }
-        }
-    }
-
-    // add overlap
-    Overlap* o    = iobuf->ovls + iobuf->otop;
-    o->aread      = ovl->aread;
-    o->bread      = ovl->bread;
-    o->flags      = ovl->flags;
-    o->path.abpos = ovl->path.abpos;
-    o->path.aepos = ovl->path.aepos;
-    o->path.bbpos = ovl->path.bbpos;
-    o->path.bepos = ovl->path.bepos;
-    o->path.diffs = ovl->path.diffs;
-
-    // add trace
-    if ( ovl->path.trace == NULL || iobuf->no_trace )
-    {
-        o->path.trace = NULL;
-        o->path.tlen  = 0;
-    }
-    else
-    {
-        o->path.tlen = ovl->path.tlen;
-        memcpy( iobuf->trace + iobuf->ttop, ovl->path.trace, tbytes * ovl->path.tlen );
-        o->path.trace = iobuf->trace + iobuf->ttop;
-    }
-
-    // adjust offsets
-    iobuf->otop++;
-    iobuf->ttop += tbytes * ovl->path.tlen;
-    return 0;
-}
-
-static int SORT_OVL( const void* x, const void* y )
-{
-    Overlap* l = (Overlap*)x;
-    Overlap* r = (Overlap*)y;
-
-    int al, ar;
-    int bl, br;
-
-    al = l->aread;
-    bl = l->bread;
-
-    ar = r->aread;
-    br = r->bread;
-
-    if ( al != ar )
-        return ( al - ar );
-
-    if ( bl != br )
-        return ( bl - br );
-
-    if ( COMP( l->flags ) > COMP( r->flags ) )
-        return 1;
-
-    if ( COMP( l->flags ) < COMP( r->flags ) )
-        return -1;
-
-    return ( l->path.abpos - r->path.abpos );
-}
-
-void Write_Overlap_Buffer( Align_Spec* spec, int RUN_ID, char* ablock, char* bblock, int lastRead )
-{
-    // sort all overlaps
-    Overlap_IO_Buffer* buf = OVL_IO_Buffer( spec );
-    int nthreads           = Num_Threads( spec );
-    int symmetric          = Symmetric( spec );
-    int only_identity      = Only_Identity( spec );
-
-    int nallOvls = 0;
-    int i, j;
-    for ( i = 0; i < nthreads; i++ )
-        nallOvls += buf[ i ].otop;
-
-    // TODO use smaller chunks for real sorting and merging
-    Overlap* allOvls = (Overlap*)malloc( sizeof( Overlap ) * nallOvls );
-    if ( allOvls == NULL )
-    {
-        fprintf( stderr, "[ERROR] - Write_Overlap_Buffer: Cannot create file overlap buffer for all threads\n" );
-        exit( 1 );
-    }
-
-    int count = 0;
-    for ( i = 0; i < nthreads; i++ )
-        for ( j = 0; j < buf[ i ].otop; j++ )
-            if ( only_identity )
-            {
-                if ( buf[ i ].ovls[ j ].aread == buf[ i ].ovls[ j ].bread )
-                    allOvls[ count++ ] = buf[ i ].ovls[ j ];
-            }
-            else
-                allOvls[ count++ ] = buf[ i ].ovls[ j ];
-
-    if ( only_identity )
-        nallOvls = count;
-
-    assert( count == nallOvls );
-
-    // sort overlaps
-    qsort( allOvls, nallOvls, sizeof( Overlap ), SORT_OVL );
-
-    // get blocks ids and root
-    int ablockID, bblockID;
-    char* aroot = malloc( strlen( ablock ) + 10 );
-    char* broot = malloc( strlen( bblock ) + 10 );
-
-    ablockID = bblockID = 0;
-    {
-        char* dot;
-
-        dot = strrchr( ablock, '.' );
-        if ( dot != NULL )
-        {
-            ablockID = atoi( ++dot );
-            snprintf( aroot, dot - ablock, "%s", ablock );
-        }
-
-        dot = strrchr( bblock, '.' );
-        if ( dot != NULL )
-        {
-            bblockID = atoi( ++dot );
-            snprintf( broot, dot - bblock, "%s", bblock );
-        }
-    }
-
-    // if parts are equal, then dump out all overlaps into a single file
-    if ( strcmp( ablock, bblock ) == 0 || symmetric == 0 )
-    {
-        char* dirName = NULL;
-        if ( ablockID > 0 )
-            dirName = getDir( RUN_ID, ablockID );
-
-        char* path = (char*)malloc( strlen( aroot ) + strlen( broot ) + 40 );
-        if ( path == NULL )
-        {
-            fprintf( stderr, "[ERROR] - Write_Overlap_Buffer: Cannot create file name buffer\n" );
-            exit( 1 );
-        }
-
-        if ( ablockID > 0 && bblockID > 0 )
-            sprintf( path, "%s/%s.%d.%s.%d.las", dirName, aroot, ablockID, broot, bblockID );
-        else if ( ablockID > 0 )
-            sprintf( path, "%s/%s.%d.%s.las", dirName, aroot, ablockID, broot );
-        else if ( bblockID > 0 )
-            sprintf( path, "%s.%s.%d.las", aroot, broot, bblockID );
-        else
-            sprintf( path, "%s.%s.las", aroot, broot );
-
-        FILE* out = fopen( path, "w" );
-        if ( out == NULL )
-        {
-            fprintf( stderr, "[ERROR] - Write_Overlap_Buffer: Cannot open file %s for writing\n", path );
-            exit( 1 );
-        }
-
-        int64 nhits = 0;
-        int tspace  = Trace_Spacing( spec );
-        int tbytes  = buf->tbytes;
-        fwrite( &nhits, sizeof( int64 ), 1, out );
-        fwrite( &tspace, sizeof( int ), 1, out );
-
-        for ( j = 0; j < nallOvls; j++, nhits++ )
-            Write_Overlap( out, allOvls + j, tbytes );
-
-        assert( nhits == nallOvls );
-        rewind( out );
-        fwrite( &nhits, sizeof( int64 ), 1, out );
-        fclose( out );
-
-        // cleanup
-        if ( dirName )
-            free( dirName );
-        free( path );
-    }
-    else // dump out ablock-vs-bblock ovls into one file and bblock-vs-ablock into a second file
-    {
-        char *dirName1, *dirName2;
-        char* tmp   = (char*)malloc( strlen( aroot ) + strlen( broot ) + 40 );
-        char* path1 = (char*)malloc( strlen( aroot ) + strlen( broot ) + 40 );
-        char* path2 = (char*)malloc( strlen( aroot ) + strlen( broot ) + 40 );
-
-        if ( path1 == NULL || path2 == NULL )
-        {
-            fprintf( stderr, "[ERROR] - Write_Overlap_Buffer: Cannot create file name buffers\n" );
-            exit( 1 );
-        }
-
-        dirName1 = dirName2 = NULL;
-
-        if ( ablockID > 0 )
-        {
-            dirName1 = getDir( RUN_ID, ablockID );
-            //            printf("dirName1: %s\n", dirName1);
-        }
-
-        if ( bblockID > 0 )
-        {
-            dirName2 = getDir( RUN_ID, bblockID );
-            //            printf("dirName2: %s\n", dirName2);
-        }
-
-        if ( ablockID > 0 )
-        {
-            if ( bblockID > 0 )
-            {
-                sprintf( path1, "%s/%s.%d.%s.%d.las", dirName1, aroot, ablockID, broot, bblockID );
-                sprintf( path2, "%s/%s.%d.%s.%d.las", dirName2, broot, bblockID, aroot, ablockID );
-            }
-            else
-            {
-                sprintf( path1, "%s/%s.%d.%s.las", dirName1, aroot, ablockID, broot );
-                sprintf( path2, "%s.%s.%d.las", broot, aroot, ablockID );
-            }
-        }
-        else
-        {
-            if ( bblockID > 0 )
-            {
-                sprintf( path1, "%s.%s.%d.las", aroot, broot, bblockID );
-                sprintf( path2, "%s/%s.%d.%s.las", dirName2, broot, bblockID, aroot );
-            }
-            else
-            {
-                sprintf( path1, "%s.%s.las", aroot, broot );
-                sprintf( path2, "%s.%s.las", broot, aroot );
-            }
-        }
-
-        if ( bblockID < ablockID )
-        {
-            tmp   = path1;
-            path1 = path2;
-            path2 = tmp;
-        }
-
-        //        printf("path1: %s, path2: %s\n", path1, path2);
-
-        // dump out reads to first overlap file
-        FILE* out = fopen( path1, "w" );
-        if ( out == NULL )
-        {
-            fprintf( stderr, "[ERROR] - Write_Overlap_Buffer: Cannot open file %s for writing\n", path1 );
-            exit( 1 );
-        }
-        int64 nhits = 0;
-        int tspace  = Trace_Spacing( spec );
-        int tbytes  = buf->tbytes;
-        fwrite( &nhits, sizeof( int64 ), 1, out );
-        fwrite( &tspace, sizeof( int ), 1, out );
-
-        for ( j = 0; j < nallOvls; j++, nhits++ )
-        {
-            if ( allOvls[ j ].aread > lastRead )
-                break;
-            Write_Overlap( out, allOvls + j, tbytes );
-        }
-
-        rewind( out );
-        fwrite( &nhits, sizeof( int64 ), 1, out );
-        fclose( out );
-
-        // dump out reads to second overlap file
-        out = fopen( path2, "w" );
-        if ( out == NULL )
-        {
-            fprintf( stderr, "[ERROR] - Write_Overlap_Buffer: Cannot open file %s for writing\n", path2 );
-            exit( 1 );
-        }
-
-        nhits = 0;
-        fwrite( &nhits, sizeof( int64 ), 1, out );
-        fwrite( &tspace, sizeof( int ), 1, out );
-
-        for ( ; j < nallOvls; j++, nhits++ )
-            Write_Overlap( out, allOvls + j, tbytes );
-
-        rewind( out );
-        fwrite( &nhits, sizeof( int64 ), 1, out );
-        fclose( out );
-
-        // cleanup
-        free( dirName1 );
-        free( path1 );
-        free( dirName2 );
-        free( path2 );
-    }
-
-    // cleanup
-    free( allOvls );
-}
-
-void Reset_Overlap_Buffer( Align_Spec* spec )
-{
-    Overlap_IO_Buffer* buf = OVL_IO_Buffer( spec );
-    int nthreads           = Num_Threads( spec );
-
-    int i;
-    for ( i = 0; i < nthreads; i++ )
-    {
-        buf[ i ].otop = 0;
-        buf[ i ].ttop = 0;
-    }
 }

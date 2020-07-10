@@ -431,7 +431,7 @@ static int filter_flips(FixContext* fctx, Overlap* ovls, int novl, int* trim_b, 
 
 static int fix_handler(void* _ctx, Overlap* ovl, int novl)
 {
-    printf("%d %d\n", ovl->aread, novl);
+    // printf("%d %d\n", ovl->aread, novl);
 
 // #warning "REMOVE ME"
 //    if ( ovl->aread != 166815 ) return 1;

@@ -17,8 +17,8 @@
 typedef struct
 {
     int sockfd;
-    struct sockaddr_in dest;    
-    
+    struct sockaddr_in dest;
+
     int send_next;
 } DynamicMask;
 
@@ -33,11 +33,11 @@ void dm_intervals(DynamicMask* dm);
 int dm_done(DynamicMask* dm, char** files);
 
 HITS_TRACK* dm_load_track(HITS_DB* db, DynamicMask* dm, char* trackName);
-     
+
 int dm_send_block_done(DynamicMask* dm, int run,
-                       HITS_DB* blocka, char* namea, 
+                       HITS_DB* blocka, char* namea,
                        HITS_DB* blockb, char* nameb);
-                       
+
 void dm_send_next(DynamicMask* dm, int run,
-                  HITS_DB* blocka, char* namea, 
+                  HITS_DB* blocka, char* namea,
                   HITS_DB* blockb, char* nameb);

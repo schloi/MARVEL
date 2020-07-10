@@ -96,6 +96,7 @@ AC_CHECK_FUNCS([bzero floor ftruncate gethostbyname inet_ntoa memmove memset mkd
 AC_CONFIG_FILES([Makefile
                  Makefile.settings
                  corrector/Makefile
+                 dalign_v2/Makefile
                  dalign/Makefile
                  db/Makefile
                  hic/Makefile

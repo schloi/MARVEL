@@ -14,7 +14,7 @@ export VERSION
 
 include Makefile.settings
 
-MODULES = corrector dalign db lib.python scripts scrub touring utils msa patcher experimental hic
+MODULES = corrector dalign dalign_v2 db lib.python scripts scrub touring utils msa patcher experimental hic
 
 .PHONY: all
 all: prebuild

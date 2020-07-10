@@ -52,7 +52,7 @@ def e_apply_attributes(g, aname, avalues):
 
 def v_apply_attributes(g, aname, avalues):
     for (n, val) in avalues.items():
-        if n in g.node:
+        if n in g.nodes:
             g.nodes[n][aname] = val
 
 def e_source(e):

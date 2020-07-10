@@ -1,7 +1,8 @@
 
 include ../Makefile.settings
 
-ALL = 
+# ALL = assign dump_matrix format_links insert misjoins rewrite scaffold_graph scaffold triangles
+ALL = assign dump_matrix format_links insert misjoins rewrite scaffold_graph
 
 all: $(ALL)
 
@@ -10,4 +11,29 @@ install: all
 
 clean:
 	rm -rf $(ALL) *.dSYM
+
+dump_matrix: Makefile dump_matrix.c hashmap.c hashmap.h
+	$(CC) $(CFLAGS) -o dump_matrix dump_matrix.c hashmap.c $(CLIBS)
+
+format_links: Makefile format_links.c hashmap.c hashmap.h
+	$(CC) $(CFLAGS) -o format_links format_links.c hashmap.c $(CLIBS)
+
+misjoins: Makefile misjoins.c hashmap.c hashmap.h
+	$(CC) $(CFLAGS) -o misjoins misjoins.c hashmap.c $(CLIBS)
+
+rewrite: Makefile rewrite.c hashmap.c hashmap.h
+	$(CC) $(CFLAGS) -o rewrite rewrite.c hashmap.c $(CLIBS)
+
+scaffold: Makefile scaffold.c hashmap.c hashmap.h graphviz.h graphviz.c
+	$(CC) $(CFLAGS) -o scaffold scaffold.c hashmap.c graphviz.c -lpthread -lm $(CLIBS)
+
+assign: Makefile assign.c hashmap.c hashmap.h graphviz.h graphviz.c cycle.h cycle.c
+	$(CC) $(CFLAGS) -o assign assign.c hashmap.c graphviz.c cycle.c -lpthread $(CLIBS)
+
+insert: Makefile insert.c hashmap.c hashmap.h graphviz.h graphviz.c cycle.h cycle.c
+	$(CC) $(CFLAGS) -o insert insert.c hashmap.c graphviz.c cycle.c -lpthread $(CLIBS)
+
+scaffold_graph: Makefile scaffold_graph.c hashmap.c hashmap.h graphviz.h graphviz.c cycle.h cycle.c
+	$(CC) $(CFLAGS) -o scaffold_graph scaffold_graph.c hashmap.c graphviz.c cycle.c -lpthread $(CLIBS)
+
 

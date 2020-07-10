@@ -485,7 +485,6 @@ static int handler_update_anno( void* _ctx, Overlap* ovls, int novl )
     track_data* trim_data = actx->trim_data;
 
     int a = ovls->aread;
-    printf("a = %d\n", a);
 
     track_anno* annoq = actx->q_track->anno;
     track_data* dataq = actx->q_track->data;
@@ -558,10 +557,6 @@ static int handler_update_anno( void* _ctx, Overlap* ovls, int novl )
         printf( " ... UPDATED %5d..%5d\n\n", tb_new, te_new );
 #endif
     }
-
-    printf("%llu %llu %d\n", trim_anno[2948], actx->tcur, a);
-
-    if ( trim_anno[2948] ) return 0;
 
     trim_data[ actx->tcur++ ] = tb_new;
     trim_data[ actx->tcur++ ] = te_new;

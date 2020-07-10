@@ -1,7 +1,7 @@
 
 include ../Makefile.settings
 
-ALL = FAsort \
+ALL = DBmerstats FAsort \
 	  LAcartoons LAcheck LAcount LAindex LAmerge LAshow LAstats \
 	  TKadjust TKcombine TKmerge TKshow \
 	  txt2track
@@ -25,6 +25,9 @@ install: all
 
 clean:
 	rm -rf $(ALL) *.dSYM
+
+DBmerstats: DBmerstats.c $(PATH_LIB)/utils.h $(PATH_LIB)/utils.c $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_DB)/QV.c
+	$(CC) $(CFLAGS) -o DBmerstats DBmerstats.c $(PATH_LIB)/utils.c $(PATH_DB)/DB.c $(PATH_DB)/QV.c $(CLIBS)
 
 FAsort: FAsort.c $(PATH_LIB)/utils.h $(PATH_LIB)/utils.c
 	$(CC) $(CFLAGS) -o FAsort FAsort.c $(PATH_LIB)/utils.c $(CLIBS)

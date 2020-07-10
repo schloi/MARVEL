@@ -1682,7 +1682,7 @@ char* getDir( int RUN_ID, int subjectID ) // HEIDELBERG_MODIFICATION
         return out;
     }
 
-    sprintf( out, "d%03d_%05d", RUN_ID, subjectID );
+    sprintf( out, "%03d_%05d", RUN_ID, subjectID );
 
     return out;
 }

@@ -8,8 +8,6 @@
  *
  *  Author  :  MARVEL Team
  *
- *  Date    :  November 2014
- *
  *******************************************************************************************/
 
 #include <assert.h>
@@ -36,7 +34,7 @@
 // switches
 
 #define VERBOSE
-#undef DEBUG_STITCH
+#define DEBUG_STITCH
 
 // macros
 
@@ -110,7 +108,6 @@ static void create_pass_through_points( StitchContext* ctx, ovl_trace* trace )
                     aprev = a;
                     bprev = b;
 
-                    // printf(" a(%4dx%4d %3d %3d %3d)", a, b, diffs, matches, tcur);
                     diffs = matches = 0;
                 }
             }
@@ -335,6 +332,11 @@ static int stitch_handler( void* _ctx, Overlap* ovl, int novl )
 
             bb2 = ovl[ k ].path.bbpos;
             be2 = ovl[ k ].path.bepos;
+
+            if ( ab1 + ctx->twidth >= ab2 )
+            {
+                continue;
+            }
 
             if ( abs( ae1 - ab2 ) < fuzz && abs( be1 - bb2 ) < fuzz && abs( ( ae1 - ab2 ) - ( be1 - bb2 ) ) < fuzz ) // added 2016-02-17
             {

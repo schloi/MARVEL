@@ -5,7 +5,7 @@ bindir         = @bindir@
 
 include ../Makefile.settings
 
-ALL = LAcorrect 
+ALL = LAcorrect
 
 all: $(ALL)
 

@@ -14,7 +14,7 @@
 
 #define SIZE_IO_BUFFER ( 1 * 1024 * 1024 )
 
-#define SEEK_PAST_TRACE
+// #define SEEK_PAST_TRACE
 
 static char* lasidx_filename(const char* pathLas)
 {
@@ -114,7 +114,7 @@ lasidx* lasidx_create(HITS_DB* db, const char* pathLas)
     return NULL;
     */
 
-#ifdef SEEK_PAST_TRACE
+#ifndef SEEK_PAST_TRACE
     size_t tmax = 1000;
     ovl_trace* trace = malloc(sizeof(ovl_trace) * tmax);
 #endif
@@ -136,7 +136,7 @@ lasidx* lasidx_create(HITS_DB* db, const char* pathLas)
         if ( ovl.path.tlen > tmax )
         {
             tmax = ovl.path.tlen * 1.2 + 1000;
-            trace = realloc( sizeof(ovl_trace) * tmax );
+            trace = realloc( trace, sizeof(ovl_trace) * tmax );
         }
 
         ovl.path.trace = trace;

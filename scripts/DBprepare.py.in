@@ -97,10 +97,8 @@ def prepare_db(args):
     opts = " --dal {numBlocks}".format(numBlocks = numBlocks)
     if jobOrder == True:
         opts += " -X"
-    opts += " -j {threads} -I -v -k {daligner_k} -t {daligner_t} -e {daligner_e:.2f} -r {runid} {tracks} -o {db} {db}".format(
-                daligner_t = t, daligner_e = marvel.config.DEF_DALIGNER_E,
-                daligner_k = marvel.config.DEF_DALIGNER_K,
-                threads = threads, runid = runid, tracks = tracks, db = db_name)
+    opts += " -j {threads} -I -v -t {daligner_t} -r {runid} {tracks} -o {db} {db}".format(
+                daligner_t = t, threads = threads, runid = runid, tracks = tracks, db = db_name)
     cmd = os.path.join(root, "HPCdaligner") + opts
     subprocess.call(cmd, shell = True)
 
