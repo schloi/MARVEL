@@ -1960,17 +1960,6 @@ static void score_node( ScaffoldContext* ctx, uint64_t nid, uint8_t active_only 
         double score_l = ( (double)( links[ EDGE_LL ] + links[ EDGE_LR ] ) ) / ( lensource * lentarget );
         double score_r = ( (double)( links[ EDGE_RL ] + links[ EDGE_RR ] ) ) / ( lensource * lentarget );
 
-        // TODO: XXXX
-
-        /*
-        if ( MAX( lensource, lentarget ) > 1 * 1000 * 1000 )
-            if ( ctx->minlinks * MAX( lensource, lentarget ) / ( 1.0 * 1000 * 1000 ) > SUM4( links ) )
-            {
-                score_l = 0.0;
-                score_r = 0.0;
-            }
-        */
-
 #ifdef SCORING_DEBUG_OUTPUT
         printf( "  --> %s %d %d %d %d L %e R %e\n", target->seqname, links[ 0 ], links[ 1 ], links[ 2 ], links[ 3 ], score_l, score_r );
 #endif

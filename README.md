@@ -28,6 +28,7 @@ The build system is based on automake/conf and build utility scripts are located
     db/             fork of the DB module underlying Gene's daligner package
     docs/           documentation
     examples/       example datasets and assembly scripts
+    hic/            various tools for dealing with Hi-C data
     lib/            utility functions
     lib.ext/        utility functions based on external code
     lib.python/     Python modules for interacting with the assembler's data files

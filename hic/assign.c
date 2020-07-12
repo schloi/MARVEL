@@ -22,6 +22,7 @@
 // command line defaults
 
 #define DEF_ARG_S 20000
+#define DEF_ARG_N 10
 
 // toggles
 
@@ -50,6 +51,7 @@ struct AssignContext
     uint16_t minseqlen; // minimum sequence length
     char* seqnameprefix;
     char* path_scaffold;
+    uint16_t topn;      // output the topn interactors
 
     // sequences
 
@@ -624,6 +626,7 @@ static void best_interactors( AssignContext* ctx, FILE* fout )
     ScafGraphNode* sgnodes = ctx->sgnodes;
     uint64_t* offsets = ctx->offsets_links;
     uint64_t* links = ctx->links;
+    uint64_t topn = ctx->topn;
 
     uint64_t* counts = calloc(nsgnodes * 2, sizeof(uint64_t));
 
@@ -673,11 +676,10 @@ static void best_interactors( AssignContext* ctx, FILE* fout )
 
         qsort(counts, ncounts / 2, sizeof(uint64_t) * 2, cmp_uint64_counts);
 
-        // fprintf(fout, "%" PRIu64 " %s %" PRIu64 , sgnode->len, sgnode->seqname, total);
         fprintf(fout, "%s %" PRIu64 , sgnode->seqname, total);
 
         uint64_t j = 0;
-        while ( ncounts > 0 && j < 10 )
+        while ( ncounts > 0 && j < topn )
         {
             ncounts -= 2;
             uint64_t id = counts[ncounts];
@@ -710,6 +712,7 @@ int main( int argc, char* argv[] )
     // process arguments
 
     ctx.minseqlen     = DEF_ARG_S;
+    ctx.topn = DEF_ARG_N;
 
     char* path_fasta     = NULL;
     char* path_out = NULL;
@@ -719,10 +722,14 @@ int main( int argc, char* argv[] )
     uint64_t nlinks = 0;
 
     int c;
-    while ( ( c = getopt( argc, argv, "f:L:o:s:" ) ) != -1 )
+    while ( ( c = getopt( argc, argv, "f:L:n:o:s:" ) ) != -1 )
     {
         switch ( c )
         {
+            case 'n':
+                ctx.topn = strtol(optarg, NULL, 10);
+                break;
+
             case 'f':
                 path_fasta = optarg;
                 break;
@@ -760,6 +767,16 @@ int main( int argc, char* argv[] )
                 usage( argv[ 0 ] );
                 exit( 1 );
         }
+    }
+
+    // arbitrary cutoffs
+    // need at least a bunch of interactors to assign to clusters
+    // too many are just useless though
+    if ( ctx.topn < 5 || ctx.topn > 20 )
+    {
+        fprintf( stderr, "number of interactors has arbitrarily been restricted to [5, 20]\n" );
+        usage( argv[0] );
+        exit(1);
     }
 
     if ( !nlinks )
