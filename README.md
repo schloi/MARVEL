@@ -3,6 +3,8 @@
 
 Here we go, a fully working GPU/CUDA-based overlapper for blazing fast alignments. The code has been sitting on my laptop for a while now and since I most likely won't write a paper on the GPU-based alignment code, here it is for your enjoyment.
 
+PS. the build system switched to cmake. I will update the build instructions below when I get around to it.
+
 # The MARVEL Assembler
 
 MARVEL consists of a set of tools that facilitate the overlapping, patching, correction and assembly of noisy (not so noisy ones as well) long reads.
