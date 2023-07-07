@@ -1,16 +1,3 @@
-/*******************************************************************************************
- *
- *  Compressed data base module.  Auxiliary routines to open and manipulate a data base for
- *    which the sequence and read information are separated into two separate files, and the
- *    sequence is compressed into 2-bits for each base.  Support for tracks of additional
- *    information, and trimming according to the current partition.  Eventually will also
- *    support compressed quality information.
- *
- *  Author :  Gene Myers
- *  Date   :  July 2013
- *  Revised:  April 2014
- *
- ********************************************************************************************/
 
 #include <ctype.h>
 #include <dirent.h>
@@ -44,7 +31,7 @@ char Ebuffer[ 1000 ];
 
 #endif
 
-void* Malloc( int64 size, char* mesg )
+void* Malloc( int64 size, const char* mesg )
 {
     void* p;
 
@@ -58,7 +45,7 @@ void* Malloc( int64 size, char* mesg )
     return ( p );
 }
 
-void* Realloc( void* p, int64 size, char* mesg )
+void* Realloc( void* p, int64 size, const char* mesg )
 {
     if ( ( p = realloc( p, size ) ) == NULL )
     {
@@ -70,7 +57,7 @@ void* Realloc( void* p, int64 size, char* mesg )
     return ( p );
 }
 
-char* Strdup( char* name, char* mesg )
+char* Strdup( const char* name, const char* mesg )
 {
     char* s;
 
@@ -114,7 +101,7 @@ char* PathTo( char* name )
     return ( path );
 }
 
-char* Root( char* name, char* suffix )
+char* Root( char* name, const char* suffix )
 {
     char *path, *find, *dot;
     int epos;
@@ -151,7 +138,7 @@ char* Root( char* name, char* suffix )
     return ( path );
 }
 
-char* Catenate( char* path, char* sep, char* root, char* suffix )
+char* Catenate( char* path, const char* sep, char* root, const char* suffix )
 {
     static char* cat = NULL;
     static int max   = -1;

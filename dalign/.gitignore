@@ -1,4 +1,3 @@
-Makefile
 HPCdaligner
 LAcat
 LAsort
@@ -6,3 +5,4 @@ LAsplit
 daligner
 DMctl
 DMserver
+libmarvl-align.a

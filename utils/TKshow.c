@@ -117,7 +117,7 @@ int main(int argc, char* argv[])
 
             default:
                 usage();
-                break;
+                exit(1);
         }
     }
 

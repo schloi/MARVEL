@@ -2,8 +2,6 @@
  *
  *  Reassign repeat intervals based on overlaps and an existing repeat annotation
  *
- *  Date   :  January 2016
- *
  *  Author :  MARVEL Team
  *
  *******************************************************************************************/

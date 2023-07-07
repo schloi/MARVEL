@@ -34,7 +34,7 @@
 // switches
 
 #define VERBOSE
-#define DEBUG_STITCH
+#undef DEBUG_STITCH
 
 // macros
 
@@ -305,6 +305,16 @@ static int stitch_handler( void* _ctx, Overlap* ovl, int novl )
     }
 
     ensure_trace( ctx, tsum * 4 );
+
+    for ( i = 0; i < novl; i++ )
+    {
+        if ( ! trace_valid( ovl + i ) )
+        {
+            ovl[i].flags |= OVL_DISCARD;
+
+            printf("invalid\n");
+        }
+    }
 
     for ( i = 0; i < novl; i++ )
     {

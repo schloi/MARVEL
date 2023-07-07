@@ -1,6 +1,6 @@
 /*******************************************************************************************
  *
- * ... TODO
+ * TODO: break resolution strategies... side with "longest alignment", "most read-mass", ...
  *
  *******************************************************************************************/
 
@@ -36,9 +36,7 @@
 // switches
 
 #define VERBOSE
-
-#define DEBUG_GAPS
-#undef DEBUG_CGAPS
+#undef DEBUG_GAPS
 
 // constants
 
@@ -596,6 +594,11 @@ static int gaps_handler( void* _ctx, Overlap* ovl, int novl )
         int i;
         for ( i = 0; i < novl; i++ )
         {
+            if ( ovl[i].flags & OVL_DISCARD )
+            {
+                continue ;
+            }
+
             trim_overlap( ctx->trim, ovl + i );
         }
     }

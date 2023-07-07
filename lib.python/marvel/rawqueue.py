@@ -7,7 +7,6 @@ import subprocess
 import time
 import shlex
 import glob
-import types
 import logging
 
 import marvel.config as mconfig
@@ -80,7 +79,7 @@ class rawqueue(object):
         for nBlock in range(first, last):
             bargs = self.assign_block_arguments(nBlock, args)
 
-            arrTask.append( ( self.replace_variables(strCmd, block = nBlock, **bargs), threads ) )
+            arrTask.append( ( self.replace_variables(strCmd, threads = threads, block = nBlock, **bargs), threads ) )
         self.queue.append( arrTask )
 
         return len(self.queue) - 1
@@ -89,7 +88,7 @@ class rawqueue(object):
         if self.disable_add:
             return None
 
-        self.queue.append( [ ( self.replace_variables(strCmd, **args), threads ) ] )
+        self.queue.append( [ ( self.replace_variables(strCmd, threads = threads, **args), threads ) ] )
 
         return len(self.queue) - 1
 
@@ -311,7 +310,7 @@ class rawqueue(object):
                 if strCmd[0] == '!':
                     arrCmd[0] = arrCmd[0][1:]
 
-                    arrProcesses.append( (subprocess.Popen( " ".join(arrCmd),
+                    arrProcesses.append( (subprocess.Popen( strCmd[1:],
                                                             bufsize = -1,
                                                             stdout = DEVNULL, stderr = subprocess.STDOUT,
                                                             shell = True),

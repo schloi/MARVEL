@@ -126,7 +126,10 @@ void rl_load(Read_Loader* rl, int* rids, int nrids)
     size_t nbuf = BLOCK_BUFFER;
     char* buffer = malloc(nbuf);
 
+#ifdef DEBUG_RL
     uint64 rb = 0;
+#endif // DEBUG_RL
+
     uint64 re = 0;
     size_t offb = 0;
     size_t offe = 0;
@@ -179,7 +182,10 @@ void rl_load(Read_Loader* rl, int* rids, int nrids)
             currid++;
         }
 
+#ifdef DEBUG_RL
         rb = re;
+#endif // DEBUG_RL
+
         offb = offe;
     }
 

@@ -1,0 +1,1 @@
+/usr/bin/gcc -O3 -DNDEBUG CMakeFiles/HPCdaligner.dir/HPCdaligner.c.o CMakeFiles/HPCdaligner.dir/__/lib/tracks.c.o CMakeFiles/HPCdaligner.dir/__/lib/compression.c.o ../db/CMakeFiles/marvl-db.dir/DB.c.o ../db/CMakeFiles/marvl-db.dir/QV.c.o ../db/CMakeFiles/marvl-db.dir/FA2x.c.o ../db/CMakeFiles/marvl-db.dir/fileUtils.c.o -o HPCdaligner  /usr/lib/x86_64-linux-gnu/libz.so -lm 

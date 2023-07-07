@@ -503,12 +503,6 @@ int main( int argc, char* argv[] )
 
         pass( pctx, stats_handler );
 
-        int last = 0;
-        if ( b == blocks )
-        {
-            last = 1;
-        }
-
         // cleanup
 
         pass_free( pctx );

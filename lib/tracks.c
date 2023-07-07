@@ -213,10 +213,12 @@ int track_delete( HITS_DB* db, const char* track )
         suc = 0;
     }
 
+    free(root_track);
+
     return suc;
 }
 
-void track_write( HITS_DB* db, const char* track, int block, track_anno* anno, track_data* data, uint64_t dlen )
+int track_write( HITS_DB* db, const char* track, int block, track_anno* anno, track_data* data, uint64_t dlen )
 {
     uint64_t tlen = DB_NREADS( db );
 
@@ -232,7 +234,8 @@ void track_write( HITS_DB* db, const char* track, int block, track_anno* anno, t
     if ( afile == NULL )
     {
         fprintf( stderr, "failed to open %s\n", path_track );
-        return;
+        free(path_track);
+        return 0;
     }
 
     track_anno_header ahead;
@@ -245,7 +248,8 @@ void track_write( HITS_DB* db, const char* track, int block, track_anno* anno, t
     if ( fwrite( &ahead, sizeof( track_anno_header ), 1, afile ) != 1 )
     {
         fprintf( stderr, "failed to write track header\n" );
-        return;
+        free(path_track);
+        return 0;
     }
 
     void* canno;
@@ -256,7 +260,7 @@ void track_write( HITS_DB* db, const char* track, int block, track_anno* anno, t
     if ( fwrite( canno, clen, 1, afile ) != 1 )
     {
         fprintf( stderr, "failed to write track data offsets\n" );
-        return;
+        return 0;
     }
 
     ahead.clen = clen;
@@ -274,7 +278,8 @@ void track_write( HITS_DB* db, const char* track, int block, track_anno* anno, t
         if ( dfile == NULL )
         {
             fprintf( stderr, "failed to open %s\n", path_track );
-            return;
+            free(path_track);
+            return 0;
         }
 
         compress_chunks( data, sizeof( track_data ) * dlen, &canno, &clen );
@@ -282,7 +287,8 @@ void track_write( HITS_DB* db, const char* track, int block, track_anno* anno, t
         if ( fwrite( canno, clen, 1, dfile ) != 1 )
         {
             fprintf( stderr, "failed to write track data of %" PRIu64 " (%" PRIu64 ") bytes\n", sizeof( track_data ) * dlen, clen );
-            return;
+            free(path_track);
+            return 0;
         }
 
         ahead.cdlen = clen;
@@ -302,10 +308,12 @@ void track_write( HITS_DB* db, const char* track, int block, track_anno* anno, t
     if ( fwrite( &ahead, sizeof( track_anno_header ), 1, afile ) != 1 )
     {
         fprintf( stderr, "failed to write track header\n" );
-        return;
+        return 0;
     }
 
     fclose( afile );
+
+    return 1;
 }
 
 static void write_track( HITS_DB* db, const char* track, int block, track_header_len tlen, track_anno* anno, track_data* data, uint64_t dlen )
@@ -322,6 +330,7 @@ static void write_track( HITS_DB* db, const char* track, int block, track_header
     if ( fileTrack == NULL )
     {
         fprintf( stderr, "failed to open %s\n", path_track );
+        free(path_track);
         return;
     }
 
@@ -330,18 +339,21 @@ static void write_track( HITS_DB* db, const char* track, int block, track_header
     if ( fwrite( &tlen, sizeof( track_header_len ), 1, fileTrack ) != 1 )
     {
         fprintf( stderr, "failed to write track header\n" );
+        free(path_track);
         return;
     }
 
     if ( fwrite( &tsize, sizeof( track_header_size ), 1, fileTrack ) != 1 )
     {
         fprintf( stderr, "failed to write track header\n" );
+        free(path_track);
         return;
     }
 
     if ( fwrite( anno, sizeof( track_anno ), tlen + 1, fileTrack ) != ( size_t )( tlen + 1 ) )
     {
         fprintf( stderr, "failed to write track data offsets\n" );
+        free(path_track);
         return;
     }
 
@@ -354,12 +366,14 @@ static void write_track( HITS_DB* db, const char* track, int block, track_header
     if ( ( fileTrack = fopen( path_track, "w" ) ) == NULL )
     {
         fprintf( stderr, "failed to open %s\n", path_track );
+        free(path_track);
         return;
     }
 
     if ( fwrite( data, sizeof( track_data ), dlen, fileTrack ) != dlen )
     {
         fprintf( stderr, "failed to write track data\n" );
+        free(path_track);
         return;
     }
 

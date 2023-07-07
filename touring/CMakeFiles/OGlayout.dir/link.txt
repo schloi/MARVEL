@@ -1,0 +1,1 @@
+/usr/bin/gcc-12 -O3 -DNDEBUG CMakeFiles/OGlayout.dir/OGlayout.c.o -o OGlayout  -lm 

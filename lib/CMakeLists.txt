@@ -1,0 +1,23 @@
+
+ADD_LIBRARY(
+    marvl-lib
+    OBJECT
+    dmask.h
+    dmask.c
+    oflags.h
+    oflags.c
+    pass.h
+    pass.c
+    tracks.h
+    tracks.c
+    compression.h
+    compression.c
+    read_loader.h
+    read_loader.c
+    trim.h
+    trim.c
+    utils.h
+    utils.c
+    iseparator.h
+    iseparator.c
+)

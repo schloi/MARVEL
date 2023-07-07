@@ -1,0 +1,33 @@
+
+import sys
+import os
+import multiprocessing
+
+# binary/scripts paths
+
+PATH_BASE    = "/usr/local"
+PATH_BIN     = os.path.join(PATH_BASE, "bin")
+PATH_SCRIPTS = os.path.join(PATH_BASE, "scripts")
+
+# defaults used for the binaries in various scripts
+
+DEF_DALIGNER_T_MIN = 20
+DEF_DALIGNER_T_MAX = 100
+
+DEF_DALIGNER_K = 14
+DEF_DALIGNER_E = 0.7
+DEF_DALIGNER_T = 100
+DEF_DALIGNER_J = min(4, multiprocessing.cpu_count())
+
+DEF_DBSPLIT_S  = 200
+DEF_DBSPLIT_X  = 2000
+
+# min python version requirements
+
+def has_recent_python():
+    if sys.version_info.major in (1, 2) or \
+       sys.version_info.major == 3 and sys.version_info.minor < 5:
+       print("Python version 3.5+ required")
+       return False
+
+    return True

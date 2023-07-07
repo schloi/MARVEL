@@ -1,0 +1,442 @@
+[
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/corrector",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAcorrect.dir/LAcorrect.c.o -c /home/schloi/devel/MARVEL_dev/corrector/LAcorrect.c",
+  "file": "/home/schloi/devel/MARVEL_dev/corrector/LAcorrect.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/corrector",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAcorrect.dir/consensus.c.o -c /home/schloi/devel/MARVEL_dev/corrector/consensus.c",
+  "file": "/home/schloi/devel/MARVEL_dev/corrector/consensus.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/cuda",
+  "command": "/usr/bin/nvcc -forward-unknown-to-host-compiler  -isystem=/home/schloi/devel/MARVEL_dev/.  -use_fast_math --default-stream per-thread -Xptxas=-v --generate-code=arch=compute_52,code=[compute_52,sm_52] --generate-code=arch=compute_60,code=[compute_60,sm_60] --generate-code=arch=compute_61,code=[compute_61,sm_61] --generate-code=arch=compute_70,code=[compute_70,sm_70] --generate-code=arch=compute_75,code=[compute_75,sm_75] -std=c++11 -x cu -c /home/schloi/devel/MARVEL_dev/cuda/tracepoints/stream-interface.cu -o CMakeFiles/cuda-tracepoints.dir/tracepoints/stream-interface.cu.o",
+  "file": "/home/schloi/devel/MARVEL_dev/cuda/tracepoints/stream-interface.cu"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/cuda",
+  "command": "/usr/bin/nvcc -forward-unknown-to-host-compiler  -isystem=/home/schloi/devel/MARVEL_dev/.  -use_fast_math --default-stream per-thread -Xptxas=-v --generate-code=arch=compute_52,code=[compute_52,sm_52] --generate-code=arch=compute_60,code=[compute_60,sm_60] --generate-code=arch=compute_61,code=[compute_61,sm_61] --generate-code=arch=compute_70,code=[compute_70,sm_70] --generate-code=arch=compute_75,code=[compute_75,sm_75] -std=c++11 -x cu -c /home/schloi/devel/MARVEL_dev/cuda/tracepoints/tracepoints.cu -o CMakeFiles/cuda-tracepoints.dir/tracepoints/tracepoints.cu.o",
+  "file": "/home/schloi/devel/MARVEL_dev/cuda/tracepoints/tracepoints.cu"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/cudalign",
+  "command": "/usr/bin/g++  -I/home/schloi/devel/MARVEL_dev/build/src -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -fopenmp -O2 -DNDEBUG -std=gnu++11 -o CMakeFiles/cudaligner.dir/cuda-aligner.cpp.o -c /home/schloi/devel/MARVEL_dev/cudalign/cuda-aligner.cpp",
+  "file": "/home/schloi/devel/MARVEL_dev/cudalign/cuda-aligner.cpp"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/cudalign",
+  "command": "/usr/bin/g++  -I/home/schloi/devel/MARVEL_dev/build/src -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -fopenmp -O2 -DNDEBUG -std=gnu++11 -o CMakeFiles/cudaligner.dir/debug.cpp.o -c /home/schloi/devel/MARVEL_dev/cudalign/debug.cpp",
+  "file": "/home/schloi/devel/MARVEL_dev/cudalign/debug.cpp"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/cudalign",
+  "command": "/usr/bin/g++  -I/home/schloi/devel/MARVEL_dev/build/src -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -fopenmp -O2 -DNDEBUG -std=gnu++11 -o CMakeFiles/cudaligner.dir/cuda-match-filter.cpp.o -c /home/schloi/devel/MARVEL_dev/cudalign/cuda-match-filter.cpp",
+  "file": "/home/schloi/devel/MARVEL_dev/cudalign/cuda-match-filter.cpp"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/cudalign",
+  "command": "/usr/bin/nvcc -forward-unknown-to-host-compiler  -I/home/schloi/devel/MARVEL_dev/build/src -isystem=/home/schloi/devel/MARVEL_dev/.  --generate-code=arch=compute_52,code=[compute_52,sm_52] --generate-code=arch=compute_60,code=[compute_60,sm_60] --generate-code=arch=compute_61,code=[compute_61,sm_61] --generate-code=arch=compute_70,code=[compute_70,sm_70] --generate-code=arch=compute_75,code=[compute_75,sm_75] -std=c++11 -x cu -c /home/schloi/devel/MARVEL_dev/cuda/resource-manager.cu -o CMakeFiles/cudaligner.dir/__/cuda/resource-manager.cu.o",
+  "file": "/home/schloi/devel/MARVEL_dev/cuda/resource-manager.cu"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/cudalign",
+  "command": "/usr/bin/gcc  -I/home/schloi/devel/MARVEL_dev/build/src -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/cudaligner.dir/filter.c.o -c /home/schloi/devel/MARVEL_dev/cudalign/filter.c",
+  "file": "/home/schloi/devel/MARVEL_dev/cudalign/filter.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/cudalign",
+  "command": "/usr/bin/gcc  -I/home/schloi/devel/MARVEL_dev/build/src -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/cudaligner.dir/align.c.o -c /home/schloi/devel/MARVEL_dev/cudalign/align.c",
+  "file": "/home/schloi/devel/MARVEL_dev/cudalign/align.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/cudalign",
+  "command": "/usr/bin/gcc  -I/home/schloi/devel/MARVEL_dev/build/src -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/cudaligner.dir/radix.c.o -c /home/schloi/devel/MARVEL_dev/cudalign/radix.c",
+  "file": "/home/schloi/devel/MARVEL_dev/cudalign/radix.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/cudalign",
+  "command": "/usr/bin/gcc  -I/home/schloi/devel/MARVEL_dev/build/src -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/cudaligner.dir/ovlbuffer.c.o -c /home/schloi/devel/MARVEL_dev/cudalign/ovlbuffer.c",
+  "file": "/home/schloi/devel/MARVEL_dev/cudalign/ovlbuffer.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/cudalign",
+  "command": "/usr/bin/gcc  -I/home/schloi/devel/MARVEL_dev/build/src -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/cudaligner.dir/__/lib/tracks.c.o -c /home/schloi/devel/MARVEL_dev/lib/tracks.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/tracks.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/cudalign",
+  "command": "/usr/bin/gcc  -I/home/schloi/devel/MARVEL_dev/build/src -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/cudaligner.dir/__/lib/compression.c.o -c /home/schloi/devel/MARVEL_dev/lib/compression.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/compression.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/cudalign",
+  "command": "/usr/bin/gcc  -I/home/schloi/devel/MARVEL_dev/build/src -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/cudaligner.dir/__/lib/read_loader.c.o -c /home/schloi/devel/MARVEL_dev/lib/read_loader.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/read_loader.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-align.dir/align.c.o -c /home/schloi/devel/MARVEL_dev/dalign/align.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign/align.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/daligner.dir/daligner.c.o -c /home/schloi/devel/MARVEL_dev/dalign/daligner.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign/daligner.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/daligner.dir/filter.c.o -c /home/schloi/devel/MARVEL_dev/dalign/filter.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign/filter.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-align2.dir/align.c.o -c /home/schloi/devel/MARVEL_dev/dalign2/align.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign2/align.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/daligner2.dir/daligner.c.o -c /home/schloi/devel/MARVEL_dev/dalign2/daligner.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign2/daligner.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/daligner2.dir/filter.c.o -c /home/schloi/devel/MARVEL_dev/dalign2/filter.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign2/filter.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/daligner2.dir/filter_reporter_cpu.c.o -c /home/schloi/devel/MARVEL_dev/dalign2/filter_reporter_cpu.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign2/filter_reporter_cpu.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/daligner2.dir/ovlbuffer.c.o -c /home/schloi/devel/MARVEL_dev/dalign2/ovlbuffer.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign2/ovlbuffer.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/daligner2.dir/align.c.o -c /home/schloi/devel/MARVEL_dev/dalign2/align.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign2/align.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/daligner2.dir/radix.c.o -c /home/schloi/devel/MARVEL_dev/dalign2/radix.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign2/radix.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/daligner2.dir/__/lib/pass.c.o -c /home/schloi/devel/MARVEL_dev/lib/pass.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/pass.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/daligner2.dir/__/lib/tracks.c.o -c /home/schloi/devel/MARVEL_dev/lib/tracks.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/tracks.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/daligner2.dir/__/lib/compression.c.o -c /home/schloi/devel/MARVEL_dev/lib/compression.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/compression.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/HPCdaligner.dir/HPCdaligner.c.o -c /home/schloi/devel/MARVEL_dev/dalign2/HPCdaligner.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign2/HPCdaligner.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/HPCdaligner.dir/__/lib/tracks.c.o -c /home/schloi/devel/MARVEL_dev/lib/tracks.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/tracks.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/HPCdaligner.dir/__/lib/compression.c.o -c /home/schloi/devel/MARVEL_dev/lib/compression.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/compression.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAcat.dir/LAcat.c.o -c /home/schloi/devel/MARVEL_dev/dalign2/LAcat.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign2/LAcat.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAsort.dir/LAsort.c.o -c /home/schloi/devel/MARVEL_dev/dalign2/LAsort.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign2/LAsort.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/dalign2",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAsplit.dir/LAsplit.c.o -c /home/schloi/devel/MARVEL_dev/dalign2/LAsplit.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign2/LAsplit.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/db",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-db.dir/DB.c.o -c /home/schloi/devel/MARVEL_dev/db/DB.c",
+  "file": "/home/schloi/devel/MARVEL_dev/db/DB.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/db",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-db.dir/QV.c.o -c /home/schloi/devel/MARVEL_dev/db/QV.c",
+  "file": "/home/schloi/devel/MARVEL_dev/db/QV.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/db",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-db.dir/FA2x.c.o -c /home/schloi/devel/MARVEL_dev/db/FA2x.c",
+  "file": "/home/schloi/devel/MARVEL_dev/db/FA2x.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/db",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-db.dir/fileUtils.c.o -c /home/schloi/devel/MARVEL_dev/db/fileUtils.c",
+  "file": "/home/schloi/devel/MARVEL_dev/db/fileUtils.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/db",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/FA2db.dir/FA2db.c.o -c /home/schloi/devel/MARVEL_dev/db/FA2db.c",
+  "file": "/home/schloi/devel/MARVEL_dev/db/FA2db.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/db",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/DB2fa.dir/DB2fa.c.o -c /home/schloi/devel/MARVEL_dev/db/DB2fa.c",
+  "file": "/home/schloi/devel/MARVEL_dev/db/DB2fa.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/db",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/DB2qv.dir/DB2qv.c.o -c /home/schloi/devel/MARVEL_dev/db/DB2qv.c",
+  "file": "/home/schloi/devel/MARVEL_dev/db/DB2qv.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/db",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/DBrm.dir/DBrm.c.o -c /home/schloi/devel/MARVEL_dev/db/DBrm.c",
+  "file": "/home/schloi/devel/MARVEL_dev/db/DBrm.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/db",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/DBsplit.dir/DBsplit.c.o -c /home/schloi/devel/MARVEL_dev/db/DBsplit.c",
+  "file": "/home/schloi/devel/MARVEL_dev/db/DBsplit.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/db",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/DBstats.dir/DBstats.c.o -c /home/schloi/devel/MARVEL_dev/db/DBstats.c",
+  "file": "/home/schloi/devel/MARVEL_dev/db/DBstats.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/db",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/DBstats.dir/__/lib/utils.c.o -c /home/schloi/devel/MARVEL_dev/lib/utils.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/utils.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/db",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/DBshow.dir/DBshow.c.o -c /home/schloi/devel/MARVEL_dev/db/DBshow.c",
+  "file": "/home/schloi/devel/MARVEL_dev/db/DBshow.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/db",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/DBdust.dir/DBdust.c.o -c /home/schloi/devel/MARVEL_dev/db/DBdust.c",
+  "file": "/home/schloi/devel/MARVEL_dev/db/DBdust.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/lib",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-lib.dir/dmask.c.o -c /home/schloi/devel/MARVEL_dev/lib/dmask.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/dmask.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/lib",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-lib.dir/oflags.c.o -c /home/schloi/devel/MARVEL_dev/lib/oflags.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/oflags.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/lib",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-lib.dir/pass.c.o -c /home/schloi/devel/MARVEL_dev/lib/pass.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/pass.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/lib",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-lib.dir/tracks.c.o -c /home/schloi/devel/MARVEL_dev/lib/tracks.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/tracks.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/lib",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-lib.dir/compression.c.o -c /home/schloi/devel/MARVEL_dev/lib/compression.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/compression.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/lib",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-lib.dir/read_loader.c.o -c /home/schloi/devel/MARVEL_dev/lib/read_loader.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/read_loader.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/lib",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-lib.dir/trim.c.o -c /home/schloi/devel/MARVEL_dev/lib/trim.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/trim.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/lib",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-lib.dir/utils.c.o -c /home/schloi/devel/MARVEL_dev/lib/utils.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/utils.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/lib",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-lib.dir/iseparator.c.o -c /home/schloi/devel/MARVEL_dev/lib/iseparator.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/iseparator.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/lib.ext",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/marvl-lib-ext.dir/bitarr.c.o -c /home/schloi/devel/MARVEL_dev/lib.ext/bitarr.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib.ext/bitarr.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/scrub",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAstitch.dir/LAstitch.c.o -c /home/schloi/devel/MARVEL_dev/scrub/LAstitch.c",
+  "file": "/home/schloi/devel/MARVEL_dev/scrub/LAstitch.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/scrub",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LArepeat.dir/LArepeat.c.o -c /home/schloi/devel/MARVEL_dev/scrub/LArepeat.c",
+  "file": "/home/schloi/devel/MARVEL_dev/scrub/LArepeat.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/scrub",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAfilter.dir/LAfilter.c.o -c /home/schloi/devel/MARVEL_dev/scrub/LAfilter.c",
+  "file": "/home/schloi/devel/MARVEL_dev/scrub/LAfilter.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/scrub",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/TKhomogenize.dir/TKhomogenize.c.o -c /home/schloi/devel/MARVEL_dev/scrub/TKhomogenize.c",
+  "file": "/home/schloi/devel/MARVEL_dev/scrub/TKhomogenize.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/scrub",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAq.dir/LAq.c.o -c /home/schloi/devel/MARVEL_dev/scrub/LAq.c",
+  "file": "/home/schloi/devel/MARVEL_dev/scrub/LAq.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/scrub",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAgap.dir/LAgap.c.o -c /home/schloi/devel/MARVEL_dev/scrub/LAgap.c",
+  "file": "/home/schloi/devel/MARVEL_dev/scrub/LAgap.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/scrub",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAfix.dir/LAfix.c.o -c /home/schloi/devel/MARVEL_dev/scrub/LAfix.c",
+  "file": "/home/schloi/devel/MARVEL_dev/scrub/LAfix.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/sv",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAhaploscan.dir/LAhaploscan.c.o -c /home/schloi/devel/MARVEL_dev/sv/LAhaploscan.c",
+  "file": "/home/schloi/devel/MARVEL_dev/sv/LAhaploscan.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/sv",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAhaploval.dir/LAhaploval.c.o -c /home/schloi/devel/MARVEL_dev/sv/LAhaploval.c",
+  "file": "/home/schloi/devel/MARVEL_dev/sv/LAhaploval.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/touring",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/OGbuild.dir/OGbuild.c.o -c /home/schloi/devel/MARVEL_dev/touring/OGbuild.c",
+  "file": "/home/schloi/devel/MARVEL_dev/touring/OGbuild.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/touring",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/OGlayout.dir/OGlayout.c.o -c /home/schloi/devel/MARVEL_dev/touring/OGlayout.c",
+  "file": "/home/schloi/devel/MARVEL_dev/touring/OGlayout.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/FAsort.dir/__/lib/utils.c.o -c /home/schloi/devel/MARVEL_dev/lib/utils.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/utils.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/FAsort.dir/FAsort.c.o -c /home/schloi/devel/MARVEL_dev/utils/FAsort.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/FAsort.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAcartoons.dir/LAcartoons.c.o -c /home/schloi/devel/MARVEL_dev/utils/LAcartoons.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/LAcartoons.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAshow.dir/__/dalign/align.c.o -c /home/schloi/devel/MARVEL_dev/dalign/align.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign/align.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAshow.dir/LAshow.c.o -c /home/schloi/devel/MARVEL_dev/utils/LAshow.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/LAshow.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAcheck.dir/__/dalign/align.c.o -c /home/schloi/devel/MARVEL_dev/dalign/align.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign/align.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAcheck.dir/LAcheck.c.o -c /home/schloi/devel/MARVEL_dev/utils/LAcheck.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/LAcheck.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAmerge.dir/LAmerge.c.o -c /home/schloi/devel/MARVEL_dev/utils/LAmerge.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/LAmerge.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAmerge.dir/__/dalign/align.c.o -c /home/schloi/devel/MARVEL_dev/dalign/align.c",
+  "file": "/home/schloi/devel/MARVEL_dev/dalign/align.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAmerge.dir/LAmergeUtils.c.o -c /home/schloi/devel/MARVEL_dev/utils/LAmergeUtils.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/LAmergeUtils.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAcount.dir/LAcount.c.o -c /home/schloi/devel/MARVEL_dev/utils/LAcount.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/LAcount.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAcoverage.dir/LAcoverage.c.o -c /home/schloi/devel/MARVEL_dev/utils/LAcoverage.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/LAcoverage.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAindex.dir/LAindex.c.o -c /home/schloi/devel/MARVEL_dev/utils/LAindex.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/LAindex.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAindex.dir/__/lib/lasidx.c.o -c /home/schloi/devel/MARVEL_dev/lib/lasidx.c",
+  "file": "/home/schloi/devel/MARVEL_dev/lib/lasidx.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/LAstats.dir/LAstats.c.o -c /home/schloi/devel/MARVEL_dev/utils/LAstats.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/LAstats.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/TKadjust.dir/TKadjust.c.o -c /home/schloi/devel/MARVEL_dev/utils/TKadjust.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/TKadjust.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/TKcombine.dir/TKcombine.c.o -c /home/schloi/devel/MARVEL_dev/utils/TKcombine.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/TKcombine.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/TKmerge.dir/TKmerge.c.o -c /home/schloi/devel/MARVEL_dev/utils/TKmerge.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/TKmerge.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/TKshow.dir/TKshow.c.o -c /home/schloi/devel/MARVEL_dev/utils/TKshow.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/TKshow.c"
+},
+{
+  "directory": "/home/schloi/devel/MARVEL_dev/build/utils",
+  "command": "/usr/bin/gcc  -isystem /home/schloi/devel/MARVEL_dev/. -O3 -DNDEBUG -Wall -O2 -DNDEBUG -o CMakeFiles/txt2track.dir/txt2track.c.o -c /home/schloi/devel/MARVEL_dev/utils/txt2track.c",
+  "file": "/home/schloi/devel/MARVEL_dev/utils/txt2track.c"
+}
+]

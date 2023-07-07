@@ -1,0 +1,15 @@
+
+include ../Makefile.settings
+
+ALL = patcher
+
+all: $(ALL)
+
+install: all
+	$(INSTALL_PROGRAM) -m 0755 $(ALL) $(install_bin)
+
+clean:
+	rm -rf $(ALL) *.dSYM
+
+patcher: patcher.c $(PATH_LIB)/lasidx.h $(PATH_LIB)/lasidx.c $(PATH_LIB)/tracks.h $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_DALIGN)/align.h $(PATH_DB)/DB.c $(PATH_DB)/DB.h $(PATH_LIB)/oflags.h $(PATH_LIB)/oflags.c $(PATH_LIB)/compression.c
+	$(CC) $(CFLAGS) -o patcher patcher.c $(PATH_LIB)/lasidx.c $(PATH_LIB)/utils.c $(PATH_DB)/QV.c $(PATH_LIB)/pass.c $(PATH_LIB)/tracks.c $(PATH_DALIGN)/align.c $(PATH_LIB)/oflags.c $(PATH_DB)/DB.c $(PATH_LIB)/compression.c $(CLIBS)

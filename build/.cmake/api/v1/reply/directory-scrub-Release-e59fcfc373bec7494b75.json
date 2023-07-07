@@ -1,0 +1,117 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"scrub/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 104,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"scrub/LAfix"
+			],
+			"targetId" : "LAfix::@037be4d4b49e092bb242",
+			"targetIndex" : 17,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"scrub/LAfilter"
+			],
+			"targetId" : "LAfilter::@037be4d4b49e092bb242",
+			"targetIndex" : 16,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"scrub/LAgap"
+			],
+			"targetId" : "LAgap::@037be4d4b49e092bb242",
+			"targetIndex" : 18,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"scrub/LAq"
+			],
+			"targetId" : "LAq::@037be4d4b49e092bb242",
+			"targetIndex" : 23,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"scrub/LArepeat"
+			],
+			"targetId" : "LArepeat::@037be4d4b49e092bb242",
+			"targetIndex" : 24,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"scrub/LAstitch"
+			],
+			"targetId" : "LAstitch::@037be4d4b49e092bb242",
+			"targetIndex" : 29,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"scrub/TKhomogenize"
+			],
+			"targetId" : "TKhomogenize::@037be4d4b49e092bb242",
+			"targetIndex" : 34,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "scrub",
+		"source" : "scrub"
+	}
+}

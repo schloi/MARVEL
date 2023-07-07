@@ -20,6 +20,9 @@
 #define PATHSEP "/"
 #endif
 
+#define SIZE_IO_BUFFER ( 10 * 1024 * 1024 )
+
+
 #define DEF_OPT_X 1000
 
 extern char* optarg;
@@ -516,6 +519,12 @@ void initDB( int argc, char** argv, CreateContext* ctx )
             }
         }
 
+        ctx->iobufBases = Malloc( SIZE_IO_BUFFER, "Allocating IO buffer for bps" );
+        setvbuf(ctx->bases, ctx->iobufBases, _IOFBF, SIZE_IO_BUFFER);
+
+        ctx->iobufIndx = Malloc( SIZE_IO_BUFFER, "Allocating IO buffer for idx" );
+        setvbuf(ctx->indx, ctx->iobufIndx, _IOFBF, SIZE_IO_BUFFER);
+
         ctx->flist = (char**)Malloc( sizeof( char* ) * ( ctx->ofiles + ctx->ifiles ), "Allocating file list" );
         ctx->ostub = Fopen( Catenate( ctx->pwd, "/", ctx->root, ".dbx" ), "w+" );
         if ( ctx->ostub == NULL || ctx->flist == NULL )
@@ -611,20 +620,31 @@ static void readFastaFile( CreateContext* ctx, char* name )
     //  Open it: <path>/<core>.fasta, check that core is not too long,
     //           and checking that it is not already in flist.
 
-    path = PathTo( name );
-    core = Root( name, ".fasta" );
-    if ( ( input = fopen( Catenate( path, "/", core, ".fasta" ), "r" ) ) == NULL )
+    if ( strcmp(name, "-") == 0 )
     {
-        core = Root( name, ".fa" );
-        if ( ( input = fopen( Catenate( path, "/", core, ".fa" ), "r" ) ) == NULL )
-            errorExit( ctx );
+        core = "stdin";
+        input = stdin;
     }
-    free( path );
-
-    if ( strlen( core ) >= MAX_NAME )
+    else
     {
-        fprintf( stderr, "File name over %d chars: '%.200s'\n", MAX_NAME, core );
-        errorExit( ctx );
+        path = PathTo( name );
+        core = Root( name, ".fasta" );
+        if ( ( input = fopen( Catenate( path, "/", core, ".fasta" ), "r" ) ) == NULL )
+        {
+            core = Root( name, ".fa" );
+            if ( ( input = fopen( Catenate( path, "/", core, ".fa" ), "r" ) ) == NULL )
+            {
+                fprintf(stderr, "Failed to open %s\n", name);
+            errorExit( ctx );
+            }
+        }
+        free( path );
+
+        if ( strlen( core ) >= MAX_NAME )
+        {
+            fprintf( stderr, "File name over %d chars: '%.200s'\n", MAX_NAME, core );
+            errorExit( ctx );
+        }
     }
 
     {

@@ -24,6 +24,8 @@ OverlapFlag2Label oflag2label[] = {
                                     {OVL_MODULE,    "module",              'm'},
                                     {OVL_OPTIONAL,  "optional",            '?'},
 
+                                    {OVL_MULTI,     "multi",               '2'},
+
                                     {0,             NULL,                  '\0'}
                                  };
 

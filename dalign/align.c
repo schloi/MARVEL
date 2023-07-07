@@ -5283,7 +5283,7 @@ int Compute_Trace_ALL( Alignment* align, Work_Data* ework )
     return ( 0 );
 }
 
-int Compute_Trace_PTS( Alignment* align, Work_Data* ework, int trace_spacing, int mode )
+int Compute_Trace_PTS( Alignment* align, Work_Data* ework, int trace_spacing, int mode, int debug )
 {
     _Work_Data* work = (_Work_Data*)ework;
     Trace_Waves wave;
@@ -5303,6 +5303,8 @@ int Compute_Trace_PTS( Alignment* align, Work_Data* ework, int trace_spacing, in
     points = (uint16*)path->trace;
 
     {
+        if (debug) { printf("Compute_Trace_PTS> allocating working memory\n"); }
+
         int64 s;
         int d;
         int M, N;
@@ -5365,6 +5367,9 @@ int Compute_Trace_PTS( Alignment* align, Work_Data* ework, int trace_spacing, in
         {
             ae = ae + trace_spacing;
             be = bb + points[ i ];
+
+            if (debug) { printf("Compute_Trace_PTS> aligning %d..%d to %d..%d\n", ab, ae, bb, be); }
+
             d  = iter_np( aseq + ab, ae - ab, bseq + bb, be - bb, &wave, mode );
             if ( d < 0 )
                 EXIT( 1 );
@@ -5372,8 +5377,12 @@ int Compute_Trace_PTS( Alignment* align, Work_Data* ework, int trace_spacing, in
             ab = ae;
             bb = be;
         }
+
         ae = path->aepos;
         be = path->bepos;
+
+        if (debug) { printf("Compute_Trace_PTS> aligning %d..%d to %d..%d\n", ab, ae, bb, be); }
+
         d  = iter_np( aseq + ab, ae - ab, bseq + bb, be - bb, &wave, mode );
         if ( d < 0 )
             EXIT( 1 );

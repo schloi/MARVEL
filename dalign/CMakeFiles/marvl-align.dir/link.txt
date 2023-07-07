@@ -1,0 +1,2 @@
+/usr/bin/ar qc libmarvl-align.a CMakeFiles/marvl-align.dir/align.c.o
+/usr/bin/ranlib libmarvl-align.a

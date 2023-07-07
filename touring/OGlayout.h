@@ -1,9 +1,3 @@
-/*
- * OGLayout.h
- *
- *  Created on: Jul 14, 2016
- *      Author: pippelmn
- */
 
 #ifndef TOURING_OGLAYOUT_H_
 #define TOURING_OGLAYOUT_H_

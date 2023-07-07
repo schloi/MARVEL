@@ -63,6 +63,7 @@
 
 typedef struct
 {
+#ifdef VERBOSE
     // stats counters
     int nFilteredDiffs;
     int nFilteredDiffsSegments;
@@ -72,6 +73,8 @@ typedef struct
     int nFilteredReadLength;
     int nRepeatOvlsKept;
     int nFilteredLocalEnd;
+    int nFilteredSecondary;
+#endif
 
     // settings
     int nStitched;
@@ -85,6 +88,7 @@ typedef struct
     int rm_aggressive; // -M
     int do_trim;
     int contained;     // -c
+    int secondary;     // -2
 
     int hrd;      // -N
     int hrd_len;  // -N x,-,-
@@ -828,7 +832,9 @@ static int find_repeat_modules( FilterContext* ctx, Overlap* ovls, int novl )
                 ovl->flags &= ~OVL_DISCARD;
                 ovl->flags |= OVL_MODULE;
 
+#ifdef VERBOSE
                 ctx->nRepeatOvlsKept++;
+#endif
                 enabled += 1;
             }
         }
@@ -1049,7 +1055,10 @@ static int find_repeat_modules( FilterContext* ctx, Overlap* ovls, int novl )
                 {
                     ovl->flags &= ~OVL_DISCARD;
                     ovl->flags |= OVL_OPTIONAL;
+
+#ifdef VERBOSE
                     ctx->nRepeatOvlsKept++;
+#endif
                     enabled += 1;
                 }
             }
@@ -1113,7 +1122,10 @@ static int find_repeat_modules( FilterContext* ctx, Overlap* ovls, int novl )
                 {
                     ovls[ maxbidx ].flags &= ~OVL_DISCARD;
                     ovls[ maxbidx ].flags |= OVL_OPTIONAL;
+
+#ifdef VERBOSE
                     ctx->nRepeatOvlsKept++;
+#endif
                     enabled += 1;
                 }
 
@@ -1135,7 +1147,11 @@ static int find_repeat_modules( FilterContext* ctx, Overlap* ovls, int novl )
         {
             ovls[ maxbidx ].flags &= ~OVL_DISCARD;
             ovls[ maxbidx ].flags |= OVL_OPTIONAL;
+
+#ifdef VERBOSE
             ctx->nRepeatOvlsKept++;
+#endif
+
             enabled += 1;
         }
     }
@@ -1191,7 +1207,10 @@ static int filter( FilterContext* ctx, Overlap* ovl )
 
     if ( ctx->nMinReadLength != -1 && ( trim_alen < ctx->nMinReadLength || trim_blen < ctx->nMinReadLength ) )
     {
+#ifdef VERBOSE
         ctx->nFilteredReadLength++;
+#endif
+
         ret |= OVL_DISCARD | OVL_RLEN;
     }
 
@@ -1202,7 +1221,10 @@ static int filter( FilterContext* ctx, Overlap* ovl )
             printf( "overlap %d -> %d: drop due to length %d\n", ovl->aread, bread, nLen );
         }
 
+#ifdef VERBOSE
         ctx->nFilteredLength++;
+#endif
+
         ret |= OVL_DISCARD | OVL_OLEN;
     }
 
@@ -1218,7 +1240,9 @@ static int filter( FilterContext* ctx, Overlap* ovl )
                 printf( "overlap %d -> %d: drop due to unaligned overhang [%d, %d -> trim %d, %d], [%d, %d -> trim %d, %d]\n", ovl->aread, ovl->bread, ovl->path.abpos, ovl->path.aepos, trim_ab, trim_ae, ovl->path.bbpos, ovl->path.bepos, trim_bb, trim_be );
             }
 
+#ifdef VERBOSE
             ctx->nFilteredUnalignedBases++;
+#endif
 
             ret |= OVL_DISCARD | OVL_LOCAL;
         }
@@ -1233,7 +1257,9 @@ static int filter( FilterContext* ctx, Overlap* ovl )
                 printf( "overlap %d -> %d: drop due to diffs %d length %d\n", ovl->aread, bread, ovl->path.diffs, nLen );
             }
 
+#ifdef VERBOSE
             ctx->nFilteredDiffs++;
+#endif
 
             ret |= OVL_DISCARD | OVL_DIFF;
         }
@@ -1241,7 +1267,7 @@ static int filter( FilterContext* ctx, Overlap* ovl )
 
     if ( ctx->nMinNonRepeatBases != -1 )
     {
-        int b, e, rb, re, ovllen, repeat, repeat_read;
+        int b, e, rb, re, ovllen, repeat;
 
         track_anno* repeats_anno;
         track_data* repeats_data;
@@ -1260,14 +1286,13 @@ static int filter( FilterContext* ctx, Overlap* ovl )
         b      = repeats_anno[ ovl->aread ] / sizeof( track_data );
         e      = repeats_anno[ ovl->aread + 1 ] / sizeof( track_data );
         ovllen = ovl->path.aepos - ovl->path.abpos;
-        repeat = repeat_read = 0;
+        repeat = 0;
 
         while ( b < e )
         {
             rb = repeats_data[ b ];
             re = repeats_data[ b + 1 ];
 
-            repeat_read += ( re - rb );
             repeat += intersect( ovl->path.abpos, ovl->path.aepos, rb, re );
 
             b += 2;
@@ -1280,7 +1305,10 @@ static int filter( FilterContext* ctx, Overlap* ovl )
                 printf( "overlap %d -> %d: drop due to repeat in a\n", ovl->aread, bread );
             }
 
+#ifdef VERBOSE
             ctx->nFilteredRepeat++;
+#endif
+
             ret |= OVL_DISCARD | OVL_REPEAT;
         }
 
@@ -1301,7 +1329,7 @@ static int filter( FilterContext* ctx, Overlap* ovl )
             bepos = ovl->path.bepos;
         }
 
-        repeat = repeat_read = 0;
+        repeat = 0;
 
         while ( b < e )
         {
@@ -1309,7 +1337,6 @@ static int filter( FilterContext* ctx, Overlap* ovl )
             re = repeats_data[ b + 1 ];
 
             repeat += intersect( bbpos, bepos, rb, re );
-            repeat_read += ( re - rb );
 
             b += 2;
         }
@@ -1321,7 +1348,9 @@ static int filter( FilterContext* ctx, Overlap* ovl )
                 printf( "overlap %d -> %d: drop due to repeat in b\n", ovl->aread, bread );
             }
 
+#ifdef VERBOSE
             ctx->nFilteredRepeat++;
+#endif
 
             ret |= OVL_DISCARD | OVL_REPEAT;
         }
@@ -1441,6 +1470,11 @@ static void filter_post( FilterContext* ctx )
         printf( "local ends discarded %d\n", ctx->nFilteredLocalEnd );
     }
 
+    if ( ctx->nFilteredSecondary )
+    {
+        printf( "multi-mappers discarded %d\n", ctx->nFilteredSecondary );
+    }
+
 #endif
 
     if ( ctx->trim )
@@ -1465,17 +1499,15 @@ static int filter_handler( void* _ctx, Overlap* ovl, int novl )
     int alen = DB_READ_LEN(ctx->db, aread);
     HITS_DB* db = ctx->db;
 
-    /*
-    if ( ovl->aread > 100 )
-    {
-        return 0;
-    }
-    */
-
     if ( ctx->trim )
     {
         for ( j = 0; j < novl; j++ )
         {
+            if ( ! trace_valid(ovl + j) )
+            {
+                continue;
+            }
+
             trim_overlap( ctx->trim, ovl + j );
         }
     }
@@ -1643,9 +1675,33 @@ static int filter_handler( void* _ctx, Overlap* ovl, int novl )
 
     // set filter flags
 
+    int novl_remaining = 0; // count remaining overlaps, exclusing self-alignment
+
     for ( j = 0; j < novl; j++ )
     {
         ovl[ j ].flags |= filter( ctx, ovl + j );
+
+        if ( ! ( ovl[j].flags & OVL_DISCARD ) && ovl[j].aread != ovl[j].bread )
+        {
+            novl_remaining += 1;
+        }
+    }
+
+    // filter reads with more than one alignment
+
+    if ( ctx->secondary && novl_remaining > 1 )
+    {
+        for ( j = 0; j < novl; j++ )
+        {
+#ifdef VERBOSE
+            if ( ovl[j].flags & OVL_DISCARD )
+            {
+                ctx->nFilteredSecondary += 1;
+            }
+#endif
+
+            ovl[j].flags |= OVL_DISCARD;
+        }
     }
 
     // find repeat modules and rescue overlaps
@@ -1683,11 +1739,12 @@ static int filter_handler( void* _ctx, Overlap* ovl, int novl )
 
 static void usage( FILE* fout, const char* app )
 {
-    fprintf( fout, "usage: %s [-cLpTv] [-dlmMnosSu n] [-rRt track] [-x file] [-N n,n,n] database input.las output.las\n\n", app );
+    fprintf( fout, "usage: %s [-2cLpTv] [-dlmMnosSu n] [-rRt track] [-x file] [-N n,n,n] database input.las output.las\n\n", app );
 
     fprintf( fout, "Filters the input las file by various critera\n\n" );
 
     fprintf( fout, "options: -v  verbose output\n" );
+    fprintf( fout, "         -2  filter reads with more than one alignment\n" );
     fprintf( fout, "         -c  drop contained reads\n");
     fprintf( fout, "         -d n  max divergence allowed [0,100]\n" );
     fprintf( fout, "         -l n  minimum read length\n" );
@@ -1760,9 +1817,10 @@ int main( int argc, char* argv[] )
     char* pathRules            = NULL;
     char* pcTrackRepeats       = DEF_ARG_R;
     char* pcTrackRepeatsStrict = NULL;
-    char* arg_trimTrack        = DEF_ARG_T;
+    char* arg_trimTrack        = NULL; // DEF_ARG_T;
     int arg_purge              = 0;
 
+    fctx.secondary           = 0;
     fctx.trackRepeatStrict   = NULL;
     fctx.fMaxDiffs           = -1;
     fctx.nMaxUnalignedBases  = -1;
@@ -1794,10 +1852,14 @@ int main( int argc, char* argv[] )
     }
 
     opterr = 0;
-    while ( ( c = getopt( argc, argv, "cLpTvd:l:m:M:n:N:o:r:R:s:S:t:u:x:" ) ) != -1 )
+    while ( ( c = getopt( argc, argv, "2cLpTvd:l:m:M:n:N:o:r:R:s:S:t:u:x:" ) ) != -1 )
     {
         switch ( c )
         {
+            case '2':
+                fctx.secondary = 1;
+                break;
+
             case 'c':
                 fctx.contained = 1;
                 break;
@@ -1987,6 +2049,8 @@ int main( int argc, char* argv[] )
     {
         fctx.trackRepeat = track_load( &db, pcTrackRepeats );
 
+        fctx.nMinAlnLength = MAX(fctx.nMinAlnLength, fctx.nMinNonRepeatBases);
+
         if ( !fctx.trackRepeat )
         {
             fprintf( stderr, "could not load track %s\n", pcTrackRepeats );
@@ -1994,12 +2058,20 @@ int main( int argc, char* argv[] )
         }
     }
 
-    fctx.trackTrim = track_load( &db, arg_trimTrack );
-
-    if ( !fctx.trackTrim )
+    if ( arg_trimTrack != NULL )
     {
-        fprintf( stderr, "could not load track %s\n", arg_trimTrack );
-        exit( 1 );
+        fctx.trackTrim = track_load( &db, arg_trimTrack );
+
+        if ( !fctx.trackTrim )
+        {
+            fprintf( stderr, "could not load track %s\n", arg_trimTrack );
+            exit( 1 );
+        }
+    }
+
+    if ( fctx.do_trim && fctx.trackTrim == NULL )
+    {
+        fprintf( stderr, "trimming requested but no trim track loaded\n");
     }
 
     if ( pathRules )

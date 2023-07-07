@@ -73,6 +73,9 @@ typedef struct
     FILE *bases;             //    bases  = .bps file positioned for appending
     FILE *indx;              //    indx   = .idx file positioned for appending
 
+    void* iobufBases;
+    void* iobufIndx;
+
     int64 offset;            //    offset = offset in .bps at which to place next sequence
     int64 boff;              //    boff   = offset in .bps file to truncate to if command fails
     int64 ioff;              //    ioff   = offset in .idx file to truncate to if command fails

@@ -4,18 +4,18 @@
  *
  *******************************************************************************************/
 
+#include "dalign/align.h"
+#include "db/DB.h"
+#include "lib/oflags.h"
+#include "lib/pass.h"
+#include "lib/utils.h"
+
 #include <ctype.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-#include "dalign/align.h"
-#include "db/DB.h"
-#include "lib/oflags.h"
-#include "lib/pass.h"
 
 // switches
 
@@ -23,17 +23,18 @@
 
 // command line defaults
 
+#define DEF_ARG_A 0
+#define DEF_ARG_D 0
 #define DEF_ARG_P 0
 #define DEF_ARG_S 0
-#define DEF_ARG_D 0
 
 // errors
 
-#define ERR_NOT_SORTED ( 0x1 << 0 )
-#define ERR_BAD_POS ( 0x1 << 1 )
+#define ERR_NOT_SORTED       ( 0x1 << 0 )
+#define ERR_BAD_POS          ( 0x1 << 1 )
 #define ERR_BAD_TRACE_LENGTH ( 0x1 << 2 )
 #define ERR_BAD_TRACE_POINTS ( 0x1 << 3 )
-#define ERR_CORRUPT ( 0x1 << 4 )
+#define ERR_CORRUPT          ( 0x1 << 4 )
 
 // macros
 
@@ -41,6 +42,11 @@
     cmp = ( a ) - ( b ); \
     if ( cmp != 0 )      \
         return cmp;
+
+// getopt
+
+extern char* optarg;
+extern int optind, opterr, optopt;
 
 // structs
 
@@ -50,16 +56,21 @@ typedef struct
     ovl_header_twidth twidth;
 
     int error; // file didn't pass check
+    int verbose;     // print a lot of stuff
 
     int check_ptp;   // pass through points
     int check_sort;  // sort order
     int check_dupes; // duplicates
+    int check_align; // compute alignment
 
     int ignoreDiscardedOvls;
 
     ovl_header_novl novl; // Overlaps counted
 
     int prev_a;
+
+    Alignment* align;      // alignment record (reused)
+    Work_Data* align_work; // global alignment module work data
 
 } CheckContext;
 
@@ -109,14 +120,31 @@ static void check_post( PassContext* pctx, CheckContext* cctx )
 static int check_process( void* _ctx, Overlap* ovl, int novl )
 {
     CheckContext* ctx = (CheckContext*)_ctx;
+    HITS_DB* db       = ctx->db;
+    int aread         = ovl->aread;
+    int lena          = DB_READ_LEN( db, aread );
+    int verbose = ctx->verbose;
 
-    int i, lena, lenb;
+    if ( ctx->check_align )
+    {
+        ctx->align->alen = lena;
+        Load_Read( db, aread, ctx->align->aseq, 0 );
+    }
 
+    int i;
     for ( i = 0; i < novl; i++ )
     {
         Overlap* o = ovl + i;
+        int bread  = o->bread;
 
         ctx->novl++;
+
+        if ( verbose )
+        {
+            printf( "%llu %d x %d %d..%d %d..%d\n", ctx->novl, o->aread, o->bread,
+                    o->path.abpos, o->path.aepos,
+                    o->path.bbpos, o->path.bepos);
+        }
 
         if ( ctx->ignoreDiscardedOvls && ( o->flags & OVL_DISCARD ) )
         {
@@ -125,7 +153,7 @@ static int check_process( void* _ctx, Overlap* ovl, int novl )
 
         if ( i == 0 )
         {
-            if ( ctx->check_sort && ctx->prev_a > o->aread )
+            if ( ctx->check_sort && ctx->prev_a > aread )
             {
                 fprintf( stderr, "overlap %lld: not sorted\n", ctx->novl );
                 ctx->error |= ERR_NOT_SORTED;
@@ -147,8 +175,7 @@ static int check_process( void* _ctx, Overlap* ovl, int novl )
             }
         }
 
-        lena = DB_READ_LEN( ctx->db, o->aread );
-        lenb = DB_READ_LEN( ctx->db, o->bread );
+        int lenb = DB_READ_LEN( ctx->db, bread );
 
         if ( o->path.abpos < 0 )
         {
@@ -197,9 +224,29 @@ static int check_process( void* _ctx, Overlap* ovl, int novl )
             if ( bpos != o->path.bepos )
             {
                 fprintf( stderr, "overlap %lld (%d x %d): pass-through points inconsistent be = %d (expected %d)\n",
-                         ctx->novl, o->aread, o->bread, bpos, o->path.bepos );
+                         ctx->novl, aread, bread, bpos, o->path.bepos );
                 ctx->error |= ERR_BAD_TRACE_POINTS;
             }
+        }
+
+        if ( ctx->check_align )
+        {
+            ctx->align->blen = lenb;
+            Load_Read( db, bread, ctx->align->bseq, 0 );
+
+            ctx->align->path = &( o->path );
+
+            if ( o->flags & OVL_COMP )
+            {
+                Complement_Seq( ctx->align->bseq, lenb );
+            }
+
+            if ( verbose )
+            {
+                printf("aligning\n");
+            }
+
+            Compute_Trace_PTS( ctx->align, ctx->align_work, ctx->twidth, 0, verbose );
         }
     }
 
@@ -210,13 +257,15 @@ static int check_process( void* _ctx, Overlap* ovl, int novl )
 
 static void usage()
 {
-    fprintf( stderr, "usage: [-dihps] database input.las\n\n" );
+    fprintf( stderr, "usage: [-adhips] database input.las\n\n" );
     fprintf( stderr, "Check the contents of a .las file for consistency.\n\n" );
-    fprintf( stderr, "options: -d  report duplicates\n" );
+    fprintf( stderr, "options: -a  compute alignment based on trace points\n" );
+    fprintf( stderr, "         -d  report duplicates\n" );
     fprintf( stderr, "         -h  only check headers\n" );
     fprintf( stderr, "         -i  skip overlaps tagged as discarded\n" );
     fprintf( stderr, "         -p  check pass-through points\n" );
     fprintf( stderr, "         -s  check sort order\n" );
+    fprintf( stderr, "         -v  verbose" );
 }
 
 int main( int argc, char* argv[] )
@@ -234,6 +283,7 @@ int main( int argc, char* argv[] )
     cctx.check_ptp           = DEF_ARG_P;
     cctx.check_sort          = DEF_ARG_S;
     cctx.check_dupes         = DEF_ARG_D;
+    cctx.check_align         = DEF_ARG_A;
     cctx.ignoreDiscardedOvls = 0;
 
     int header_only = 0;
@@ -241,10 +291,14 @@ int main( int argc, char* argv[] )
     int c;
     opterr = 0;
 
-    while ( ( c = getopt( argc, argv, "dhips" ) ) != -1 )
+    while ( ( c = getopt( argc, argv, "adhipsv" ) ) != -1 )
     {
         switch ( c )
         {
+            case 'a':
+                cctx.check_align = 1;
+                break;
+
             case 'h':
                 header_only = 1;
                 break;
@@ -264,6 +318,10 @@ int main( int argc, char* argv[] )
 
             case 'i':
                 cctx.ignoreDiscardedOvls = 1;
+                break;
+
+            case 'v':
+                cctx.verbose = 1;
                 break;
 
             default:
@@ -303,9 +361,18 @@ int main( int argc, char* argv[] )
             exit( 1 );
         }
 
-        pctx->split_b      = 0;
-        pctx->load_trace   = cctx.check_ptp;
-        pctx->unpack_trace = cctx.check_ptp;
+        if ( cctx.check_align )
+        {
+            cctx.align = (Alignment*)malloc( sizeof( Alignment ) );
+
+            cctx.align->aseq = New_Read_Buffer( &db );
+            cctx.align->bseq = New_Read_Buffer( &db );
+
+            cctx.align_work = New_Work_Data();
+        }
+
+        pctx->load_trace   = ( cctx.check_ptp || cctx.check_align );
+        pctx->unpack_trace = ( cctx.check_ptp || cctx.check_align );
         pctx->data         = &cctx;
 
         check_pre( pctx, &cctx );
@@ -313,6 +380,15 @@ int main( int argc, char* argv[] )
         pass( pctx, check_process );
 
         check_post( pctx, &cctx );
+
+        if ( cctx.check_align )
+        {
+            free( cctx.align->aseq - 1 );
+            free( cctx.align->bseq - 1 );
+
+            free( cctx.align );
+            Free_Work_Data( cctx.align_work );
+        }
 
         Close_DB( &db );
     }

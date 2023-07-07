@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+
+from __future__ import print_function
+
+import argparse
+import os
+import subprocess
+import sys
+
+import marvel
+import marvel.config
+import marvel.DB
+
+def is_fasta(fpath):
+    f = open(fpath)
+
+    data = None
+    while data is None or len(data) == 0:
+        data = f.readline()
+
+    if data.startswith(">"):
+        return True
+
+    return False
+
+def prepare_db(args):
+    dbpath = args.db
+    fasta = args.fasta
+    runid = args.runid
+    minreadlen = args.minreadlen
+    blocksize = args.blocksize
+    threads = args.threads
+    genome = args.genome
+    kmert = args.kmert
+    jobOrder = args.jobOrder
+    numBlocks = args.numBlocks
+    dust = args.dust
+    mrg = args.mrg
+    shortblockformat = args.shortblockformat
+    skip = args.skip
+    cuda = args.cuda
+
+    if args.maskTrack == None:
+        tracks = ""
+    else:
+        tracks = " ".join( [ "-m{}".format(t) for t in args.maskTrack ] )
+
+    if not is_fasta(fasta):
+        print("Could not recognize {} as FASTA formatted".format(fasta))
+        return False
+
+    root = marvel.config.PATH_BIN
+
+    db_dir = os.path.dirname(dbpath)
+    db_name = os.path.basename(dbpath)
+
+    idx = db_name.find(".")
+    if idx != -1:
+        db_name = db_name[:idx]
+
+    if os.path.exists( os.path.join(db_dir, db_name + ".db") ):
+        print("removing existing database")
+
+        opts = " {db}".format(db = db_name)
+        cmd = os.path.join(root, "DBrm") + opts
+        subprocess.call(cmd, shell = True)
+
+    print("converting fasta to db ( min read length {minreadlen} )".format(minreadlen = minreadlen))
+
+    opts = ""
+    if args.tracks:
+        opts += " ".join( [ "-c " + t for t in args.tracks ] )
+    opts += " -x{minreadlen} {db} {fasta}".format(minreadlen = minreadlen, db = db_name,  fasta = fasta)
+    cmd = os.path.join(root, "FA2db ") + opts
+    subprocess.call(cmd, shell = True)
+
+    print("partitioning db ( blocksize {blocksize} )".format(blocksize = blocksize))
+    opts = " -s{blocksize} {db}".format(blocksize = blocksize, db = db_name)
+    cmd = os.path.join(root, "DBsplit") + opts
+    subprocess.call(cmd, shell = True)
+
+    if kmert != -1:
+        t = kmert
+    elif genome != -1:
+        cov_block = blocksize / float(genome)
+
+        if cov_block > 1:
+            t = 4 * int(cov_block)
+        else:
+            t = marvel.config.DEF_DALIGNER_T_MIN
+    else:
+        t = marvel.config.DEF_DALIGNER_T_MIN
+
+    t = min( marvel.config.DEF_DALIGNER_T_MAX, max(marvel.config.DEF_DALIGNER_T_MIN, t) )
+
+    if dust:
+        print("dusting db")
+        opts = " {db}".format(db = db_name)
+        cmd = os.path.join(root, "DBdust") + opts
+        subprocess.call(cmd, shell = True)
+
+    print("creating plan")
+    opts = " --dal {numBlocks}".format(numBlocks = numBlocks)
+    if jobOrder == True:
+        opts += " -X"
+    if shortblockformat:
+        opts += " -B"
+    if skip:
+        opts += " -p"
+    if cuda:
+        opts += " --cuda"
+
+    opts += " -j {threads} --mrg {mrg} -I -v -t {daligner_t} -r {runid} {tracks} -o {db} {db}".format(
+                daligner_t = t, mrg = mrg, threads = threads, runid = runid, tracks = tracks, db = db_name)
+    cmd = os.path.join(root, "HPCdaligner") + opts
+    subprocess.call(cmd, shell = True)
+
+    print(cmd)
+
+    return True
+
+def main():
+    parser = argparse.ArgumentParser(description = "Create database")
+
+    parser.add_argument("db", help = "Name of the database to be created")
+    parser.add_argument("fasta", help = "Input reads in fasta format")
+
+    parser.add_argument("-B", "--shortblockformat",
+                        action="store_true", dest="shortblockformat", default=False,
+                        help = "use the short block format")
+    parser.add_argument("-d", "--dust",
+                        action="store_true", dest="dust", default=False,
+                        help = "enable dust track creation")
+    parser.add_argument("-r", "--run",
+                        dest = "runid", metavar = "run.id", type = int,
+                        default = 1,
+                        help = "Run ID for overlap directory naming")
+    parser.add_argument("-c",
+                        dest = "tracks", metavar = "track.name", type = str,
+                        action = "append",
+                        help = "convert key=value from fasta header to a track")
+    parser.add_argument("-x", "--minreadlength",
+                        dest = "minreadlen", metavar = "min.read.length", type = int,
+                        default = marvel.config.DEF_DBSPLIT_X,
+                        help = "Minimum read length")
+    parser.add_argument("-s", "--blocksize",
+                        dest = "blocksize", metavar = "block.size", type = int,
+                        default = marvel.config.DEF_DBSPLIT_S,
+                        help = "Database block size in megabases")
+    parser.add_argument("-j", "--threads",
+                        dest = "threads", metavar = "daligner.threads", type = int,
+                        default = marvel.config.DEF_DALIGNER_J,
+                        help = "Daligner number of threads")
+    parser.add_argument("-k", "--kmer",
+                        dest = "kmer", metavar = "daligner.kmer", type = int,
+                        default = marvel.config.DEF_DALIGNER_K,
+                        help = "k-mer size for the overlapper")
+    parser.add_argument("-t", "--threshold",
+                        dest = "kmert", metavar = "daligner.kmer_threshold", type = int,
+                        default = -1,
+                        help = "don't use kmers occuring more than the threshold in a block for alignment seeding")
+    parser.add_argument("-m", "--maskTrack",
+                        dest = "maskTrack", metavar = "daligner.maskTrack", type = str,
+                        default = None, action='append' ,
+                        help = "specify an interval track that is to be softmasked, (not used in kmer placing)")
+    parser.add_argument("-g", "--genome",
+                        dest = "genome", metavar = "genome.size", type = float,
+                        default = -1,
+                        help = "genome size estimate in megabases. used to compute a meaningful value for -t")
+    parser.add_argument("-b", "--numBlocks",
+                        dest = "numBlocks", metavar = "daligner.numBlocks", type = int,
+                        default = 4,
+                        help = "number of block comparisons for a daligner job")
+    parser.add_argument("-X", "--jobOrder", action="store_true", dest="jobOrder", default=False,
+                        help = "change daligner job order into: db.1, db.1 .. db.n; db.2, db.2 .. db.n; ..., (default: diagonal bands)")
+
+    parser.add_argument("--mrg", dest = "mrg", metavar = "LAmerge.files", type = int, default = 8,
+                        help = "number of files that will be merged simultaneously")
+
+    parser.add_argument("--skip", dest = "skip", action="store_true", default=False,
+                        help = "skip recomputing existing and valid files")
+
+    parser.add_argument("--cuda", dest = "cuda", action="store_true", default=False,
+                        help = "use cudaligner")
+
+    args = parser.parse_args()
+
+    if not prepare_db(args):
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+

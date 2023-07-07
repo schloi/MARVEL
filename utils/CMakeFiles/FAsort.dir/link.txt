@@ -1,0 +1,1 @@
+/usr/bin/gcc-12 -O3 -DNDEBUG CMakeFiles/FAsort.dir/__/lib/utils.c.o CMakeFiles/FAsort.dir/FAsort.c.o -o FAsort 

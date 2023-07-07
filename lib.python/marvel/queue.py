@@ -1,14 +1,8 @@
 
 from __future__ import print_function
 
-import multiprocessing
-import sys
 import os
-import subprocess
-import time
 import shlex
-import glob
-import types
 
 import marvel.rawqueue
 import marvel.config
@@ -29,15 +23,13 @@ class queue(marvel.rawqueue.rawqueue):
 
         if self.db.endswith(".db"):
             self.db = self.db[:-3]
+            self.db_path = self.db_path[:-3]
 
         self.coverage = cov
         self.path_bin = path_bin
         self.path_scripts = path_scripts
 
-        if self.db.endswith(".db"):
-            self.db = self.db[:-3]
-
-        for strLine in open(self.db + ".db"):
+        for strLine in open(self.db_path + ".db"):
             strLine = strLine.strip()
 
             if strLine.startswith("blocks"):
@@ -62,7 +54,7 @@ class queue(marvel.rawqueue.rawqueue):
             for i in range(len(args)):
                 arg = args[i]
 
-                if arg.startswith("-j"):
+                if arg.startswith("-T"):
                     if len(arg) > 2:
                         threads = int( arg[2:].strip() )
                     else:

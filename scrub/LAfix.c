@@ -431,15 +431,7 @@ static int filter_flips(FixContext* fctx, Overlap* ovls, int novl, int* trim_b, 
 
 static int fix_handler(void* _ctx, Overlap* ovl, int novl)
 {
-    // printf("%d %d\n", ovl->aread, novl);
-
-// #warning "REMOVE ME"
-//    if ( ovl->aread != 166815 ) return 1;
-
     FixContext* fctx = (FixContext*)_ctx;
-
-// #warning "REMOVE ME"
-    // if ( DB_READ_LEN(fctx->db, ovl->aread) < 20000 ) return 1;
 
     int maxgap = fctx->maxgap;
     int lowq = fctx->lowq;
@@ -767,12 +759,12 @@ static int fix_handler(void* _ctx, Overlap* ovl, int novl)
     int seg_first = trim_ab / twidth;
     int seg_last = trim_ae / twidth;
 
-    while (qa[seg_first] == 0)
+    while (qa[seg_first] == 0 && seg_first < seg_last)
     {
         seg_first++;
     }
 
-    while (qa[seg_last - 1] == 0)
+    while (qa[seg_last - 1] == 0 && seg_last > seg_first)
     {
         seg_last--;
     }

@@ -1,0 +1,676 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Release-31cde0196065dd5a1d42.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.18"
+					},
+					"projectIndex" : 0,
+					"source" : "."
+				},
+				{
+					"build" : "corrector",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-corrector-Release-c24604d1e3c872f84f38.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.18"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "corrector",
+					"targetIndexes" : 
+					[
+						13
+					]
+				},
+				{
+					"build" : "cuda",
+					"jsonFile" : "directory-cuda-Release-23c5d1faa9000ee48c4a.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.18"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "cuda",
+					"targetIndexes" : 
+					[
+						37
+					]
+				},
+				{
+					"build" : "cudalign",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-cudalign-Release-3a0905f2ea6ce35c648b.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.18"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "cudalign",
+					"targetIndexes" : 
+					[
+						38
+					]
+				},
+				{
+					"build" : "dalign",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-dalign-Release-5307919bb27b5cf25b40.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.18"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "dalign",
+					"targetIndexes" : 
+					[
+						39,
+						41
+					]
+				},
+				{
+					"build" : "dalign2",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-dalign2-Release-8aac6fbe9596ceaf290f.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.18"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "dalign2",
+					"targetIndexes" : 
+					[
+						9,
+						11,
+						26,
+						27,
+						40,
+						42
+					]
+				},
+				{
+					"build" : "db",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-db-Release-239facb315ddeb51ae6f.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.18"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "db",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						43
+					]
+				},
+				{
+					"build" : "lib",
+					"jsonFile" : "directory-lib-Release-c12f15c6f888b43a891c.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.18"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "lib",
+					"targetIndexes" : 
+					[
+						44
+					]
+				},
+				{
+					"build" : "lib.ext",
+					"jsonFile" : "directory-lib.ext-Release-69ac27884ba6711a46fd.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.18"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "lib.ext",
+					"targetIndexes" : 
+					[
+						45
+					]
+				},
+				{
+					"build" : "scrub",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-scrub-Release-e59fcfc373bec7494b75.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.18"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "scrub",
+					"targetIndexes" : 
+					[
+						16,
+						17,
+						18,
+						23,
+						24,
+						29,
+						34
+					]
+				},
+				{
+					"build" : "sv",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-sv-Release-b09441d7d28ad3572b73.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.18"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "sv",
+					"targetIndexes" : 
+					[
+						19,
+						20
+					]
+				},
+				{
+					"build" : "touring",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-touring-Release-2b240136ac59e537744b.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.18"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "touring",
+					"targetIndexes" : 
+					[
+						30,
+						31
+					]
+				},
+				{
+					"build" : "utils",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-utils-Release-00bf5ceb7f7dbe0ede36.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.18"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "utils",
+					"targetIndexes" : 
+					[
+						8,
+						10,
+						12,
+						14,
+						15,
+						21,
+						22,
+						25,
+						28,
+						32,
+						33,
+						35,
+						36,
+						46
+					]
+				}
+			],
+			"name" : "Release",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"name" : "MARVL",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17,
+						18,
+						19,
+						20,
+						21,
+						22,
+						23,
+						24,
+						25,
+						26,
+						27,
+						28,
+						29,
+						30,
+						31,
+						32,
+						33,
+						34,
+						35,
+						36,
+						37,
+						38,
+						39,
+						40,
+						41,
+						42,
+						43,
+						44,
+						45,
+						46
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 6,
+					"id" : "DB2fa::@1f4cdc73c39a66049a93",
+					"jsonFile" : "target-DB2fa-Release-ac621359be5c07d2205c.json",
+					"name" : "DB2fa",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 6,
+					"id" : "DB2qv::@1f4cdc73c39a66049a93",
+					"jsonFile" : "target-DB2qv-Release-29d4654d02b2c80dfbc3.json",
+					"name" : "DB2qv",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 6,
+					"id" : "DBdust::@1f4cdc73c39a66049a93",
+					"jsonFile" : "target-DBdust-Release-f41efc20333843ba7a42.json",
+					"name" : "DBdust",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 6,
+					"id" : "DBrm::@1f4cdc73c39a66049a93",
+					"jsonFile" : "target-DBrm-Release-0fed2d0727f4546b920f.json",
+					"name" : "DBrm",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 6,
+					"id" : "DBshow::@1f4cdc73c39a66049a93",
+					"jsonFile" : "target-DBshow-Release-b8db33fa215f5771b73d.json",
+					"name" : "DBshow",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 6,
+					"id" : "DBsplit::@1f4cdc73c39a66049a93",
+					"jsonFile" : "target-DBsplit-Release-3a806cb1a6053a203b22.json",
+					"name" : "DBsplit",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 6,
+					"id" : "DBstats::@1f4cdc73c39a66049a93",
+					"jsonFile" : "target-DBstats-Release-45bfea61119399aceed0.json",
+					"name" : "DBstats",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 6,
+					"id" : "FA2db::@1f4cdc73c39a66049a93",
+					"jsonFile" : "target-FA2db-Release-ccf16eda1bda19895af8.json",
+					"name" : "FA2db",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "FAsort::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-FAsort-Release-ac4075aaa29dc2e772dd.json",
+					"name" : "FAsort",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 5,
+					"id" : "HPCdaligner::@bddc88d51ecaac1db7fe",
+					"jsonFile" : "target-HPCdaligner-Release-062fe9589b6a4c31bbcd.json",
+					"name" : "HPCdaligner",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "LAcartoons::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-LAcartoons-Release-a9a56eb8954a4f877be3.json",
+					"name" : "LAcartoons",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 5,
+					"id" : "LAcat::@bddc88d51ecaac1db7fe",
+					"jsonFile" : "target-LAcat-Release-6794a70e7b6f92eb24a9.json",
+					"name" : "LAcat",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "LAcheck::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-LAcheck-Release-59c8f1a32325ed11d53b.json",
+					"name" : "LAcheck",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "LAcorrect::@ebbca51353f9471a23af",
+					"jsonFile" : "target-LAcorrect-Release-be02d6bd4b53ab64efad.json",
+					"name" : "LAcorrect",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "LAcount::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-LAcount-Release-cda28ffd888a709f8c05.json",
+					"name" : "LAcount",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "LAcoverage::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-LAcoverage-Release-f411bd0941b90154a8dc.json",
+					"name" : "LAcoverage",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 9,
+					"id" : "LAfilter::@037be4d4b49e092bb242",
+					"jsonFile" : "target-LAfilter-Release-9d241291f844e99f6621.json",
+					"name" : "LAfilter",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 9,
+					"id" : "LAfix::@037be4d4b49e092bb242",
+					"jsonFile" : "target-LAfix-Release-44c055ed4f971b3e1106.json",
+					"name" : "LAfix",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 9,
+					"id" : "LAgap::@037be4d4b49e092bb242",
+					"jsonFile" : "target-LAgap-Release-e9c6fbbc24bbee726e0f.json",
+					"name" : "LAgap",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 10,
+					"id" : "LAhaploscan::@63f2db60c1822e1d0d7d",
+					"jsonFile" : "target-LAhaploscan-Release-9e8b7f3cef10c2ad144d.json",
+					"name" : "LAhaploscan",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 10,
+					"id" : "LAhaploval::@63f2db60c1822e1d0d7d",
+					"jsonFile" : "target-LAhaploval-Release-1bab6096cd76f9e5bbcb.json",
+					"name" : "LAhaploval",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "LAindex::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-LAindex-Release-6d5d0a04cb2cdfb3e025.json",
+					"name" : "LAindex",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "LAmerge::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-LAmerge-Release-e9476afc500543e34de3.json",
+					"name" : "LAmerge",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 9,
+					"id" : "LAq::@037be4d4b49e092bb242",
+					"jsonFile" : "target-LAq-Release-596fac8084d38b8e11d6.json",
+					"name" : "LAq",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 9,
+					"id" : "LArepeat::@037be4d4b49e092bb242",
+					"jsonFile" : "target-LArepeat-Release-b2f8af0795196b244c04.json",
+					"name" : "LArepeat",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "LAshow::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-LAshow-Release-600a54ede00a9e3345ba.json",
+					"name" : "LAshow",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 5,
+					"id" : "LAsort::@bddc88d51ecaac1db7fe",
+					"jsonFile" : "target-LAsort-Release-6dcaef6a82750f06a889.json",
+					"name" : "LAsort",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 5,
+					"id" : "LAsplit::@bddc88d51ecaac1db7fe",
+					"jsonFile" : "target-LAsplit-Release-102bb60053795fc86b01.json",
+					"name" : "LAsplit",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "LAstats::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-LAstats-Release-31fd2249c2e5961f55d2.json",
+					"name" : "LAstats",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 9,
+					"id" : "LAstitch::@037be4d4b49e092bb242",
+					"jsonFile" : "target-LAstitch-Release-fede650eb9a4baf1dfe6.json",
+					"name" : "LAstitch",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 11,
+					"id" : "OGbuild::@571f6a7f507c3c3c26dd",
+					"jsonFile" : "target-OGbuild-Release-e2722ec033a1d255f301.json",
+					"name" : "OGbuild",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 11,
+					"id" : "OGlayout::@571f6a7f507c3c3c26dd",
+					"jsonFile" : "target-OGlayout-Release-4b4de73b1b16216841d0.json",
+					"name" : "OGlayout",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "TKadjust::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-TKadjust-Release-3ac9c01c69897b5f921e.json",
+					"name" : "TKadjust",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "TKcombine::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-TKcombine-Release-3591768b6e88b38ec5c5.json",
+					"name" : "TKcombine",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 9,
+					"id" : "TKhomogenize::@037be4d4b49e092bb242",
+					"jsonFile" : "target-TKhomogenize-Release-d28965e0770876c6abc2.json",
+					"name" : "TKhomogenize",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "TKmerge::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-TKmerge-Release-e494d6219641658086e7.json",
+					"name" : "TKmerge",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "TKshow::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-TKshow-Release-983a38275d3520f4db59.json",
+					"name" : "TKshow",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "cuda-tracepoints::@166cd5f16c8e65e20d5b",
+					"jsonFile" : "target-cuda-tracepoints-Release-3b77d45d273baffaa418.json",
+					"name" : "cuda-tracepoints",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 3,
+					"id" : "cudaligner::@da90878345cb7e7829f3",
+					"jsonFile" : "target-cudaligner-Release-e1e03c8a92d15f50aa29.json",
+					"name" : "cudaligner",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 4,
+					"id" : "daligner::@def0a03006ce67c8eb51",
+					"jsonFile" : "target-daligner-Release-eb0fa41bd789ae8ebd3a.json",
+					"name" : "daligner",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 5,
+					"id" : "daligner2::@bddc88d51ecaac1db7fe",
+					"jsonFile" : "target-daligner2-Release-12a74c52b0ac2c6229a6.json",
+					"name" : "daligner2",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 4,
+					"id" : "marvl-align::@def0a03006ce67c8eb51",
+					"jsonFile" : "target-marvl-align-Release-6a607ca21a5cea4220b7.json",
+					"name" : "marvl-align",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 5,
+					"id" : "marvl-align2::@bddc88d51ecaac1db7fe",
+					"jsonFile" : "target-marvl-align2-Release-6a4713f2cf036605421a.json",
+					"name" : "marvl-align2",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 6,
+					"id" : "marvl-db::@1f4cdc73c39a66049a93",
+					"jsonFile" : "target-marvl-db-Release-7c1209b36e3d481b7ab5.json",
+					"name" : "marvl-db",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 7,
+					"id" : "marvl-lib::@306ed2d68c6501e8728f",
+					"jsonFile" : "target-marvl-lib-Release-b680197d4c512fddf3d3.json",
+					"name" : "marvl-lib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 8,
+					"id" : "marvl-lib-ext::@c7da5c2fc0d9ccb5b475",
+					"jsonFile" : "target-marvl-lib-ext-Release-f0cc6cf8f1f74b848193.json",
+					"name" : "marvl-lib-ext",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "txt2track::@c810615cce0f7acb82dc",
+					"jsonFile" : "target-txt2track-Release-a608291cfc6f7bb45563.json",
+					"name" : "txt2track",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/schloi/devel/MARVEL_dev/build",
+		"source" : "/home/schloi/devel/MARVEL_dev"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

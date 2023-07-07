@@ -1,0 +1,2 @@
+/usr/bin/ar qc libcuda-tracepoints.a CMakeFiles/cuda-tracepoints.dir/tracepoints/stream-interface.cu.o CMakeFiles/cuda-tracepoints.dir/tracepoints/tracepoints.cu.o
+/usr/bin/ranlib libcuda-tracepoints.a

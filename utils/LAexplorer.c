@@ -80,6 +80,7 @@ typedef struct
     // FILE* fileLas;
     HITS_TRACK* qtrack;
     HITS_TRACK* srctrack;
+    HITS_TRACK* trimtrack;
 
     lasidx* lasIndex;
     int* lasIndexFile;
@@ -1579,21 +1580,38 @@ static void update_details_bar(int x, int idx)
         uint64 srca = srcdata[ srcanno[ovl->aread] / sizeof(track_data) ];
         uint64 srcb = srcdata[ srcanno[ovl->bread] / sizeof(track_data) ];
 
-        sprintf(src, " source reads %8llu x %8llu", srca, srcb);
+        sprintf(src, " src %8llu x %8llu", srca, srcb);
     }
     else
     {
         src[0] = '\0';
     }
 
+    char trima[64];
+    char trimb[64];
+    if (g_ectx.trimtrack)
+    {
+        int tab, tae, tbb, tbe;
+        get_trim(&(g_ectx.db), g_ectx.trimtrack, ovl->aread, &tab, &tae);
+        get_trim(&(g_ectx.db), g_ectx.trimtrack, ovl->bread, &tbb, &tbe);
+
+        sprintf(trima, " %d..%d", tab, tae);
+        sprintf(trimb, " %d..%d", tbb, tbe);
+    }
+    else
+    {
+        trima[0] = '\0';
+        trimb[0] = '\0';
+    }
+
     gchar* text = g_markup_printf_escaped(
-            "<tt>@ %5dbp cov %3d%s <b>%8d</b> (%5d) x <b>%8d</b> (%5d) <b>%5d..%5d</b> (%5d) %c <b>%5d..%5d</b> (%5d)%s flags %s</tt>",
+            "<tt>@ %5dbp cov %3d%s <b>%8d</b> (%d%s) x <b>%8d</b> (%d%s) <b>%5d..%5d</b> %c <b>%5d..%5d</b>%s flags %s</tt>",
              x, cov, q,
-             ovl->aread, DB_READ_LEN(&g_ectx.db, ovl->aread),
-             ovl->bread, DB_READ_LEN(&g_ectx.db, ovl->bread),
-             ovl->path.abpos, ovl->path.aepos, ovl->path.aepos - ovl->path.abpos,
+             ovl->aread, DB_READ_LEN(&g_ectx.db, ovl->aread), trima,
+             ovl->bread, DB_READ_LEN(&g_ectx.db, ovl->bread), trimb,
+             ovl->path.abpos, ovl->path.aepos,
              ovl->flags & OVL_COMP ? '<' : '>',
-             ovl->path.bbpos, ovl->path.bepos, ovl->path.bepos - ovl->path.bbpos,
+             ovl->path.bbpos, ovl->path.bepos,
              src, flags);
 
     gtk_label_set_markup(GTK_LABEL(bar), text);
@@ -2130,6 +2148,7 @@ static int command_line(GApplication* application, GApplicationCommandLine* cmdl
 
     g_ectx.qtrack = track_load(&g_ectx.db, qname);
     g_ectx.srctrack = track_load(&g_ectx.db, sname);
+    g_ectx.trimtrack = track_load(&g_ectx.db, tname);
 
     int i = 0;
     if (inames != NULL)

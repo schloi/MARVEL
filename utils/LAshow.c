@@ -281,7 +281,7 @@ static void show( ShowContext* ctx, Overlap* ovls, int novl )
                     Complement_Seq( ctx->align->bseq, ovlBLen );
                 }
 
-                Compute_Trace_PTS( ctx->align, ctx->align_work, ctx->twidth, 0 );
+                Compute_Trace_PTS( ctx->align, ctx->align_work, ctx->twidth, 0, 0 );
 
                 int width = db_a->reads[ ovls[ i ].aread ].rlen + db_b->reads[ ovls[ i ].bread ].rlen;
 
@@ -393,7 +393,7 @@ static void show( ShowContext* ctx, Overlap* ovls, int novl )
             }
 
 
-            Compute_Trace_PTS( ctx->align, ctx->align_work, ctx->twidth, 0 );
+            Compute_Trace_PTS( ctx->align, ctx->align_work, ctx->twidth, 0, 0 );
 
             Print_Reference( stdout, ctx->align, ctx->align_work, 0, 100, 0, 0, 5 );
 
@@ -575,7 +575,7 @@ static int handler_show( void* _ctx, Overlap* ovls, int novl )
 
 static void usage()
 {
-    fprintf( stderr, "usage: [-tfrc] [-s [l|i|L|I]] [-x n] [-o n] [-T track] [-i f] database input.las [ [n | n-m] ... ] ]\n\n" );
+    fprintf( stderr, "usage: [-mtfrc] [-s [l|i|L|I]] [-x n] [-o n] [-T track] [-i f] database input.las [ [n | n-m] ... ] ]\n\n" );
 
     fprintf( stderr, "Show the contents of a .las file\n\n" );
 
@@ -583,6 +583,7 @@ static void usage()
     fprintf( stderr, "         -c  colorize output\n" );
     fprintf( stderr, "         -f  show the flags associated with the alignment\n" );
     fprintf( stderr, "         -a  show the complete alignment\n" );
+    fprintf( stderr, "         -c  shows alignments between two databases. pass additonal db before input.las\n");
     fprintf( stderr, "         -s mode  sorting order. (l)ength, (i)dentifier, alignment (b)egin, (e)nd, use uppercase of descending.\n" );
     fprintf( stderr, "         -x n  minimum read length\n" );
     fprintf( stderr, "         -o n  minimum overlap length\n" );

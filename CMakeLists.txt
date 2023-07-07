@@ -1,0 +1,102 @@
+CMAKE_MINIMUM_REQUIRED(VERSION 3.18)
+
+IF (DEFINED CMAKE_BUILD_TYPE)
+    SET(CMAKE_BUILD_TYPE "Release")
+ENDIF ()
+
+MESSAGE("build type set to ${CMAKE_BUILD_TYPE}")
+
+SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+PROJECT(MARVL
+        LANGUAGES CXX C)
+
+OPTION(CUDA_FEATS "Set to On to use CUDA features" ON)
+
+IF (CUDA_FEATS)
+    # sm_60 = PASCAL
+    # sm_70 = VOLTA (TESLA)
+    # sm_75 = TURING
+    # sm_80 = AMPERE
+    # sm_89 = ADA
+    # sm_90 = HOPPER
+
+    # https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/
+
+    ENABLE_LANGUAGE(CUDA)
+    SET(CMAKE_CUDA_ARCHITECTURES 52 60 61 70 75)
+ELSE ()
+    MESSAGE("CUDA_FEATS set to OFF. Skipping CUDA targets.")
+ENDIF ()
+
+IF (NOT DEFINED CMAKE_CXX_STANDARD)
+    SET(CMAKE_CXX_STANDARD 11)
+ENDIF ()
+
+SET(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+IF (NOT DEFINED CMAKE_CUDA_STANDARD)
+    SET(CMAKE_CUDA_STANDARD 11)
+ENDIF ()
+
+SET(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+IF (DEFINED CMAKE_COMMON_FLAGS)
+    ADD_COMPILE_OPTIONS(${CMAKE_COMMON_FLAGS})
+ENDIF ()
+
+ADD_COMPILE_OPTIONS( $<$<COMPILE_LANGUAGE:C,CXX>:-Wall> )
+
+ADD_COMPILE_OPTIONS( $<$<COMPILE_LANGUAGE:CXX>:-fopenmp> )
+ADD_LINK_OPTIONS( $<$<LINK_LANGUAGE:CXX>:-fopenmp> )
+
+IF (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    ADD_COMPILE_OPTIONS( $<$<COMPILE_LANGUAGE:C,CXX>:-g> )
+    # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wunused-macros -Wall -Wextra -I../ -g -O0 -Wunreachable-code -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+    # set(CMAKE_C_FLAGS "${CMAKE_CXX_FLAGS} -Wunused-macros -Wall -Wextra -I../ -g -O0 -Wunreachable-code -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+ELSEIF (CMAKE_BUILD_TYPE STREQUAL "Release")
+    ADD_COMPILE_OPTIONS( $<$<COMPILE_LANGUAGE:C,CXX>:-O2> )
+    ADD_COMPILE_OPTIONS( $<$<COMPILE_LANGUAGE:C,CXX>:-DNDEBUG> )
+ENDIF ()
+
+FIND_PACKAGE(Threads REQUIRED)
+FIND_PACKAGE(ZLIB REQUIRED)
+
+FIND_PACKAGE(PkgConfig REQUIRED)
+PKG_CHECK_MODULES(GTK QUIET gtk+-3.0)
+
+INCLUDE_DIRECTORIES(
+        AFTER
+        SYSTEM
+        .
+)
+
+ADD_SUBDIRECTORY(corrector)
+
+IF (CUDA_FEATS)
+    ADD_SUBDIRECTORY(cuda)
+    ADD_SUBDIRECTORY(cudalign)
+ENDIF()
+
+ADD_SUBDIRECTORY(dalign)
+ADD_SUBDIRECTORY(dalign2)
+ADD_SUBDIRECTORY(db)
+ADD_SUBDIRECTORY(lib)
+ADD_SUBDIRECTORY(lib.ext)
+ADD_SUBDIRECTORY(scrub)
+ADD_SUBDIRECTORY(sv)
+ADD_SUBDIRECTORY(touring)
+ADD_SUBDIRECTORY(utils)
+
+INSTALL(DIRECTORY scripts DESTINATION .
+        FILE_PERMISSIONS
+        OWNER_READ OWNER_EXECUTE OWNER_WRITE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE)
+
+CONFIGURE_FILE( lib.python/marvel/config.py.in lib.python/marvel/config.py )
+
+INSTALL(DIRECTORY lib.python DESTINATION .
+        PATTERN "*.in" EXCLUDE)
+
+UNSET(CUDA_FEATS CACHE)

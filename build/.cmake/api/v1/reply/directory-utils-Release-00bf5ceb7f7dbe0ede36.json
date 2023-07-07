@@ -1,0 +1,201 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"utils/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 210,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/txt2track"
+			],
+			"targetId" : "txt2track::@c810615cce0f7acb82dc",
+			"targetIndex" : 46,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/TKshow"
+			],
+			"targetId" : "TKshow::@c810615cce0f7acb82dc",
+			"targetIndex" : 36,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/TKmerge"
+			],
+			"targetId" : "TKmerge::@c810615cce0f7acb82dc",
+			"targetIndex" : 35,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/TKcombine"
+			],
+			"targetId" : "TKcombine::@c810615cce0f7acb82dc",
+			"targetIndex" : 33,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/TKadjust"
+			],
+			"targetId" : "TKadjust::@c810615cce0f7acb82dc",
+			"targetIndex" : 32,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/LAstats"
+			],
+			"targetId" : "LAstats::@c810615cce0f7acb82dc",
+			"targetIndex" : 28,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/FAsort"
+			],
+			"targetId" : "FAsort::@c810615cce0f7acb82dc",
+			"targetIndex" : 8,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/LAindex"
+			],
+			"targetId" : "LAindex::@c810615cce0f7acb82dc",
+			"targetIndex" : 21,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/LAcount"
+			],
+			"targetId" : "LAcount::@c810615cce0f7acb82dc",
+			"targetIndex" : 14,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/LAcoverage"
+			],
+			"targetId" : "LAcoverage::@c810615cce0f7acb82dc",
+			"targetIndex" : 15,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/LAmerge"
+			],
+			"targetId" : "LAmerge::@c810615cce0f7acb82dc",
+			"targetIndex" : 22,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/LAcheck"
+			],
+			"targetId" : "LAcheck::@c810615cce0f7acb82dc",
+			"targetIndex" : 12,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/LAshow"
+			],
+			"targetId" : "LAshow::@c810615cce0f7acb82dc",
+			"targetIndex" : 25,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"utils/LAcartoons"
+			],
+			"targetId" : "LAcartoons::@c810615cce0f7acb82dc",
+			"targetIndex" : 10,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "utils",
+		"source" : "utils"
+	}
+}

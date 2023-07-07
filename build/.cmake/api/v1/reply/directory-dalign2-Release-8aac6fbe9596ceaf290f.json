@@ -1,0 +1,93 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"dalign2/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 81,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"dalign2/LAsplit"
+			],
+			"targetId" : "LAsplit::@bddc88d51ecaac1db7fe",
+			"targetIndex" : 27,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"dalign2/LAsort"
+			],
+			"targetId" : "LAsort::@bddc88d51ecaac1db7fe",
+			"targetIndex" : 26,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"dalign2/LAcat"
+			],
+			"targetId" : "LAcat::@bddc88d51ecaac1db7fe",
+			"targetIndex" : 11,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"dalign2/daligner2"
+			],
+			"targetId" : "daligner2::@bddc88d51ecaac1db7fe",
+			"targetIndex" : 40,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"dalign2/HPCdaligner"
+			],
+			"targetId" : "HPCdaligner::@bddc88d51ecaac1db7fe",
+			"targetIndex" : 9,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "dalign2",
+		"source" : "dalign2"
+	}
+}

@@ -1,22 +1,40 @@
 
+#include "DB.h"
+#include "lib/utils.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#include "DB.h"
-#include "lib/utils.h"
-
 #define DEF_ARG_B 1000
 
 extern char* optarg;
 extern int optind, opterr, optopt;
 
+static int cmp_int64(const void* a, const void* b)
+{
+    int64 x = * ( (int64*)a );
+    int64 y = * ( (int64*)b );
+
+    if (x < y)
+    {
+        return -1;
+    }
+    else if ( x > y)
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
 static void usage()
 {
-    fprintf( stderr, "usage: [-nr] [-bg <int>] <name:db|dam>\n" );
+    fprintf( stderr, "usage: [-enr] [-bg <int>] <name:db>\n" );
     fprintf( stderr, "options: -b ... bucket size of histogram length (%d)\n", DEF_ARG_B );
+    fprintf( stderr, "         -e ... show empty bins\n");
     fprintf( stderr, "         -g ... genome size\n" );
     fprintf( stderr, "         -r ... raw output\n" );
 }
@@ -24,24 +42,28 @@ static void usage()
 int main( int argc, char* argv[] )
 {
     HITS_DB _db, *db = &_db;
-    int dam;
 
     int nbin, *hist;
     int64* bsum;
 
     int BIN     = DEF_ARG_B;
     int64 GSIZE = -1;
-    int raw = 0;
+    int raw     = 0;
+    int emptybins = 0;
 
     // parse arguments
 
     int c;
     opterr = 0;
 
-    while ( ( c = getopt( argc, argv, "rb:g:" ) ) != -1 )
+    while ( ( c = getopt( argc, argv, "erb:g:" ) ) != -1 )
     {
         switch ( c )
         {
+            case 'e':
+                emptybins = 1;
+                break;
+
             case 'r':
                 raw = 1;
                 break;
@@ -80,20 +102,10 @@ int main( int argc, char* argv[] )
 
     int i, status;
 
-    //  Open .db or .dam
-
     status = Open_DB( argv[ optind ], db );
     if ( status < 0 )
     {
         exit( 1 );
-    }
-
-    dam = status;
-
-    if ( raw && dam )
-    {
-        fprintf(stderr, "raw output currently not supported for .dam\n");
-        raw = 0;
     }
 
     int64 totlen;
@@ -130,15 +142,30 @@ int main( int argc, char* argv[] )
         bsum[ rlen / BIN ] += rlen;
     }
 
+    int64* lengths = malloc( sizeof(int64) * nreads );
+
     nbin = ( maxlen - 1 ) / BIN + 1;
     ave  = totlen / nreads;
     dev  = 0;
     for ( i = 0; i < nreads; i++ )
     {
-        int rlen = reads[ i ].rlen;
+        int rlen = lengths[i] = reads[ i ].rlen;
         dev += ( rlen - ave ) * ( rlen - ave );
     }
     dev = (int64)sqrt( ( 1. * dev ) / nreads );
+
+    qsort(lengths, nreads, sizeof(int64), cmp_int64);
+    int64 sum = 0;
+    i = 0;
+    while ( sum < totlen/2 )
+    {
+        sum += lengths[i];
+        i += 1;
+    }
+
+    int64 n50 = lengths[i];
+
+    free(lengths);
 
     int64 _cum  = 0;
     int64 _btot = 0;
@@ -152,27 +179,24 @@ int main( int argc, char* argv[] )
         btot[ i ] = _btot;
     }
 
-    if ( dam )
+    if ( raw )
     {
-        printf( "%d contigs %lld average contig length\n", nreads, ave );
-    }
-    else if ( raw )
-    {
-        printf( "%d %lld %lld %lld\n", nreads, totlen, ave, dev );
+        printf( "%d %lld %lld %lld %lld\n", nreads, totlen, ave, dev, n50 );
     }
     else
     {
-        printf( "%d reads %s base pairs\n", nreads, bp_format(totlen, 1) );
-        printf( "%lld average read length with %lld standard deviation\n", ave, dev );
+        printf( "%d reads %lld base pairs\n", nreads, totlen );
+        printf( "%lld average read length with %lld standard deviation and n50 %lld\n", ave, dev, n50 );
     }
 
-    if (raw)
+    if ( raw )
     {
         printf( "A %.3f C %.3f G %.3f T %.3f\n", db->freq[ 0 ], db->freq[ 1 ], db->freq[ 2 ], db->freq[ 3 ] );
     }
     else
     {
-        printf( "Base composition: %.3f(A) %.3f(C) %.3f(G) %.3f(T)\n", db->freq[ 0 ], db->freq[ 1 ], db->freq[ 2 ], db->freq[ 3 ] );
+        printf( "Base composition: %.3f(A) %.3f(C) %.3f(G) %.3f(T)\n", db->freq[ 0 ], db->freq[ 1 ], db->freq[ 2 ],
+                db->freq[ 3 ] );
         printf( "\nDistribution of Read Lengths (Bin size = %d)\n\n", BIN );
 
         printf( "%11s %11s %7s %7s %9s", "Bin", "Count", "% Reads", "% Bases", "Average" );
@@ -184,20 +208,14 @@ int main( int argc, char* argv[] )
         printf( "\n" );
     }
 
-    int skip = dam ? 0 : -1;
-
     for ( i = nbin - 1; i >= 0; i-- )
     {
-        if ( hist[ i ] != skip && ( hist[ i ] > 0 ) )
+        if ( emptybins || hist[ i ] > 0 )
         {
-            if (raw)
+            if ( raw )
             {
-                printf( "%d %d %.1f %.1f %lld",
-                        ( i * BIN ),
-                        hist[ i ],
-                        ( 100. * cum[ i ] ) / nreads,
-                        ( 100. * btot[ i ] ) / totlen,
-                        btot[ i ] / cum[ i ] );
+                printf( "%d %d %.1f %.1f %lld", ( i * BIN ), hist[ i ], ( 100. * cum[ i ] ) / nreads,
+                        ( 100. * btot[ i ] ) / totlen, btot[ i ] / cum[ i ] );
 
                 if ( GSIZE > 0 )
                 {
@@ -207,12 +225,8 @@ int main( int argc, char* argv[] )
             }
             else
             {
-                printf( "%11d %11d %7.1f %7.1f %9lld",
-                        ( i * BIN ),
-                        hist[ i ],
-                        ( 100. * cum[ i ] ) / nreads,
-                        ( 100. * btot[ i ] ) / totlen,
-                        btot[ i ] / cum[ i ] );
+                printf( "%11d %11d %7.1f %7.1f %9lld", ( i * BIN ), hist[ i ], ( 100. * cum[ i ] ) / nreads,
+                        ( 100. * btot[ i ] ) / totlen, btot[ i ] / cum[ i ] );
 
                 if ( GSIZE > 0 )
                 {
@@ -230,8 +244,8 @@ int main( int argc, char* argv[] )
 
     free( hist );
     free( bsum );
-    free(btot);
-    free(cum);
+    free( btot );
+    free( cum );
 
     Close_DB( db );
 

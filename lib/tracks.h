@@ -59,7 +59,7 @@ HITS_TRACK* track_load( HITS_DB* db, char* track );
 HITS_TRACK* track_load_block( HITS_DB* db, char* tname );
 void track_close( HITS_TRACK* track );
 int track_delete( HITS_DB* db, const char* track );
-void track_write( HITS_DB* db, const char* track, int block, track_anno* anno, track_data* data, uint64_t dlen );
+int track_write( HITS_DB* db, const char* track, int block, track_anno* anno, track_data* data, uint64_t dlen );
 
 char* track_name( HITS_DB* db, const char* track, int block );
 

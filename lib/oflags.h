@@ -16,8 +16,9 @@
 #define OVL_TRIM         (1 << 17)     // trimmed
 #define OVL_MODULE       (1 << 18)     // overlap spans unique repeat modules junction
 #define OVL_OPTIONAL     (1 << 19)     // optional (risky) overlaps for touring
+#define OVL_MULTI        (1 << 20)     // has more than one alignment
 
-#define OVL_FLAGS       15             // number of flags
+#define OVL_FLAGS       16             // number of flags
 
 
 typedef struct _OverlapFlag2Label OverlapFlag2Label;

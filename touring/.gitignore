@@ -1,8 +1,5 @@
-Makefile
 OGbuild
 OGtour
 OGlayout
 OGlayout
-OGtour.py
-tour2fasta.py
 *.pyc

@@ -180,7 +180,10 @@ static void print_graph_graphml(OgBuildContext* octx, FILE* f, const char* title
     fprintf(f, "  <key attr.name=\"read\"       attr.type=\"int\"    for=\"node\" id=\"read\" />\n");
     fprintf(f, "  <key attr.name=\"optional\"   attr.type=\"int\"    for=\"node\" id=\"optional\" />\n");
 
+    fprintf(f, "  <key attr.name=\"name\"       attr.type=\"string\" for=\"graph\" id=\"name\" />\n");
+
     fprintf(f, "  <graph id=\"%s\" edgedefault=\"directed\">\n", title);
+    fprintf(f, "    <data key=\"name\">%s</data>\n", title);
 
     uint64* nleft = octx->nleft;
     uint64* nright = octx->nright;
@@ -966,10 +969,16 @@ static char* write_graph_target_path(const char* path, int ncomp, const char* ex
 
     if ( sep )
     {
+        sprintf(pathcomp, "%.*s/components/%s_%07d.%s",
+                (int)(sep - path), path,
+                sep + 1, ncomp, ext);
+
+        /*
         sprintf(pathcomp, "%.*s/%s_%05d/%s_%07d.%s",
                 (int)(sep - path), path,
                 sep + 1, ncomp / 10000,
                 sep + 1, ncomp, ext);
+        */
     }
     else
     {
@@ -983,6 +992,7 @@ static void write_graph(OgBuildContext* octx, const char* path)
 {
     int* comp2reads = octx->comp2reads;
     int ncomp2reads = octx->ncomp2reads;
+    char compname[256];
 
     if (octx->split)
     {
@@ -999,7 +1009,8 @@ static void write_graph(OgBuildContext* octx, const char* path)
 
             if (f)
             {
-                print_graph_graphml(octx, f, "og", NULL, 0, comp2reads + i);
+                sprintf(compname, "comp_%d", ncomp);
+                print_graph_graphml(octx, f, compname, NULL, 0, comp2reads + i);
                 fclose(f);
             }
             else
@@ -1035,7 +1046,7 @@ static void write_graph(OgBuildContext* octx, const char* path)
 
         if (f)
         {
-            print_graph_graphml(octx, f, "og", NULL, 0, comp2reads);
+            print_graph_graphml(octx, f, "comp_0", NULL, 0, comp2reads);
             fclose(f);
         }
         else

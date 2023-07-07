@@ -1,0 +1,1 @@
+/usr/bin/gcc-12 -O3 -DNDEBUG CMakeFiles/DBsplit.dir/DBsplit.c.o CMakeFiles/marvl-db.dir/DB.c.o CMakeFiles/marvl-db.dir/QV.c.o CMakeFiles/marvl-db.dir/FA2x.c.o CMakeFiles/marvl-db.dir/fileUtils.c.o -o DBsplit  /usr/lib/x86_64-linux-gnu/libz.so 

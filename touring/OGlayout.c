@@ -2380,7 +2380,7 @@ static int parseOptions(OgLayoutContext *octx, int argc, char *argv[])
         exit(1);
     }
 
-    if (octx->quadTreeLevel < 1 && octx->quadTreeLevel > 100)
+    if (octx->quadTreeLevel < 1 || octx->quadTreeLevel > 100)
     {
         fprintf(stderr, "Unsupported quadtree level: %d! Allowed range: [1, 100]\n", octx->quadTreeLevel);
         return 1;

@@ -120,18 +120,18 @@ extern char Ebuffer[];
 //  The following general utilities return NULL if any of their input pointers are NULL, or if they
 //    could not perform their function (in which case they also print an error to stderr).
 
-void *Malloc(int64 size, char *mesg);                    //  Guarded versions of malloc, realloc
-void *Realloc(void *object, int64 size, char *mesg);     //  and strdup, that output "mesg" to
-char *Strdup(char *string, char *mesg);                  //  stderr if out of memory
+void *Malloc(int64 size, const char *mesg);                    //  Guarded versions of malloc, realloc
+void *Realloc(void *object, int64 size, const char *mesg);     //  and strdup, that output "mesg" to
+char *Strdup(const char *string, const char *mesg);                  //  stderr if out of memory
 
 FILE *Fopen(char *path, char *mode);     // Open file path for "mode"
 char *PathTo(char *path);                // Return path portion of file name "path"
-char *Root(char *path, char *suffix);    // Return the root name, excluding suffix, of "path"
+char *Root(char *path, const char *suffix);    // Return the root name, excluding suffix, of "path"
 
 // Catenate returns concatenation of path.sep.root.suffix in a *temporary* buffer
 // Numbered_Suffix returns concatenation of left.<num>.right in a *temporary* buffer
 
-char *Catenate(char *path, char *sep, char *root, char *suffix);
+char *Catenate(char *path, const char *sep, char *root, const char *suffix);
 char *Numbered_Suffix(char *left, int num, char *right);
 
 

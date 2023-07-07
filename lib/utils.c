@@ -90,7 +90,7 @@ char* bp_format_alloc(uint64_t num, int dec, int alloc)
         str = sstr;
     }
 
-    char* suffix = "KMG";
+    char* suffix = "KMGT";
     double dnum = num;
     int ns = -1;
 
@@ -140,6 +140,58 @@ int fread_integers(FILE* fileIn, int** out_values, int* out_nvalues)
     *out_nvalues = nvalues;
 
     return nvalues;
+}
+
+size_t fread_integer_sets(FILE* fileIn, int64_t** _values, uint64_t** _sets)
+{
+    size_t maxline = 0;
+    char* line = NULL;
+    int nline;
+
+    size_t maxvalues = 100;
+    int64_t* values = malloc( maxvalues * sizeof(int64_t) );
+    size_t nvalues = 0;
+
+    size_t maxsets = 100;
+    uint64_t* sets = malloc( maxsets * sizeof(uint64_t) );
+    size_t nsets = 0;
+
+    sets[0] = 0;
+
+    while ( ( nline = getline(&line, &maxline, fileIn) ) > 0 )
+    {
+        char* linesep = line;
+        char* token;
+
+        while ( ( token = strsep(&linesep, " \t") ) )
+        {
+            values[ nvalues ] = strtol(token, NULL, 10);
+            nvalues += 1;
+
+            if ( nvalues == maxvalues )
+            {
+                maxvalues = maxvalues * 1.2 + 1000;
+                values = realloc(values, sizeof(int64_t) * maxvalues );
+            }
+        }
+
+        nsets += 1;
+
+        if ( nsets == maxsets )
+        {
+            maxsets = maxsets * 1.2 + 100;
+            sets = realloc(sets, sizeof(uint64_t) * maxsets);
+        }
+
+        sets[nsets] = nvalues;
+    }
+
+    *_values = values;
+    *_sets = sets;
+
+    free(line);
+
+    return nsets;
 }
 
 char* format_bytes(unsigned long bytes)
@@ -284,3 +336,25 @@ void get_trim(HITS_DB* db, HITS_TRACK* trimtrack, int rid, int* b, int* e)
         }
     }
 }
+
+
+int trace_valid( Overlap* o )
+{
+    ovl_trace* trace = o->path.trace;
+
+    int bpos = o->path.bbpos;
+
+    int j;
+    for ( j = 0; j < o->path.tlen; j += 2 )
+    {
+        bpos += trace[ j + 1 ];
+    }
+
+    if ( bpos != o->path.bepos )
+    {
+        return 0;
+    }
+
+    return 1;
+}
+

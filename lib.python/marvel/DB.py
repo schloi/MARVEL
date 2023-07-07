@@ -227,6 +227,10 @@ class DB(object):
         return self.arrReads[rid][0]
 
     def sequence(self, rid):
+        if rid >= len(self.arrReads):
+            print("read id {} out of range".format(rid), file = sys.stderr)
+            sys.exit(1)
+
         (rlen, boff, dummy, dummy) = self.arrReads[rid]
 
         letter = (ord('a'), ord('c'), ord('g'), ord('t'))
