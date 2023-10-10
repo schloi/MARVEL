@@ -90,130 +90,131 @@ This will create ECOL.db and two hidden files .ECOL.idx and .ECOL.bps in the cur
 The assembly can now be performed by running the included do.py script. Which will use all available processor cores on the machine it is running at to perform the assembly.
 
 The do.py script only serves as an example of how to perform an assembly using MARVEL and can be changed to your liking or replaced altogether with a custom setup of your own.
+```python
+# set various constants
 
-    # set various constants
+DB         = "ECOL"                         # database name
+COVERAGE   = 25                             # coverage of the dataset
+DB_FIX     = DB + "_FIX"                    # name of the database containing the patched reads
+PARALLEL   = multiprocessing.cpu_count()    # number of available processors
 
-    DB         = "ECOL"                         # database name
-    COVERAGE   = 25                             # coverage of the dataset
-    DB_FIX     = DB + "_FIX"                    # name of the database containing the patched reads
-    PARALLEL   = multiprocessing.cpu_count()    # number of available processors
+### patch raw reads
 
-    ### patch raw reads
+q = marvel.queue.queue(DB, COVERAGE, PARALLEL)
 
-    q = marvel.queue.queue(DB, COVERAGE, PARALLEL)
+# run daligner to create initial overlaps
+q.plan("{db}.dalign.plan")
 
-    # run daligner to create initial overlaps
-    q.plan("{db}.dalign.plan")
+# run LAmerge to merge overlap blocks
+q.plan("{db}.merge.plan")
 
-    # run LAmerge to merge overlap blocks
-    q.plan("{db}.merge.plan")
+# create quality and trim annotation (tracks) for each overlap block
+q.block("{path}/LAq -b {block} {db} {db}.{block}.las")
 
-    # create quality and trim annotation (tracks) for each overlap block
-    q.block("{path}/LAq -b {block} {db} {db}.{block}.las")
+# since q and trim tracks have been produced for each block, we need to merge them
+q.single("{path}/TKmerge -d {db} q")
+q.single("{path}/TKmerge -d {db} trim")
 
-    # since q and trim tracks have been produced for each block, we need to merge them
-    q.single("{path}/TKmerge -d {db} q")
-    q.single("{path}/TKmerge -d {db} trim")
+# run LAfix to patch reads based on overlaps
+# the -g parameter specifies the maximum gap size that gets patched
+q.block("{path}/LAfix -g -1 {db} {db}.{block}.las {db}.{block}.fixed.fasta")
 
-    # run LAfix to patch reads based on overlaps
-    # the -g parameter specifies the maximum gap size that gets patched
-    q.block("{path}/LAfix -g -1 {db} {db}.{block}.las {db}.{block}.fixed.fasta")
+# join all fasta files containing the repaired reads
+q.single("!cat {db}.*.fixed.fasta > {db}.fixed.fasta")
 
-    # join all fasta files containing the repaired reads
-    q.single("!cat {db}.*.fixed.fasta > {db}.fixed.fasta")
+# create a new database with them
+# -s ... block size in megabytes/bases
+# -r ... run id
+# -j ... threads used by the overlapper
+# -g ... genome size
+q.single("{path_scripts}/DBprepare.py -s 50 -r 2 -j 4 -g 4600000 {db_fixed} {db}.fixed.fasta", db_fixed = DB_FIX)
 
-    # create a new database with them
-    # -s ... block size in megabytes/bases
-    # -r ... run id
-    # -j ... threads used by the overlapper
-    # -g ... genome size
-    q.single("{path_scripts}/DBprepare.py -s 50 -r 2 -j 4 -g 4600000 {db_fixed} {db}.fixed.fasta", db_fixed = DB_FIX)
+# run the commands build using the above statements
+q.process()
 
-    # run the commands build using the above statements
-    q.process()
+# alternatively you can dump the set of statements build to a text file
+# that you then lateron could use for running jobs on a queuing system
+# q.dump("statements.txt")
 
-    # alternatively you can dump the set of statements build to a text file
-    # that you then lateron could use for running jobs on a queuing system
-    # q.dump("statements.txt")
+# build a new queue for the assembly of the patched reads
+q = marvel.queue.queue(DB_FIX, COVERAGE, PARALLEL)
 
-    # build a new queue for the assembly of the patched reads
-    q = marvel.queue.queue(DB_FIX, COVERAGE, PARALLEL)
+# put the daligner statements in the queue
+q.plan("{db}.dalign.plan")
 
-    # put the daligner statements in the queue
-    q.plan("{db}.dalign.plan")
+# put the LAmerge statements in the queue
+q.plan("{db}.merge.plan")
 
-    # put the LAmerge statements in the queue
-    q.plan("{db}.merge.plan")
+# stitch reads, this will repair/join alignments that have split into two (or more)
+# due to leftover weak regions in the reads
+q.block("{path}/LAstitch -f 50 {db} {db}.{block}.las {db}.{block}.stitch.las")
 
-    # stitch reads, this will repair/join alignments that have split into two (or more)
-    # due to leftover weak regions in the reads
-    q.block("{path}/LAstitch -f 50 {db} {db}.{block}.las {db}.{block}.stitch.las")
+# create quality and trim annotation for each overlap block
+q.block("{path}/LAq -s 5 -T trim0 -b {block} {db} {db}.{block}.stitch.las")
 
-    # create quality and trim annotation for each overlap block
-    q.block("{path}/LAq -s 5 -T trim0 -b {block} {db} {db}.{block}.stitch.las")
+# and merge them
+q.single("{path}/TKmerge -d {db} q")
+q.single("{path}/TKmerge -d {db} trim0")
 
-    # and merge them
-    q.single("{path}/TKmerge -d {db} q")
-    q.single("{path}/TKmerge -d {db} trim0")
+# create a repeat annotation for each overlap block
+q.block("{path}/LArepeat -c {coverage} -b {block} {db} {db}.{block}.stitch.las")
 
-    # create a repeat annotation for each overlap block
-    q.block("{path}/LArepeat -c {coverage} -b {block} {db} {db}.{block}.stitch.las")
+# and merge them
+q.single("{path}/TKmerge -d {db} repeats")
 
-    # and merge them
-    q.single("{path}/TKmerge -d {db} repeats")
+# detect chimeric breaks and other leftover structural problems with the reads/alignments
+# that result in "gap", ie. regions that are not spanned by any alignment and discard
+# all alignments on one side of the gap
+q.block("{path}/LAgap -t trim0 {db} {db}.{block}.stitch.las {db}.{block}.gap.las")
 
-    # detect chimeric breaks and other leftover structural problems with the reads/alignments
-    # that result in "gap", ie. regions that are not spanned by any alignment and discard
-    # all alignments on one side of the gap
-    q.block("{path}/LAgap -t trim0 {db} {db}.{block}.stitch.las {db}.{block}.gap.las")
+# create a new trim annotation, since LAgap might have resulted in regions of some reads
+# not being overed by an alignments (ie. appearing like "dead" sequence)
+q.block("{path}/LAq -s 5 -u -t trim0 -T trim1 -b {block} {db} {db}.{block}.gap.las")
 
-    # create a new trim annotation, since LAgap might have resulted in regions of some reads
-    # not being overed by an alignments (ie. appearing like "dead" sequence)
-    q.block("{path}/LAq -s 5 -u -t trim0 -T trim1 -b {block} {db} {db}.{block}.gap.las")
+# merge the block-based tracks
+q.single("{path}/TKmerge -d {db} trim1")
 
-    # merge the block-based tracks
-    q.single("{path}/TKmerge -d {db} trim1")
+# filter all non true-overlap induced alignments
+# -r ... which repeat track to use
+# -t ... which trim track to use
+# -T ... actually apply the trim (ie. update alignments based on its information)
+# -o ... discard all alignments shorter than 2k
+# -u ... discard all local alignments with >0 unaligned bases
+# -n ... require alignments that span a repeat to cover at least 300 non-repeat annotated bases
+# -p ... actually discard the filtered alignments, and not just flag them as discarded
+q.block("{path}/LAfilter -n 300 -r repeats -t trim1 -T -o 2000 -u 0 {db} {db}.{block}.gap.las {db}.{block}.filtered.las")
 
-    # filter all non true-overlap induced alignments
-    # -r ... which repeat track to use
-    # -t ... which trim track to use
-    # -T ... actually apply the trim (ie. update alignments based on its information)
-    # -o ... discard all alignments shorter than 2k
-    # -u ... discard all local alignments with >0 unaligned bases
-    # -n ... require alignments that span a repeat to cover at least 300 non-repeat annotated bases
-    # -p ... actually discard the filtered alignments, and not just flag them as discarded
-    q.block("{path}/LAfilter -n 300 -r repeats -t trim1 -T -o 2000 -u 0 {db} {db}.{block}.gap.las {db}.{block}.filtered.las")
+# merge all filtered overlap files
+q.single("{path}/LAmerge -S filtered {db} {db}.filtered.las")
 
-    # merge all filtered overlap files
-    q.single("{path}/LAmerge -S filtered {db} {db}.filtered.las")
+# create the overlap graph
+q.single("{path}/OGbuild -t trim1 {db} {db}.filtered.las {db}.graphml")
 
-    # create the overlap graph
-    q.single("{path}/OGbuild -t trim1 {db} {db}.filtered.las {db}.graphml")
+# tour the overlap graph and create contigs paths
+q.single("{path_scripts}/OGtour.py -c {db} {db}.graphml")
 
-    # tour the overlap graph and create contigs paths
-    q.single("{path_scripts}/OGtour.py -c {db} {db}.graphml")
+# correct the reads used in the touring of the overlap graph
+# and put them into a new database
+# -j ... number of threads to use
+# -r ... only correct the reads with the ids contained in ECOL_FIX.tour.rids
+# Note: LAcorrect could be run directly after the initial overlapping in order to produce a set
+#       of corrected reads
+q.single("{path}/LAcorrect -j 4 -r {db}.tour.rids {db} {db}.filtered.las {db}.corrected")
+q.single("{path}/FA2db -c {db}_CORRECTED [expand:{db}.corrected.*.fasta]")
 
-    # correct the reads used in the touring of the overlap graph
-    # and put them into a new database
-    # -j ... number of threads to use
-    # -r ... only correct the reads with the ids contained in ECOL_FIX.tour.rids
-    # Note: LAcorrect could be run directly after the initial overlapping in order to produce a set
-    #       of corrected reads
-    q.single("{path}/LAcorrect -j 4 -r {db}.tour.rids {db} {db}.filtered.las {db}.corrected")
-    q.single("{path}/FA2db -c {db}_CORRECTED [expand:{db}.corrected.*.fasta]")
+# output fasta files of the paths found in the touring
+# -c ... use the corrected reads, of not present the contigs would be built using the
+#        the uncorrected (patched) reads
+# -t ... which trim track to use
+q.single("{path_scripts}/tour2fasta.py -c {db}_CORRECTED -t trim1 {db} {db}.tour.graphml {db}.tour.paths")
 
-    # output fasta files of the paths found in the touring
-    # -c ... use the corrected reads, of not present the contigs would be built using the
-    #        the uncorrected (patched) reads
-    # -t ... which trim track to use
-    q.single("{path_scripts}/tour2fasta.py -c {db}_CORRECTED -t trim1 {db} {db}.tour.graphml {db}.tour.paths")
+# optional: calculate a layout (arrange the graph's nodes in such a way that they are easy to look at)
+#           for the toured overlap graph and write it to a dot file
+q.single("{path}/OGlayout -R {db}.tour.graphml {db}.tour.layout.dot")
 
-    # optional: calculate a layout (arrange the graph's nodes in such a way that they are easy to look at)
-    #           for the toured overlap graph and write it to a dot file
-    q.single("{path}/OGlayout -R {db}.tour.graphml {db}.tour.layout.dot")
-
-    # run the commands
-    q.process()
+# run the commands
+q.process()
+```
 
 ## CONCEPTS & NOMENCLATURE
 
@@ -279,4 +280,4 @@ MARVEL performs read correction post-assembly. This ensures that true overlaps a
 
 Large repeat-rich genomes often result in excessive CPU and storage requirements. We added an on-the-fly repeat masker that works jointly with the overlapper to lower said requirements. On the server side you need to launch the dynamic masking server DMserver on a dedicated node (with enough main memory) and on the client side the overlapper is told where the server runs using the -D argument. When the overlapper starts processing a new block, it retrieves a masking track from the server (network traffic is negligible) and uses the track to soft mask intervals in the block, thereby excluding them from the k-mer seeding. When a block comparison is finished, the overlapper notifies the server of the location of the resulting .las file(s) (note that overlapper and masking server need to have a shared filesystem for that to work). The server processes the alignments and updates internal data structures which maintain data on the reads' repetitiveness.
 
-For additional information please refer to docs/HOWTO-dynamic-masking.txt
+For additional information please refer to [docs/HOWTO-dynamic-masking.txt](docs/HOWTO-dynamic-masking.txt).
