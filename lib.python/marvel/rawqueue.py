@@ -215,7 +215,8 @@ class rawqueue(object):
 
         return (level, task)
 
-    def dump(self, fileOut):
+    def dump(self, fileName):
+        fileOut = open(fileName, 'w')
         for i in range( len(self.queue) ):
 
             for command in self.queue[i]:
